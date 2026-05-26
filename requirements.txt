@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+chromadb
+ollama
+pymupdf
+tree-sitter==0.21.3
+tree-sitter-languages
+pydantic
+pydantic-settings
+python-multipart
+pyyaml
