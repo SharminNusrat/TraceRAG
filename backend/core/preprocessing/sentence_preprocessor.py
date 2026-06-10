@@ -19,6 +19,11 @@ class SentencePreprocessor(Preprocessor):
             )
             elements.append(artifact_element)
 
+            elements += self._to_sentence_elements(artifact)
+            return elements
+
+        def _to_sentence_elements(self, artifact: Artifact) -> list[Element]:
+            elements = []
             sentences = nltk.sent_tokenize(artifact.content)
             for idx, sentence in enumerate(sentences):
                 if sentence.strip():  # Only add non-empty sentences
