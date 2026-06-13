@@ -1,0 +1,39 @@
+{
+  "trace_links": [
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/srs.pdf",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\auth.js",
+      "confidence": 0.6883612871170044,
+      "confidence_level": "low",
+      "explanation": "the source code implements the login functionality as described in the requirement, including user authentication, password validation, token generation, and error handling."
+    }
+  ],
+  "unimplemented": [
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/srs.pdf::1.1",
+      "content": "1.1 Login\nThe system shall allow users to login with username and password.\nThe system shall validate user credentials against the database.\nThe system shall generate an authentication token upon successful login."
+    }
+  ],
+  "summary": {
+    "total_source_elements": 1,
+    "total_target_elements": 14,   ### 14 methods in total ###
+    "total_links": 1,
+    "unimplemented_count": 1,
+    "high_confidence": 0,
+    "medium_confidence": 0,
+    "low_confidence": 1
+  }
+}
+
+
+------------------------------REQ BODY----------------------
+{
+  "requirements_path": "D:/Downloads/TraceRAG/backend/dumps/Test/srs.pdf",
+  "codebase_path": "D:/Downloads/TraceRAG/backend/dumps/Test/src",
+  "source_preprocessor": "section",
+  "target_preprocessor": "method",
+  "classifier": "reasoning",
+  "n_results": 3,
+  "source_granularity": 0,
+  "target_granularity": 0
+}

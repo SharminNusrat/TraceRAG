@@ -40,7 +40,7 @@ class SectionPreprocessor(Preprocessor):
         return elements
 
     def _split_sections(self, text: str) -> list[tuple[str, str, str]]:
-        matches = self.HEADING_PATTERN.finditer(text)
+        matches = list(self.HEADING_PATTERN.finditer(text))
         sections = []
         for i, match in enumerate(matches):
             section_number = match.group(1)

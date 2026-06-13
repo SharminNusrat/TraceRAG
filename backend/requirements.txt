@@ -1,12 +1,19 @@
 fastapi
 uvicorn[standard]
 chromadb
+# chromadb-admin
 ollama
 pymupdf
-tree-sitter==0.21.3
-tree-sitter-languages
+tree-sitter
+tree-sitter-python
+tree-sitter-java
+tree-sitter-javascript
+tree-sitter-typescript
 pydantic
 pydantic-settings
 python-multipart
 pyyaml
 nltk
+langchain-text-splitters
+transformers
+torch

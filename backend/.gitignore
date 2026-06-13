@@ -1,2 +1,40 @@
+# Environment variables and local config
 .env
+.env.*
+!.env.example
+
+# Generated app data / local storage
 dumps/
+chroma_data/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
