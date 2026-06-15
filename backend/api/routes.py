@@ -1,19 +1,10 @@
 import logging
 from fastapi import APIRouter, HTTPException
 from api.schemas import AnalyzeRequest, AnalyzeResponse, TraceLinkResponse, PreprocessorType, ClassifierType
-from core.ingestion.pdf_provider import PDFProvider
-from core.ingestion.code_provider import CodeProvider
-from core.preprocessing.artifact_preprocessor import ArtifactPreprocessor
-from core.preprocessing.sentence_preprocessor import SentencePreprocessor
-from core.preprocessing.section_preprocessor import SectionPreprocessor
-from core.preprocessing.summarize_preprocessor import SummarizePreprocessor
-from core.preprocessing.code_chunking_preprocessor import CodeChunkingPreprocessor
-from core.preprocessing.code_method_preprocessor import CodeMethodPreprocessor
-from core.preprocessing.code_tree_preprocessor import CodeTreePreprocessor
-from core.embedding.ollama_embedder import OllamaEmbeddingCreator
-from core.classification.simple_classifier import SimpleClassifier
-from core.classification.reasoning_classifier import ReasoningClassifier
-from core.classification.ollama_chat_provider import OllamaChatProvider
+from core.ingestion import PDFProvider, CodeProvider
+from core.preprocessing import ArtifactPreprocessor, SentencePreprocessor, SectionPreprocessor, SummarizePreprocessor, CodeChunkingPreprocessor, CodeMethodPreprocessor, CodeTreePreprocessor
+from core.embedding import OllamaEmbeddingCreator
+from core.classification import SimpleClassifier, ReasoningClassifier, OllamaChatProvider
 from core.pipeline import TracePipeline
 
 router = APIRouter()
