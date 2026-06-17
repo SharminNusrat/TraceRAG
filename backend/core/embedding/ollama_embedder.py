@@ -17,33 +17,28 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
         self._tokenizer = AutoTokenizer.from_pretrained(self.TOKENIZER_NAME)
 
     # def create_embeddings(self, elements: list[Element]) -> list[list[float]]:
-    #     embeddings = []
-    #     for element in elements:
-    #         embedding = self._get_embedding(element)
-    #         embeddings.append(embedding)
-    #     return embeddings
+    #     contents = [self._truncate_content(element.content) for element in elements]
+    #     uncached = [(i, c) for i, c in enumerate(contents) if c not in self._cache]
 
-    # def _get_embedding(self, element: Element) -> list[float]:
-    #     content = self._truncate_content(element.content)
-    #     if content in self._cache:
-    #         return self._cache[content]
-    #     response = ollama.embeddings(model=self.model, prompt=content)
-    #     embedding = response['embedding']
-    #     self._cache[content] = embedding
-    #     return embedding
+    #     for batch_start in range(0, len(uncached), self.batch_size):
+    #         batch = uncached[batch_start:batch_start + self.batch_size]
+    #         indices, texts = zip(*batch)
+    #         response = ollama.embed(model=self.model, input=list(texts))
+    #         for i, embedding in zip(indices, response["embeddings"]):
+    #             self._cache[contents[i]] = embedding
+                
+    #     return [self._cache[content] for content in contents]
 
     def create_embeddings(self, elements: list[Element]) -> list[list[float]]:
-        contents = [self._truncate_content(element.content) for element in elements]
-        uncached = [(i, c) for i, c in enumerate(contents) if c not in self._cache]
+        contents = [self._truncate_content(e.content) for e in elements]
+        uncached_texts = [text for text in set(contents) if text not in self._cache]
 
-        for batch_start in range(0, len(uncached), self.batch_size):
-            batch = uncached[batch_start:batch_start + self.batch_size]
-            indices, texts = zip(*batch)
-            response = ollama.embed(model=self.model, input=list(texts))
-            for i, embedding in zip(indices, response["embeddings"]):
-                self._cache[contents[i]] = embedding
-                
-        return [self._cache[content] for content in contents]
+        for batch_start in range(0, len(uncached_texts), self.batch_size):
+            texts = uncached_texts[batch_start:batch_start + self.batch_size]
+            response = ollama.embed(model=self.model, input=texts)
+            for text, embedding in zip(texts, response["embeddings"]):
+                self._cache[text] = embedding
+        return [self._cache[text] for text in contents]
 
     def _truncate_content(self, content: str) -> str:
         tokens = self._tokenizer.encode(content)

@@ -48,7 +48,8 @@ class ReasoningClassifier(Classifier):
         cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
 
         trace_match = re.search(r'<trace>(yes|no)</trace>', cleaned, re.IGNORECASE)
-        linked = trace_match and trace_match.group(1).lower() == "yes" if trace_match else "yes" in cleaned.lower()
+        # linked = trace_match and trace_match.group(1).lower() == "yes" if trace_match else "yes" in cleaned.lower()
+        linked = trace_match.group(1).lower() == "yes" if trace_match else "yes" in cleaned.lower()
 
         explanation = None
         explanation_match = re.search(r'<explanation>(.*?)</explanation>', cleaned, re.DOTALL)

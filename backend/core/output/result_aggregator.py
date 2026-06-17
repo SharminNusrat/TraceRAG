@@ -19,10 +19,10 @@ class ResultAggregator:
         seen = set()
 
         for result in classification_results:
-            valid_souces = self._get_valid_elements(result.source, self.source_granularity, source_elements)
+            valid_sources = self._get_valid_elements(result.source, self.source_granularity, source_elements)
             valid_targets = self._get_valid_elements(result.target, self.target_granularity, target_elements)
 
-            for source in valid_souces:
+            for source in valid_sources:
                 for target in valid_targets:
                     pair = (source.identifier, target.identifier)
                     if pair not in seen:

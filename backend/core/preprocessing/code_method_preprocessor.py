@@ -125,7 +125,7 @@ class CodeMethodPreprocessor(Preprocessor):
         nodes = []
         for child in root.children:
             if child.type == class_node_type:
-                continue  # Skip class nodes
+                continue  # Skip class nodes because methods inside classes were already processed.
             if child.type == target_type:
                 nodes.append(child)
         return nodes
