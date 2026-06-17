@@ -4,8 +4,9 @@ from api.schemas import AnalyzeRequest, AnalyzeResponse, TraceLinkResponse, Prep
 from core.ingestion import PDFProvider, CodeProvider
 from core.preprocessing import ArtifactPreprocessor, SentencePreprocessor, SectionPreprocessor, SummarizePreprocessor, CodeChunkingPreprocessor, CodeMethodPreprocessor, CodeTreePreprocessor
 from core.embedding import OllamaEmbeddingCreator
-from core.classification import SimpleClassifier, ReasoningClassifier, OllamaChatProvider
+from core.classification import SimpleClassifier, ReasoningClassifier, OllamaChatProvider, GroqChatProvider
 from core.pipeline import TracePipeline
+from config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -30,7 +31,8 @@ def get_preprocessor(preprocessor_type: PreprocessorType):
 
 
 def get_classifier(classifier_type: ClassifierType):
-    provider = OllamaChatProvider()
+    # provider = OllamaChatProvider() # Working perfectly
+    provider = GroqChatProvider(api_key=settings.groq_api_key) # Also working
     match classifier_type:
         case ClassifierType.SIMPLE:
             return SimpleClassifier(provider=provider)

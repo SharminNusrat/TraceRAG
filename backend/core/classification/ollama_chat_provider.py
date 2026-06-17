@@ -1,5 +1,6 @@
 import ollama
 from dataclasses import dataclass
+from core.classification.chat_provider import ChatProvider
 
 DEFAULT_SEED = 133742243
 DEFAULT_TEMPERATURE = 0.0
@@ -7,7 +8,7 @@ DEFAULT_MODEL = "deepseek-r1:7b"
 DEFAULT_HOST = "http://localhost:11434"
 
 @dataclass
-class OllamaChatProvider:
+class OllamaChatProvider(ChatProvider):
     model: str = DEFAULT_MODEL
     host: str = DEFAULT_HOST
     seed: int = DEFAULT_SEED

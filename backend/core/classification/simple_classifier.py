@@ -1,12 +1,14 @@
 import re
+from typing import Optional
 from core.schemas import Element
 from core.classification.base import Classifier, ClassificationResult
 from core.classification.prompts import SimplePromptTemplate, format_prompt
+from core.classification.chat_provider import ChatProvider
 from core.classification.ollama_chat_provider import OllamaChatProvider
 
 class SimpleClassifier(Classifier):
 
-    def __init__(self, provider: OllamaChatProvider = None, template: str = None): 
+    def __init__(self, provider: Optional[ChatProvider] = None, template: str = None): 
         self.provider = provider or OllamaChatProvider()
         self.template = template or SimplePromptTemplate.DEFAULT.value
         self._cache: dict[tuple, bool] = {}
