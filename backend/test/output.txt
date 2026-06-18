@@ -1,3 +1,17 @@
+------------------------------REQ BODY----------------------
+{
+  "requirements_path": "D:/Downloads/TraceRAG/backend/dumps/Test/srs.pdf",
+  "codebase_path": "D:/Downloads/TraceRAG/backend/dumps/Test/src",
+  "source_preprocessor": "section",
+  "target_preprocessor": "method",
+  "classifier": "reasoning",
+  "n_results": 3,
+  "source_granularity": 0,
+  "target_granularity": 0
+}
+
+------------------------------RESPONSE----------------------
+
 {
   "trace_links": [
     {
@@ -28,12 +42,341 @@
 
 ------------------------------REQ BODY----------------------
 {
-  "requirements_path": "D:/Downloads/TraceRAG/backend/dumps/Test/srs.pdf",
+  "requirements_path": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf",
+  "codebase_path": "D:/Downloads/TraceRAG/backend/dumps/Test/src",
+  "source_preprocessor": "sentence",
+  "target_preprocessor": "method",
+  "classifier": "simple",
+  "n_results": 5,
+  "source_granularity": 1,
+  "target_granularity": 1
+}
+
+------------------------------RESPONSE----------------------
+{
+  "trace_links": [
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_0",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\payment.js::class_0",
+      "confidence": 0.4583457112312317,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_1",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\auth.js::class_0",
+      "confidence": 0.6515052318572998,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_2",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\auth.js::class_0",
+      "confidence": 0.608505368232727,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_3",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\auth.js::class_0",
+      "confidence": 0.6473996639251709,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_7",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\payment.js::class_0",
+      "confidence": 0.6839089393615723,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_8",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\payment.js::class_0",
+      "confidence": 0.6462559700012207,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_10",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\payment.js::class_0",
+      "confidence": 0.7091622352600098,
+      "confidence_level": "medium",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_11",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\payment.js::class_0",
+      "confidence": 0.8059460520744324,
+      "confidence_level": "medium",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_13",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\user.js::class_0",
+      "confidence": 0.6649746298789978,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_14",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\user.js::class_0",
+      "confidence": 0.5473226308822632,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_15",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\user.js::class_0",
+      "confidence": 0.7142214179039001,
+      "confidence_level": "medium",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_16",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\user.js::class_0",
+      "confidence": 0.6845012307167053,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_17",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\user.js::class_0",
+      "confidence": 0.6934078335762024,
+      "confidence_level": "low",
+      "explanation": null
+    }
+  ],
+  "unimplemented": [
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_4",
+      "content": "1.2 Logout\nThe system shall allow users to logout and invalidate their token."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_5",
+      "content": "1.3 Password Validation\nThe system shall validate passwords securely."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_6",
+      "content": "2."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_9",
+      "content": "The system shall support multiple currencies."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::sentence_12",
+      "content": "3."
+    }
+  ],
+  "summary": {
+    "total_source_elements": 18,
+    "total_target_elements": 14,
+    "total_links": 13,
+    "unimplemented_count": 5,
+    "high_confidence": 0,
+    "medium_confidence": 3,
+    "low_confidence": 10
+  }
+}
+
+------------------------------REQ BODY----------------------
+{
+  "requirements_path": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf",
   "codebase_path": "D:/Downloads/TraceRAG/backend/dumps/Test/src",
   "source_preprocessor": "section",
   "target_preprocessor": "method",
-  "classifier": "reasoning",
-  "n_results": 3,
-  "source_granularity": 0,
+  "classifier": "simple",
+  "n_results": 1,
+  "source_granularity": 1,
+  "target_granularity": 1
+}
+
+------------------------------RESPONSE----------------------
+{
+  "trace_links": [
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::1",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\auth.js::class_0",
+      "confidence": 0.6581812500953674,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::2",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\payment.js::class_0",
+      "confidence": 0.72352135181427,
+      "confidence_level": "medium",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::3",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\user.js::class_0",
+      "confidence": 0.6693750023841858,
+      "confidence_level": "low",
+      "explanation": null
+    }
+  ],
+  "unimplemented": [
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::1.1",
+      "content": "1.1 Login\nThe system shall allow users to login with username and password.\nThe system shall validate user credentials against the database.\nThe system shall generate an authentication token upon successful login."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::1.2",
+      "content": "1.2 Logout\nThe system shall allow users to logout and invalidate their token."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::1.3",
+      "content": "1.3 Password Validation\nThe system shall validate passwords securely."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::2.1",
+      "content": "2.1 Process Payment\nThe system shall process payments for users.\nThe system shall validate payment amount before processing.\nThe system shall support multiple currencies."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::2.2",
+      "content": "2.2 Refund\nThe system shall allow refunds for completed transactions."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::2.3",
+      "content": "2.3 Calculate Total\nThe system shall calculate total price from a list of items."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::3.1",
+      "content": "3.1 Create User\nThe system shall allow creation of new user accounts.\nThe system shall prevent duplicate email registration."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::3.2",
+      "content": "3.2 Get User\nThe system shall retrieve user information by ID."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::3.3",
+      "content": "3.3 Update Profile\nThe system shall allow users to update their profile information."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::3.4",
+      "content": "3.4 Delete User\nThe system shall allow deletion of user accounts"
+    }
+  ],
+  "summary": {
+    "total_source_elements": 13,
+    "total_target_elements": 14,
+    "total_links": 3,
+    "unimplemented_count": 10,
+    "high_confidence": 0,
+    "medium_confidence": 1,
+    "low_confidence": 2
+  }
+}
+
+------------------------------REQ BODY----------------------
+{
+  "requirements_path": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf",
+  "codebase_path": "D:/Downloads/TraceRAG/backend/dumps/Test/src",
+  "source_preprocessor": "section",
+  "target_preprocessor": "method",
+  "classifier": "simple",
+  "n_results": 2,
+  "source_granularity": 2,
   "target_granularity": 0
+}
+
+------------------------------RESPONSE----------------------
+{
+  "trace_links": [
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::1.1",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\auth.js",
+      "confidence": 0.6581812500953674,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::1.2",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\auth.js",
+      "confidence": 0.6581812500953674,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::1.3",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\auth.js",
+      "confidence": 0.6581812500953674,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::2.1",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\payment.js",
+      "confidence": 0.72352135181427,
+      "confidence_level": "medium",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::2.2",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\payment.js",
+      "confidence": 0.7091622352600098,
+      "confidence_level": "medium",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::2.3",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\payment.js",
+      "confidence": 0.8059460520744324,
+      "confidence_level": "medium",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::3.1",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\user.js",
+      "confidence": 0.6693750023841858,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::3.2",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\user.js",
+      "confidence": 0.6693750023841858,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::3.3",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\user.js",
+      "confidence": 0.6693750023841858,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::3.4",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\user.js",
+      "confidence": 0.6693750023841858,
+      "confidence_level": "low",
+      "explanation": null
+    }
+  ],
+  "unimplemented": [
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::1",
+      "content": "1 User Authentication\n1.1 Login\nThe system shall allow users to login with username and password.\nThe system shall validate user credentials against the database.\nThe system shall generate an authentication token upon successful login.\n1.2 Logout\nThe system shall allow users to logout and invalidate their token.\n1.3 Password Validation\nThe system shall validate passwords securely."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::2",
+      "content": "2 Payment Processing\n2.1 Process Payment\nThe system shall process payments for users.\nThe system shall validate payment amount before processing.\nThe system shall support multiple currencies.\n2.2 Refund\nThe system shall allow refunds for completed transactions.\n2.3 Calculate Total\nThe system shall calculate total price from a list of items."
+    },
+    {
+      "identifier": "D:/Downloads/TraceRAG/backend/dumps/Test/test_srs.pdf::3",
+      "content": "3 User Management\n3.1 Create User\nThe system shall allow creation of new user accounts.\nThe system shall prevent duplicate email registration.\n3.2 Get User\nThe system shall retrieve user information by ID.\n3.3 Update Profile\nThe system shall allow users to update their profile information.\n3.4 Delete User\nThe system shall allow deletion of user accounts"
+    }
+  ],
+  "summary": {
+    "total_source_elements": 13,
+    "total_target_elements": 14,
+    "total_links": 10,
+    "unimplemented_count": 3,
+    "high_confidence": 0,
+    "medium_confidence": 3,
+    "low_confidence": 7
+  }
 }

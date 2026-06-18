@@ -1,5 +1,8 @@
+import logging
 from fastapi import FastAPI
 from api import router
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
     title="TraceRAG API",

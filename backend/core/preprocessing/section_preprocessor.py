@@ -1,11 +1,14 @@
 import re
+import logging
 from core.schemas import Artifact, Element
 from core.preprocessing.base import Preprocessor
 from core.preprocessing.sentence_preprocessor import SentencePreprocessor
 
+logger = logging.getLogger(__name__)
+
 class SectionPreprocessor(Preprocessor):
 
-    HEADING_PATTERN = re.compile(r'^(\d+(\.\d+)*)\s+(.+)', re.MULTILINE)
+    HEADING_PATTERN = re.compile(r'^(\d+(\.\d+)*)\.?\s+(.+)', re.MULTILINE)
 
     def preprocess(self, artifacts: list[Artifact]) -> list[Element]:
         elements = []
@@ -31,11 +34,13 @@ class SectionPreprocessor(Preprocessor):
                     section_element = Element(
                         identifier=f"{artifact.identifier}::{section_number}",
                         type=artifact.type,
-                        content=f"{section_number} {section_title}\n{section_content}",
+                        content=f"{section_number} {section_title}\n{section_content.strip()}",
                         granularity=granularity,
                         parent_id=parent_id,
                         compare=True
                     )
+                    logger.info(f"ELEMENT id={section_element.identifier} | granularity={section_element.granularity} | parent={section_element.parent_id}")
+                    logger.info(f"CONTENT:\n{section_element.content}\n{'='*50}")
                     elements.append(section_element)
         return elements
 
@@ -46,10 +51,19 @@ class SectionPreprocessor(Preprocessor):
             section_number = match.group(1)
             section_title = match.group(3).strip()
             start = match.end()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+            end = self._find_section_end(matches, i, section_number, len(text))
             section_content = text[start:end].strip()
             sections.append((section_number, section_title, section_content))
         return sections
+
+    def _find_section_end(self, matches: list,  current_index: int, current_number: str, text_length: int) -> int:
+        current_level = len(current_number.split('.'))
+        for j in range(current_index + 1, len(matches)):
+            next_number = matches[j].group(1)
+            next_level = len(next_number.split('.'))
+            if next_level <= current_level:
+                return matches[j].start()
+        return text_length
 
     def _get_granularity(self, section_number: str) -> int:
         return section_number.count('.') + 1
