@@ -1,4 +1,5 @@
-from groq import Groq
+from groq import Groq, RateLimitError
+import itertools
 from core.classification.chat_provider import ChatProvider
 
 DEFAULT_MODEL = "llama-3.1-8b-instant"
@@ -6,10 +7,13 @@ DEFAULT_TEMPERATURE = 0.0
 
 class GroqChatProvider(ChatProvider):
 
-    def __init__(self, api_key: str, model: str = DEFAULT_MODEL, temperature: float = DEFAULT_TEMPERATURE):
-        self.client = Groq(api_key=api_key)
+    def __init__(self, api_keys: list[str], model: str = DEFAULT_MODEL, temperature: float = DEFAULT_TEMPERATURE):
+        self.api_keys = api_keys
         self.model = model
         self.temperature = temperature
+        self._key_cycle = itertools.cycle(api_keys)
+        self.current_key = next(self._key_cycle)
+        self.client = Groq(api_key=self.current_key)
 
     def chat(self, prompt: str, system_message: str = None) -> str:
         messages = []
@@ -17,12 +21,25 @@ class GroqChatProvider(ChatProvider):
             messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": prompt})
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=self.temperature
-        )
-        return response.choices[0].message.content
+        attempts = 0
+        while attempts < len(self.api_keys):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=self.temperature
+                )
+                return response.choices[0].message.content
+            except RateLimitError:
+                print(f"Rate limit hit for key {self.current_key}. Switching to next key.")
+                self._rotate_key()
+                attempts += 1
+
+        raise RuntimeError("All API keys have hit their rate limits.")
+
+    def _rotate_key(self):
+        self.current_key = next(self._key_cycle)
+        self.client = Groq(api_key=self.current_key)
 
     def model_name(self) -> str:
         return self.model

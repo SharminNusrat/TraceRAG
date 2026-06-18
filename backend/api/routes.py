@@ -32,7 +32,7 @@ def get_preprocessor(preprocessor_type: PreprocessorType):
 
 def get_classifier(classifier_type: ClassifierType):
     # provider = OllamaChatProvider() # Working perfectly
-    provider = GroqChatProvider(api_key=settings.groq_api_key) # Also working
+    provider = GroqChatProvider(api_keys=settings.groq_api_keys_list) # Also working
     match classifier_type:
         case ClassifierType.SIMPLE:
             return SimpleClassifier(provider=provider)
