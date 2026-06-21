@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, HTTPException
-from api.schemas import AnalyzeRequest, AnalyzeResponse, TraceLinkResponse, PreprocessorType, ClassifierType
-from core.ingestion import PDFProvider, CodeProvider
+from api.schemas import AnalyzeRequest, AnalyzeResponse, SourceType, TraceLinkResponse, PreprocessorType, ClassifierType
+from core.ingestion import CodeProvider, DocumentProvider, TextProvider
 from core.preprocessing import ArtifactPreprocessor, SentencePreprocessor, SectionPreprocessor, SummarizePreprocessor, CodeChunkingPreprocessor, CodeMethodPreprocessor, CodeTreePreprocessor
 from core.embedding import OllamaEmbeddingCreator
 from core.classification import SimpleClassifier, ReasoningClassifier, OllamaChatProvider, GroqChatProvider
@@ -10,6 +10,14 @@ from config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def get_source_provider(request: AnalyzeRequest):
+    match request.source_type:
+        case SourceType.DOCUMENT:
+            return DocumentProvider(request.requirements_path)
+        case SourceType.TEXT:
+            return TextProvider(request.requirements_text)
 
 
 def get_preprocessor(preprocessor_type: PreprocessorType):
@@ -44,7 +52,7 @@ def get_classifier(classifier_type: ClassifierType):
 async def analyze(request: AnalyzeRequest):
     try:
         pipeline = TracePipeline(
-            source_provider=PDFProvider(request.requirements_path),
+            source_provider=get_source_provider(request),
             target_provider=CodeProvider(request.codebase_path),
             source_preprocessor=get_preprocessor(request.source_preprocessor),
             target_preprocessor=get_preprocessor(request.target_preprocessor),

@@ -380,3 +380,41 @@
     "low_confidence": 7
   }
 }
+
+
+------------------------------REQ BODY----------------------
+{
+  "source_type": "text",
+  "requirements_path": "",
+  "requirements_text": "The system shall validate payment amount before processing",
+  "codebase_path": "D:/Downloads/TraceRAG/backend/dumps/Test/src",
+  "source_preprocessor": "single",
+  "target_preprocessor": "method",
+  "classifier": "simple",
+  "n_results": 2,
+  "source_granularity": 0,
+  "target_granularity": 2
+}
+
+------------------------------RESPONSE----------------------
+{
+  "trace_links": [
+    {
+      "source_id": "raw_text",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/Test/src\\payment.js::class_0::method_1",
+      "confidence": 0.6949585676193237,
+      "confidence_level": "low",
+      "explanation": null
+    }
+  ],
+  "unimplemented": [],
+  "summary": {
+    "total_source_elements": 1,
+    "total_target_elements": 14,
+    "total_links": 1,
+    "unimplemented_count": 0,
+    "high_confidence": 0,
+    "medium_confidence": 0,
+    "low_confidence": 1
+  }
+}

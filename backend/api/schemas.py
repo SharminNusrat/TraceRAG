@@ -1,6 +1,12 @@
 from pydantic import BaseModel
 from enum import Enum
 
+
+class SourceType(str, Enum):
+    DOCUMENT = "document"
+    TEXT = "text"
+
+
 class PreprocessorType(str, Enum):
     SINGLE = "single"
     SENTENCE = "sentence"
@@ -17,8 +23,10 @@ class ClassifierType(str, Enum):
 
 
 class AnalyzeRequest(BaseModel):
-    requirements_path: str
-    codebase_path: str
+    source_type: SourceType = SourceType.DOCUMENT
+    requirements_path: str = ""
+    requirements_text: str = ""
+    codebase_path: str 
     source_preprocessor: PreprocessorType = PreprocessorType.SECTION
     target_preprocessor: PreprocessorType = PreprocessorType.METHOD
     classifier: ClassifierType = ClassifierType.REASONING
