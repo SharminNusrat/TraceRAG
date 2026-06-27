@@ -1,0 +1,27 @@
+UC,MethodName,Confidence,ConfidenceLevel,TargetId
+UC1,"login(req, res)",0.58,low,"D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\userController.js::login(req, res)"
+UC2,"activateTechnician(req, res)",0.61,low,"D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\technicianManageController.js::activateTechnician(req, res)"
+UC2,processTicketQueue(),0.55,low,D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\ticketController.js::processTicketQueue()
+UC3,processTicketQueue(),0.69,low,D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\ticketController.js::processTicketQueue()
+UC4,"addComment(req, res)",0.66,low,"D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\commentController.js::addComment(req, res)"
+UC4,"editComment(req, res)",0.64,low,"D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\commentController.js::editComment(req, res)"
+UC4,processTicketQueue(),0.60,low,D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\ticketController.js::processTicketQueue()
+UC5,processTicketQueue(),0.63,low,D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\ticketController.js::processTicketQueue()
+UC5,"addComment(req, res)",0.61,low,"D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\commentController.js::addComment(req, res)"
+UC6,"technicianPerformance(req, res)",0.65,low,"D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\reportController.js::technicianPerformance(req, res)"
+UC6,"technicianSelfReport(req, res)",0.62,low,"D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\reportController.js::technicianSelfReport(req, res)"
+UC6,processTicketQueue(),0.60,low,D:\Downloads\TraceRAG\backend\spl2_test\backend\controllers\ticketController.js::processTicketQueue()
+
+
+//
+{
+        "source_type": "document",
+        "requirements_path": str(REQ_DIR.absolute()),
+        "codebase_path": str(CODE_DIR.absolute()),
+        "source_preprocessor": "single",
+        "target_preprocessor": "method",
+        "classifier": "simple",
+        "n_results": 8,
+        "source_granularity": 0,
+        "target_granularity": 1
+}

@@ -1,7 +1,0 @@
-UC,ClassName,Confidence,ConfidenceLevel,TargetId
-UC2,CardBC,0.72,medium,D:\Downloads\TraceRAG\backend\eTour_test\code\CardBC.java
-UC2,DBCulturalHeritage,0.71,medium,D:\Downloads\TraceRAG\backend\eTour_test\code\DBCulturalHeritage.java
-UC2,CulturalHeritageAgencyManager,0.71,medium,D:\Downloads\TraceRAG\backend\eTour_test\code\CulturalHeritageAgencyManager.java
-UC2,BeanCulturalHeritage,0.67,low,D:\Downloads\TraceRAG\backend\eTour_test\code\BeanCulturalHeritage.java
-UC3,CulturalHeritageCommonManager,0.72,medium,D:\Downloads\TraceRAG\backend\eTour_test\code\CulturalHeritageCommonManager.java
-UC3,CulturalHeritageChecker,0.66,low,D:\Downloads\TraceRAG\backend\eTour_test\code\CulturalHeritageChecker.java

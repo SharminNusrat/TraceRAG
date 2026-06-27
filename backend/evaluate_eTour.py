@@ -64,7 +64,7 @@ def call_api() -> dict:
         "classifier": "simple",
         "n_results": 12,
         "source_granularity": 0,
-        "target_granularity": 0
+        "target_granularity": 1
     }
     
     try:
@@ -163,7 +163,7 @@ def evaluate():
     logger.info("")
     
     # Save to CSV in gold standard format: UC,ClassName
-    with open(OUTPUT_CSV, 'w', newline='', encoding='utf-8') as csvfile:
+    with open(OUTPUT_CSV, 'a', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
         # Write results in gold standard format (UC, ClassName)
@@ -174,12 +174,15 @@ def evaluate():
     
     # Also create a detailed output file for reference
     detailed_output = ETOUR_TEST_DIR / "output_detailed.csv"
-    with open(detailed_output, 'w', newline='', encoding='utf-8') as csvfile:
+    file_exists = detailed_output.exists()
+
+    with open(detailed_output, 'a', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(
             csvfile,
             fieldnames=["UC", "ClassName", "Confidence", "ConfidenceLevel", "TargetId"]
         )
-        writer.writeheader()
+        if not file_exists:
+            writer.writeheader()
         
         for result in results:
             writer.writerow({

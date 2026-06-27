@@ -11,7 +11,7 @@ EXTENSION_TO_LANGUAGE = {
 
 class CodeChunkingPreprocessor(Preprocessor):
 
-    DEFAULT_CHUNK_SIZE = 60
+    DEFAULT_CHUNK_SIZE = 500
 
     def __init__(self, chunk_size: int = DEFAULT_CHUNK_SIZE):
         self.chunk_size = chunk_size
@@ -49,10 +49,11 @@ class CodeChunkingPreprocessor(Preprocessor):
         if language:
             splitter = RecursiveCharacterTextSplitter.from_language(
                 language=language,
-                chunk_size=self.chunk_size
+                chunk_size=self.chunk_size,
+                chunk_overlap=200
             )
         else:
-            splitter = RecursiveCharacterTextSplitter(chunk_size=self.chunk_size)
+            splitter = RecursiveCharacterTextSplitter(chunk_size=self.chunk_size, chunk_overlap=200)
         return splitter.split_text(artifact.content)
 
     def _get_extension(self, identifier: str) -> str:

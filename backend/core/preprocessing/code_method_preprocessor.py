@@ -24,8 +24,8 @@ CLASS_NODES = {
 METHOD_NODES = {
     'python': ['function_definition'],
     'java': ['method_declaration', 'constructor_declaration'],
-    'javascript': ['method_definition', 'function_declaration'],
-    'typescript': ['method_definition', 'function_declaration']
+    'javascript': ['method_definition', 'function_declaration', 'arrow_function'],
+    'typescript': ['method_definition', 'function_declaration', 'arrow_function']
 }
 
 def _get_ts_language(language: str) -> Language:
@@ -75,8 +75,8 @@ class CodeMethodPreprocessor(Preprocessor):
         if classes:
             for class_node in classes:
                 class_name = self._extract_name(class_node, language)
-                class_content = content[class_node.start_byte:class_node.end_byte].decode('utf-8')
-                class_id = f"{artifact.identifier}::class_{class_name}"
+                class_content = self._strip_comments(content[class_node.start_byte:class_node.end_byte].decode('utf-8'), language)
+                class_id = f"{artifact.identifier}::{class_name}"
                 class_element = Element(
                     identifier=class_id,
                     type=f"source code class definition",
@@ -88,13 +88,15 @@ class CodeMethodPreprocessor(Preprocessor):
                 elements.append(class_element)
 
                 for node_type in method_node_types:
+                    if node_type == "arrow_function":
+                        continue
                     methods = self._find_nodes(class_node, node_type)
                     for method_node in methods:
                         method_name = self._extract_name(method_node, language)
                         method_params = self._extract_params(method_node, language)
-                        method_content = content[method_node.start_byte:method_node.end_byte].decode('utf-8')
+                        method_content = self._strip_comments(content[method_node.start_byte:method_node.end_byte].decode('utf-8'), language)
                         method_element = Element(
-                            identifier=f"{class_id}::method_{method_name}{method_params}",
+                            identifier=f"{class_id}::{method_name}{method_params}",
                             type=f"source code method",
                             content=method_content,
                             granularity=2,
@@ -104,13 +106,15 @@ class CodeMethodPreprocessor(Preprocessor):
                         elements.append(method_element)
 
         for node_type in method_node_types:
+            if node_type == "arrow_function":
+                continue
             top_level = self._find_top_level_nodes(tree.root_node, class_node_type, node_type)
             for func_node in top_level:
                 func_name = self._extract_name(func_node, language)
                 func_params = self._extract_params(func_node, language)
-                func_content = content[func_node.start_byte:func_node.end_byte].decode('utf-8')
+                func_content = self._strip_comments(content[func_node.start_byte:func_node.end_byte].decode('utf-8'), language)
                 func_element = Element(
-                    identifier=f"{artifact.identifier}::function_{func_name}{func_params}",
+                    identifier=f"{artifact.identifier}::{func_name}{func_params}",
                     type=f"source code method",
                     content=func_content,
                     granularity=1,
@@ -118,7 +122,65 @@ class CodeMethodPreprocessor(Preprocessor):
                     compare=True
                 )
                 elements.append(func_element)
+
+        if language in ("javascript", "typescript"):
+            arrow_functions = self._find_arrow_functions(tree.root_node, class_node_type)
+            for func_name, arrow_node in arrow_functions:
+                func_params = self._extract_params(arrow_node, language)
+                func_content = self._strip_comments(
+                    content[arrow_node.start_byte:arrow_node.end_byte].decode('utf-8'),
+                    language
+                )
+                elements.append(Element(
+                    identifier=f"{artifact.identifier}::{func_name}{func_params}",
+                    type='source code method',
+                    content=func_content,
+                    granularity=1,
+                    parent_id=artifact.identifier,
+                    compare=True
+                ))
         return elements
+
+    def _find_arrow_functions(self, root: Node, class_node_type: str) -> list[tuple[str, Node]]:
+        """Returns list of (name, arrow_function_node) tuples"""
+        results = []
+        
+        def extract_from_declarator(decl_node):
+            name = None
+            arrow_node = None
+            for child in decl_node.children:
+                if child.type == "identifier":
+                    name = child.text.decode("utf-8")
+                elif child.type == "arrow_function":
+                    arrow_node = child
+            if name and arrow_node:
+                results.append((name, arrow_node))
+
+        for child in root.children:
+            if child.type == class_node_type:
+                continue
+            if child.type in {"lexical_declaration", "variable_declaration"}:
+                for decl in child.children:
+                    if decl.type == "variable_declarator":
+                        extract_from_declarator(decl)
+            elif child.type == "export_statement":
+                for export_child in child.children:
+                    if export_child.type in {"lexical_declaration", "variable_declaration"}:
+                        for decl in export_child.children:
+                            if decl.type == "variable_declarator":
+                                extract_from_declarator(decl)
+        return results
+
+    def _strip_comments(self, content: str, language: str) -> str:
+        match language:
+            case "java" | "javascript" | "typescript":
+                content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+                content = re.sub(r'//.*?$', '', content, flags=re.MULTILINE)
+            case "python":
+                content = re.sub(r'""".*?"""', '', content, flags=re.DOTALL)
+                content = re.sub(r"'''.*?'''", '', content, flags=re.DOTALL)
+                content = re.sub(r'#.*?$', '', content, flags=re.MULTILINE)
+        return content.strip()
 
     def _extract_name(self, node: Node, language: str) -> str:
         name_node = node.child_by_field_name("name")
@@ -191,6 +253,23 @@ class CodeMethodPreprocessor(Preprocessor):
                 continue  # Skip class nodes because methods inside classes were already processed.
             if child.type == target_type:
                 nodes.append(child)
+            if child.type == "export_statement":
+                for export_child in child.children:
+                    if export_child.type == target_type:
+                        nodes.append(export_child)
+                    elif export_child.type in {"lexical_declaration", "variable_declaration"}:
+                        for decl in export_child.children:
+                            if decl.type == "variable_declarator":
+                                for var_child in decl.children:
+                                    if var_child.type == target_type:
+                                        nodes.append(var_child)
+
+            if child.type in {"lexical_declaration", "variable_declaration"}:
+                for decl in child.children:
+                    if decl.type == "variable_declarator":
+                        for var_child in decl.children:
+                            if var_child.type == target_type:
+                                nodes.append(var_child)
         return nodes
 
     def _get_extension(self, identifier: str) -> str:
