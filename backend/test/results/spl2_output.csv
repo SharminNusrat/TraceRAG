@@ -1,0 +1,31 @@
+-------------------chunk&pool embedder--------------------
+UC1,"login(req, res)"
+UC3,processTicketQueue()
+UC4,"addComment(req, res)"
+UC4,"editComment(req, res)"
+UC4,processTicketQueue()
+UC5,processTicketQueue()
+UC5,"addComment(req, res)"
+UC6,"technicianPerformance(req, res)"
+UC6,processTicketQueue()
+-------------------truncating embedder--------------------
+UC1,"login(req, res)"
+UC3,processTicketQueue()
+UC4,"addComment(req, res)"
+UC4,"editComment(req, res)"
+UC4,processTicketQueue()
+UC5,processTicketQueue()
+UC5,"addComment(req, res)"
+UC6,"technicianPerformance(req, res)"
+UC6,processTicketQueue()
+--------------------semantic units--------------------
+UC1,"login(req, res)"
+UC3,processTicketQueue()
+UC3,"createTicket(req, res)"
+UC4,"editComment(req, res)"
+UC4,"addComment(req, res)"
+UC5,processTicketQueue()
+UC5,"createTicket(req, res)"
+UC5,"addComment(req, res)"
+UC5,"editComment(req, res)"
+UC6,"technicianPerformance(req, res)"

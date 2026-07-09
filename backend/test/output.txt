@@ -418,3 +418,77 @@
     "low_confidence": 1
   }
 }
+
+
+##------------Nomic-embed-text---------------##
+{
+  "source_type": "document",
+  "requirements_path": "D:/Downloads/TraceRAG/backend/dumps/spl2_test/req/UC1.txt",
+  "requirements_text": "",
+  "codebase_path": "D:/Downloads/TraceRAG/backend/dumps/spl2_test/backend",
+  "source_preprocessor": "sentence",
+  "target_preprocessor": "method",
+  "classifier": "simple",
+  "n_results": 12,
+  "source_granularity": 0,
+  "target_granularity": 1
+}
+
+{
+  "trace_links": [
+    {
+      "source_id": "UC1",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/spl2_test/backend\\middleware\\authMiddleware.js::authenticateToken(req, res, next)",
+      "confidence": 0.5307438969612122,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "UC1",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/spl2_test/backend\\controllers\\userController.js::resetPassword(req, res)",
+      "confidence": 0.6189616322517395,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "UC1",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/spl2_test/backend\\controllers\\userController.js::updateProfile(req, res)",
+      "confidence": 0.60555100440979,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "UC1",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/spl2_test/backend\\controllers\\userController.js::login(req, res)",
+      "confidence": 0.560614287853241,
+      "confidence_level": "low",
+      "explanation": null
+    },
+    {
+      "source_id": "UC1",
+      "target_id": "D:/Downloads/TraceRAG/backend/dumps/spl2_test/backend\\controllers\\userController.js::verifyMail(req, res)",
+      "confidence": 0.5476349592208862,
+      "confidence_level": "low",
+      "explanation": null
+    }
+  ],
+  "unimplemented": [
+    {
+      "identifier": "UC1::sentence_0",
+      "content": "Account Management: A user must create an account and log in to access the system."
+    },
+    {
+      "identifier": "UC1::sentence_1",
+      "content": "Users can update their profiles or reset forgotten passwords."
+    }
+  ],
+  "summary": {
+    "total_source_elements": 2,
+    "total_target_elements": 42,
+    "total_links": 5,
+    "unimplemented_count": 2,
+    "high_confidence": 0,
+    "medium_confidence": 0,
+    "low_confidence": 5
+  }
+}
