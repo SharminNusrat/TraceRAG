@@ -69,7 +69,9 @@ def call_api() -> dict:
         "classifier": "simple",
         "n_results": 8,
         "source_granularity": 0,
-        "target_granularity": 1
+        "target_granularity": 1,
+        "dependency_expansion_depth": 1,
+        "analysis_mode": "project"
     }
     
     try:

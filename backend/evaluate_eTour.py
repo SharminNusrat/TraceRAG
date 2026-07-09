@@ -64,7 +64,9 @@ def call_api() -> dict:
         "classifier": "simple",
         "n_results": 12,
         "source_granularity": 0,
-        "target_granularity": 1
+        "target_granularity": 1,
+        "dependency_expansion_depth": 1,
+        "analysis_mode": "project"
     }
     
     try:
@@ -72,7 +74,7 @@ def call_api() -> dict:
         response = requests.post(
             ANALYZE_ENDPOINT,
             json=payload,
-            timeout=600  # 10 minute timeout (processing all UCs)
+            timeout=900  # 10 minute timeout (processing all UCs)
         )
         
         if response.status_code == 200:

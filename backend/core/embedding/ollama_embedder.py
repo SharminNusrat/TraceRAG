@@ -1,6 +1,7 @@
 import ollama
 import logging
 from transformers import AutoTokenizer
+from core.cache import PersistentEmbeddingCache
 from core.schemas import CodeSemanticUnits, Element
 from core.embedding.base import EmbeddingCreator
 
@@ -22,11 +23,23 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
     MAX_TOKENS = ACTIVE_MAX_TOKENS
     DEFAULT_BATCH_SIZE = DEFAULT_EMBEDDING_BATCH_SIZE
 
-    def __init__(self, model: str = DEFAULT_MODEL, batch_size: int = DEFAULT_BATCH_SIZE):
+    def __init__(
+        self,
+        model: str = DEFAULT_MODEL,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        persistent_cache_path: str | None = None,
+        cache_namespace: str | None = None
+    ):
         self.model = model
         self.batch_size = batch_size
         self._cache: dict[str, list[float]] = {}
         self._tokenizer = AutoTokenizer.from_pretrained(self.TOKENIZER_NAME)
+        namespace = cache_namespace or f"{self.model}:{self.TOKENIZER_NAME}:{self.MAX_TOKENS}"
+        self._persistent_cache = (
+            PersistentEmbeddingCache(persistent_cache_path, namespace)
+            if persistent_cache_path
+            else None
+        )
 
     def create_embeddings(self, elements: list[Element]) -> list[list[float]]:
         contents = []
@@ -37,13 +50,24 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
                 logger.warning(f"Truncating: {e.identifier} ({len(tokens)} tokens)")
             contents.append(self._truncate_content(embedding_text))
         
-        uncached_texts = [text for text in set(contents) if text not in self._cache]
+        uncached_texts = []
+        for text in set(contents):
+            if text in self._cache:
+                continue
+
+            cached_embedding = self._persistent_cache.get(text) if self._persistent_cache else None
+            if cached_embedding is not None:
+                self._cache[text] = cached_embedding
+            else:
+                uncached_texts.append(text)
 
         for batch_start in range(0, len(uncached_texts), self.batch_size):
             texts = uncached_texts[batch_start:batch_start + self.batch_size]
             response = ollama.embed(model=self.model, input=texts)
             for text, embedding in zip(texts, response["embeddings"]):
                 self._cache[text] = embedding
+                if self._persistent_cache:
+                    self._persistent_cache.set(text, embedding)
         return [self._cache[text] for text in contents]
 
     def _build_embedding_text(self, element: Element) -> str:

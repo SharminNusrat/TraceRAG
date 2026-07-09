@@ -16,6 +16,9 @@ class ChromaStore(VectorStore):
         )
 
     def add_elements(self, elements: list[Element], embeddings: list[list[float]]) -> None:
+        if not elements:
+            return
+
         self.collection.upsert(
             ids=[e.identifier for e in elements],
             embeddings=embeddings,
@@ -27,6 +30,15 @@ class ChromaStore(VectorStore):
                 "compare": e.compare
             } for e in elements]
         )
+
+    def replace_elements(self, elements: list[Element], embeddings: list[list[float]]) -> None:
+        current_ids = {e.identifier for e in elements}
+        existing = self.collection.get()
+        stale_ids = [doc_id for doc_id in existing["ids"] if doc_id not in current_ids]
+        if stale_ids:
+            self.collection.delete(ids=stale_ids)
+
+        self.add_elements(elements, embeddings)
 
     def find_similar_elements(self, embedding: list[float], n_results: int, only_compare: bool = True) -> list[tuple[Element, float]]:
         where = {"compare": True} if only_compare else None

@@ -22,6 +22,11 @@ class ClassifierType(str, Enum):
     REASONING = "reasoning"
 
 
+class AnalysisMode(str, Enum):
+    SESSION = "session"
+    PROJECT = "project"
+
+
 class AnalyzeRequest(BaseModel):
     source_type: SourceType = SourceType.DOCUMENT
     requirements_path: str = ""
@@ -33,6 +38,9 @@ class AnalyzeRequest(BaseModel):
     n_results: int = 10
     source_granularity: int = 0
     target_granularity: int = 0
+    dependency_expansion_depth: int = 0
+    analysis_mode: AnalysisMode = AnalysisMode.SESSION
+    project_id: str | None = None
 
 
 class TraceLinkResponse(BaseModel):
