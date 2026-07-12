@@ -81,3 +81,38 @@ class DependencyGraph:
                 queue.append((next_id, depth + 1))
 
         return expanded
+
+    def expand_paths(
+        self,
+        seed_ids: Iterable[str],
+        max_depth: int = 1,
+        dependency_types: set[DependencyType] | None = None,
+        min_confidence: float = 0.0,
+        include_incoming: bool = False,
+    ) -> dict[str, list[CodeDependency]]:
+        """Return each reachable node with its first discovered shortest dependency path."""
+        paths: dict[str, list[CodeDependency]] = {seed_id: [] for seed_id in seed_ids}
+        queue = deque((seed_id, []) for seed_id in seed_ids)
+
+        while queue:
+            current_id, path = queue.popleft()
+            if len(path) >= max_depth:
+                continue
+
+            edges = self.get_outgoing(current_id, dependency_types)
+            if include_incoming:
+                edges += self.get_incoming(current_id, dependency_types)
+
+            for edge in edges:
+                if edge.confidence < min_confidence or not edge.target_id:
+                    continue
+
+                next_id = edge.target_id if edge.source_id == current_id else edge.source_id
+                if next_id in paths:
+                    continue
+
+                next_path = [*path, edge]
+                paths[next_id] = next_path
+                queue.append((next_id, next_path))
+
+        return paths

@@ -81,7 +81,8 @@ class TracePipeline:
             dependency_graph = self.dependency_analyzer.analyze(target_artifacts, target_elements)
             expander = DependencyLinkExpander(
                 graph=dependency_graph,
-                max_depth=self.dependency_expansion_depth
+                max_depth=self.dependency_expansion_depth,
+                min_target_granularity=self.aggregator.target_granularity,
             )
             all_results = expander.expand(all_results)
 

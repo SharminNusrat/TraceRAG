@@ -24,6 +24,20 @@ class CodeDependencyAnalyzer:
                 logger.warning(f"Dependency analysis skipped for {artifact.identifier}: {exc}")
                 continue
 
-            graph.add_edges(resolver.resolve_all(dependencies))
+            resolver.register_imports(dependencies)
+            resolved_dependencies = resolver.resolve_all(dependencies)
+            traversable_dependencies = [
+                dependency
+                for dependency in resolved_dependencies
+                if dependency.source_id in graph.nodes and dependency.target_id in graph.nodes
+            ]
+            unresolved_count = len(resolved_dependencies) - len(traversable_dependencies)
+            if unresolved_count:
+                logger.debug(
+                    "Skipped %s unresolved or ambiguous dependencies in %s",
+                    unresolved_count,
+                    artifact.identifier,
+                )
+            graph.add_edges(traversable_dependencies)
 
         return graph
