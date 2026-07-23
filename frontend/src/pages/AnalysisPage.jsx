@@ -1,18 +1,21 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, X } from 'lucide-react';
 import { Brand } from '../components/common/Brand';
-import { Button } from '../components/common/Button';
-import { PageHeader } from '../components/common/PageHeader';
+import { Stepper } from '../components/common/Stepper';
 import { useAnalysis } from '../features/analysis/AnalysisContext';
 import { AnalysisSettings } from '../features/analysis/components/AnalysisSettings';
 import { ArtifactUploader } from '../features/analysis/components/ArtifactUploader';
+import { ReviewStep } from '../features/analysis/components/ReviewStep';
 import { mockResult } from '../features/analysis/mockResult';
+
+const STEPS = ['Upload Artifacts', 'Analysis Settings', 'Review & Run'];
 
 export function AnalysisPage() {
   const navigate = useNavigate();
   const { draft, setDraft, setResult } = useAnalysis();
   const [files, setFiles] = useState([]);
-  const [advanced, setAdvanced] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
 
   const update = (field, value) => setDraft({ ...draft, [field]: value });
 
@@ -34,59 +37,110 @@ export function AnalysisPage() {
 
   const totalArtifacts = files.length + (draft.requirementsText.trim() ? 1 : 0);
   const missingType = files.some((f) => !f.type);
-  const canRun = totalArtifacts >= 2 && !missingType;
+  const canProceedFromUpload = totalArtifacts >= 2 && !missingType;
+  const canRun = canProceedFromUpload;
+
+  const next = () => {
+    if (currentStep < STEPS.length - 1) setCurrentStep(currentStep + 1);
+  };
+  const back = () => {
+    if (currentStep > 0) setCurrentStep(currentStep - 1);
+  };
+  const goToStep = (step) => {
+    if (step <= currentStep) setCurrentStep(step);
+  };
 
   const run = () => {
     setResult(mockResult);
     navigate('/results');
   };
 
+  const canNext = currentStep === 0 ? canProceedFromUpload : true;
+
   return (
     <main className="workflow-page">
       <nav className="workflow-nav">
         <Brand />
         <span>New analysis</span>
-        <Button variant="ghost" onClick={() => navigate('/')}>Exit</Button>
+        <button
+          type="button"
+          className="workflow-exit-btn"
+          onClick={() => navigate('/')}
+          aria-label="Exit analysis"
+        >
+          <X size={15} strokeWidth={2.2} />
+          <span>Exit</span>
+        </button>
       </nav>
 
       <div className="workflow-content">
-        <PageHeader
-          eyebrow="One-time analysis"
-          title="Set up your analysis"
-          description="Add your requirements and codebase. You can review results before choosing whether to save them."
-        />
+        <Stepper steps={STEPS} currentStep={currentStep} onStepClick={goToStep} />
 
-        <section className="setup-grid">
-          <article className="setup-card">
-            <div className="step-label">01</div>
-            <h2>Add your artifacts</h2>
-            <p>Upload the files for this analysis and mark what each one is. At least two are needed: a requirements source and a codebase.</p>
-            <ArtifactUploader
+        <div className="step-content-card">
+          {currentStep === 0 && (
+            <>
+              <div className="step-content-header">
+                <h1>Upload your artifacts</h1>
+                <p>
+                  Add the requirements and codebase files for analysis. You need at least
+                  one requirements source and one codebase archive.
+                </p>
+              </div>
+              <ArtifactUploader
+                files={files}
+                onFilesChange={handleFilesChange}
+                requirementsText={draft.requirementsText}
+                onRequirementsTextChange={handleRequirementsText}
+              />
+            </>
+          )}
+
+          {currentStep === 1 && (
+            <>
+              <div className="step-content-header">
+                <h1>Analysis settings</h1>
+                <p>
+                  Configure how your artifacts are processed. The defaults work
+                  well for most repositories.
+                </p>
+              </div>
+              <AnalysisSettings draft={draft} onChange={update} />
+            </>
+          )}
+
+          {currentStep === 2 && (
+            <ReviewStep
               files={files}
-              onFilesChange={handleFilesChange}
               requirementsText={draft.requirementsText}
-              onRequirementsTextChange={handleRequirementsText}
+              draft={draft}
+              onGoToStep={goToStep}
+              onRun={run}
+              canRun={canRun}
             />
-          </article>
+          )}
+        </div>
 
-          <article className="setup-card settings-card">
-            <div className="step-label">02</div>
-            <h2>Analysis settings</h2>
-            <p>Smart defaults work well for most repositories.</p>
-            <button className="settings-summary" onClick={() => setAdvanced(!advanced)}>
-              <span>
-                <b>{advanced ? 'Hide settings' : 'Configure analysis'}</b>
-                <small>Section requirements &middot; Method-level code &middot; Reasoning classifier</small>
-              </span>
-              <i>{advanced ? '⌃' : '⌄'}</i>
-            </button>
-            {advanced && <AnalysisSettings draft={draft} onChange={update} />}
-          </article>
-        </section>
-
-        <footer className="workflow-footer">
-          <p>Your files and results stay in this browser until you decide to save them.</p>
-          <Button onClick={run} disabled={!canRun}>Run analysis <span>→</span></Button>
+        {/* Step navigation footer */}
+        <footer className="step-footer">
+          <div className="step-footer-left">
+            {currentStep > 0 && (
+              <button type="button" className="button button-secondary step-nav-btn" onClick={back}>
+                <ArrowLeft size={15} strokeWidth={2.2} /> Back
+              </button>
+            )}
+          </div>
+          <div className="step-footer-right">
+            {currentStep < STEPS.length - 1 && (
+              <button
+                type="button"
+                className="button button-primary step-nav-btn"
+                onClick={next}
+                disabled={!canNext}
+              >
+                Next <ArrowRight size={15} strokeWidth={2.2} />
+              </button>
+            )}
+          </div>
         </footer>
       </div>
     </main>
