@@ -8,7 +8,6 @@ EXTENSION_TO_PARSER = {
     '.java': lambda: JavaParser(),
     '.js': lambda: JsTsParser(is_typescript=False),
     '.ts': lambda: JsTsParser(is_typescript=True),
-    '.tsx': lambda: JsTsParser(is_typescript=True),
 }
 
 class CodeTreePreprocessor(Preprocessor):
