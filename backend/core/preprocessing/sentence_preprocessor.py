@@ -1,5 +1,5 @@
 import nltk
-from core.schemas import Artifact, Element
+from core.schemas import Artifact, Element, ElementLevel
 from core.preprocessing.base import Preprocessor
 
 nltk.download('punkt_tab', quiet=True)
@@ -16,6 +16,7 @@ class SentencePreprocessor(Preprocessor):
                 type=artifact.type,
                 content=artifact.content,
                 granularity=0,
+                level=ElementLevel.ARTIFACT,
                 parent_id=None,
                 compare=False
             )
@@ -34,6 +35,7 @@ class SentencePreprocessor(Preprocessor):
                     type=artifact.type,
                     content=sentence.strip(),
                     granularity=1,
+                    level=ElementLevel.SENTENCE,
                     parent_id=artifact.identifier,
                     compare=True
                 )

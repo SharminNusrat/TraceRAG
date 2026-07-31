@@ -1,5 +1,5 @@
 import chromadb
-from core.schemas import Element
+from core.schemas import Element, ElementLevel
 from core.storage.base import VectorStore
 
 SOURCE_COLLECTION = "source_elements"
@@ -26,6 +26,7 @@ class ChromaStore(VectorStore):
             metadatas=[{
                 "type": e.type,
                 "granularity": e.granularity,
+                "level": e.level.value,
                 "parent_id": e.parent_id or "",
                 "compare": e.compare
             } for e in elements]
@@ -58,6 +59,7 @@ class ChromaStore(VectorStore):
                 type=metadata["type"],
                 content=results["documents"][0][i],
                 granularity=metadata["granularity"],
+                level=ElementLevel(metadata.get("level", ElementLevel.ARTIFACT.value)),
                 parent_id=metadata["parent_id"] or None,
                 compare=metadata["compare"]
             )
@@ -74,6 +76,7 @@ class ChromaStore(VectorStore):
             type=metadata["type"],
             content=result["documents"][0],
             granularity=metadata["granularity"],
+            level=ElementLevel(metadata.get("level", ElementLevel.ARTIFACT.value)),
             parent_id=metadata["parent_id"] or None,
             compare=metadata["compare"]
         )

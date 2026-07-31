@@ -1,5 +1,5 @@
 import os
-from core.schemas import Artifact, Element
+from core.schemas import Artifact, Element, ElementLevel
 from core.preprocessing.base import Preprocessor
 from core.parser import BaseParser, JavaParser, PythonParser, JsTsParser
 
@@ -37,6 +37,7 @@ class CodeTreePreprocessor(Preprocessor):
                         type='source code package',
                         content=f"Package folder: '{os.path.basename(folder)}'",
                         granularity=depth,
+                        level=ElementLevel.PACKAGE,
                         parent_id=parent_id,
                         compare=False
                     )
@@ -63,6 +64,7 @@ class CodeTreePreprocessor(Preprocessor):
             type=artifact.type,
             content=artifact.content,
             granularity=base_granularity,
+            level=ElementLevel.FILE,
             parent_id=parent_id,
             compare=False
         )
@@ -88,6 +90,7 @@ class CodeTreePreprocessor(Preprocessor):
                 type='source code class definition',
                 content=class_content,
                 granularity=base_granularity + 1,
+                level=ElementLevel.CLASS,
                 parent_id=abs_id,
                 compare=False
             )
@@ -106,6 +109,7 @@ class CodeTreePreprocessor(Preprocessor):
                     type='source code method',
                     content=method_content,
                     granularity=base_granularity + 2,
+                    level=ElementLevel.FUNCTION,
                     parent_id=class_id,
                     compare=False
                 )
@@ -122,6 +126,7 @@ class CodeTreePreprocessor(Preprocessor):
                 type='source code method',
                 content=function_content,
                 granularity=base_granularity + 1,
+                level=ElementLevel.FUNCTION,
                 parent_id=abs_id,
                 compare=False
             )

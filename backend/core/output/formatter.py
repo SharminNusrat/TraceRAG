@@ -8,6 +8,9 @@ class TraceMatrix:
         self.target_elements = [e for e in target_elements if e.compare]
         self.trace_links = trace_links
         self._link_map = {(link.source_id, link.target_id): link for link in trace_links}
+        # Unfiltered lookups: aggregation may roll a link up to a coarser element
+        # (a class or file) that itself has compare=False.
+        self._content_map = {e.identifier: e.content for e in source_elements + target_elements}
 
     def get_link(self, source_id: str, target_id: str) -> TraceLink | None:
         return self._link_map.get((source_id, target_id))
@@ -21,7 +24,9 @@ class TraceMatrix:
             "trace_links": [
                 {
                     "source_id": link.source_id,
+                    "source_content": self._content_map.get(link.source_id),
                     "target_id": link.target_id,
+                    "target_content": self._content_map.get(link.target_id),
                     "confidence": link.confidence,
                     "confidence_level": link.confidence_level.value,
                     "explanation": link.explanation

@@ -68,8 +68,8 @@ def call_api() -> dict:
         "target_preprocessor": "method",
         "classifier": "simple",
         "n_results": 10,
-        "source_granularity": 0,
-        "target_granularity": 1,
+        "source_output_level": "artifact",
+        "target_output_level": "class",
         "dependency_expansion_depth": 1,
         "analysis_mode": "project"
     }

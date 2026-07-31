@@ -1,4 +1,4 @@
-from core.schemas import Artifact, Element
+from core.schemas import Artifact, Element, ElementLevel
 from core.preprocessing.base import Preprocessor
 from core.parser import BaseParser, JavaParser, PythonParser, JsTsParser
 
@@ -32,6 +32,7 @@ class CodeMethodPreprocessor(Preprocessor):
             type=artifact.type,
             content=artifact.content,
             granularity=0,
+            level=ElementLevel.FILE,
             parent_id=None,
             compare=False
         )
@@ -51,6 +52,7 @@ class CodeMethodPreprocessor(Preprocessor):
                     type=f"source code class definition",
                     content=class_content,
                     granularity=1,
+                    level=ElementLevel.CLASS,
                     parent_id=artifact.identifier,
                     compare=False,
                     semantic_units=class_semantic_units
@@ -67,6 +69,7 @@ class CodeMethodPreprocessor(Preprocessor):
                         type=f"source code method",
                         content=method_content,
                         granularity=2,
+                        level=ElementLevel.FUNCTION,
                         parent_id=class_id,
                         compare=True,
                         semantic_units=method_semantic_units
@@ -83,6 +86,7 @@ class CodeMethodPreprocessor(Preprocessor):
                 type='source code method',
                 content=function_content,
                 granularity=1,
+                level=ElementLevel.FUNCTION,
                 parent_id=artifact.identifier,
                 compare=True,
                 semantic_units=function_semantic_units

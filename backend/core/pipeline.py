@@ -1,4 +1,5 @@
 import logging
+from core.schemas import ElementLevel
 from core.ingestion.base import ArtifactProvider
 from core.preprocessing.base import Preprocessor
 from core.embedding.base import EmbeddingCreator
@@ -23,8 +24,8 @@ class TracePipeline:
         classifier: Classifier,
         chroma_path: str = "./chroma_data",
         n_results: int = 10,
-        source_granularity: int = 0,
-        target_granularity: int = 0,
+        source_output_level: ElementLevel | None = None,
+        target_output_level: ElementLevel | None = None,
         dependency_analyzer: CodeDependencyAnalyzer | None = None,
         dependency_expansion_depth: int = 0,
         reset_vector_stores: bool = True,
@@ -39,7 +40,7 @@ class TracePipeline:
         self.dependency_analyzer = dependency_analyzer
         self.dependency_expansion_depth = dependency_expansion_depth
         self.reset_vector_stores = reset_vector_stores
-        self.aggregator = ResultAggregator(source_granularity, target_granularity)
+        self.aggregator = ResultAggregator(source_output_level, target_output_level)
         self.source_store = ChromaStore(SOURCE_COLLECTION, chroma_path)
         self.target_store = ChromaStore(TARGET_COLLECTION, chroma_path)
 
@@ -79,10 +80,12 @@ class TracePipeline:
         if self.dependency_analyzer and self.dependency_expansion_depth > 0:
             logger.info("Expanding trace links with dependency graph")
             dependency_graph = self.dependency_analyzer.analyze(target_artifacts, target_elements)
+            # No granularity floor: the expander already restricts itself to
+            # compare=True nodes, and the aggregator rolls links up to the
+            # requested output level afterwards.
             expander = DependencyLinkExpander(
                 graph=dependency_graph,
                 max_depth=self.dependency_expansion_depth,
-                min_target_granularity=self.aggregator.target_granularity,
             )
             all_results = expander.expand(all_results)
 

@@ -1,5 +1,5 @@
 import ollama
-from core.schemas import Artifact, Element
+from core.schemas import Artifact, Element, ElementLevel
 from core.preprocessing.base import Preprocessor
 
 class SummarizePreprocessor(Preprocessor):
@@ -19,6 +19,7 @@ class SummarizePreprocessor(Preprocessor):
                 type=f"Summary of '{artifact.type}'",
                 content=summary,
                 granularity=0,
+                level=ElementLevel.ARTIFACT,
                 parent_id=None,
                 compare=True
             )

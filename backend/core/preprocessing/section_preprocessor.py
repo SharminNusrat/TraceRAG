@@ -1,6 +1,6 @@
 import re
 import logging
-from core.schemas import Artifact, Element
+from core.schemas import Artifact, Element, ElementLevel
 from core.preprocessing.base import Preprocessor
 from core.preprocessing.sentence_preprocessor import SentencePreprocessor
 
@@ -18,6 +18,7 @@ class SectionPreprocessor(Preprocessor):
                 type=artifact.type,
                 content=artifact.content,
                 granularity=0,
+                level=ElementLevel.ARTIFACT,
                 parent_id=None,
                 compare=False
             )
@@ -36,6 +37,7 @@ class SectionPreprocessor(Preprocessor):
                         type=artifact.type,
                         content=f"{section_number} {section_title}\n{section_content.strip()}",
                         granularity=granularity,
+                        level=ElementLevel.SECTION,
                         parent_id=parent_id,
                         compare=True
                     )

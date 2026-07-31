@@ -1,5 +1,5 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter, Language
-from core.schemas import Artifact, Element
+from core.schemas import Artifact, Element, ElementLevel
 from core.preprocessing.base import Preprocessor
 
 EXTENSION_TO_LANGUAGE = {
@@ -24,6 +24,7 @@ class CodeChunkingPreprocessor(Preprocessor):
                 type=artifact.type,
                 content=artifact.content,
                 granularity=0,
+                level=ElementLevel.FILE,
                 parent_id=None,
                 compare=False
             )
@@ -37,6 +38,7 @@ class CodeChunkingPreprocessor(Preprocessor):
                         type=artifact.type,
                         content=chunk.strip(),
                         granularity=1,
+                        level=ElementLevel.CHUNK,
                         parent_id=artifact.identifier,
                         compare=True
                     )

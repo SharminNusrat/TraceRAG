@@ -1,14 +1,33 @@
 import { FileText, Settings, ArrowRight } from 'lucide-react';
+import { findKind, findPreprocessor } from '../api/capabilitiesApi';
 
-export function ReviewStep({ files, requirementsText, draft, onGoToStep, onRun, canRun }) {
-  const pastedCount = requirementsText.trim() ? 1 : 0;
-  const totalArtifacts = files.length + pastedCount;
+function describeSide(capabilities, artifact, preprocessorKey, outputLevelKey) {
+  const kind = findKind(capabilities, artifact?.kind);
+  const preprocessor = findPreprocessor(kind, preprocessorKey);
+  const level = preprocessor?.output_levels.find((option) => option.key === outputLevelKey);
+  return {
+    preprocessor: preprocessor?.label ?? preprocessorKey ?? '—',
+    level: level?.label ?? '—',
+  };
+}
+
+export function ReviewStep({ artifacts, sides, draft, capabilities, onGoToStep, onRun, canRun, running, error }) {
+  const sourceArtifact = sides.selectedSources[0];
+  const targetArtifact = sides.selectedTargets[0];
+
+  const source = describeSide(capabilities, sourceArtifact, draft.sourcePreprocessor, draft.sourceOutputLevel);
+  const target = describeSide(capabilities, targetArtifact, draft.targetPreprocessor, draft.targetOutputLevel);
+
+  const classifierLabel = capabilities?.classifiers
+    .find((option) => option.key === draft.classifier)?.label ?? draft.classifier;
 
   const settingsDisplay = [
-    ['Requirements granularity', draft.sourcePreprocessor],
-    ['Code granularity', draft.targetPreprocessor],
-    ['Classifier', draft.classifier],
-    ['Links per requirement', draft.nResults],
+    ['Source split into', source.preprocessor],
+    ['Source links reported at', source.level],
+    ['Target split into', target.preprocessor],
+    ['Target links reported at', target.level],
+    ['Classifier', classifierLabel],
+    ['Candidates per requirement', draft.nResults],
   ];
 
   return (
@@ -19,8 +38,8 @@ export function ReviewStep({ files, requirementsText, draft, onGoToStep, onRun, 
             <FileText size={18} strokeWidth={1.8} />
           </div>
           <div>
-            <h3>Uploaded Artifacts</h3>
-            <p>{totalArtifacts} artifact{totalArtifacts !== 1 ? 's' : ''} selected</p>
+            <h3>Trace pair</h3>
+            <p>{artifacts.length} artifact{artifacts.length !== 1 ? 's' : ''} uploaded</p>
           </div>
           <button type="button" className="review-edit-link" onClick={() => onGoToStep(0)}>
             Edit
@@ -28,26 +47,27 @@ export function ReviewStep({ files, requirementsText, draft, onGoToStep, onRun, 
         </div>
 
         <div className="review-list">
-          {pastedCount > 0 && (
-            <div className="review-list-item">
-              <span className="review-item-badge requirements">REQ</span>
-              <div className="review-item-info">
-                <b>Pasted requirements text</b>
-                <small>{requirementsText.trim().length.toLocaleString()} characters</small>
+          {[['Source', sides.selectedSources], ['Target', sides.selectedTargets]].map(([role, group]) => {
+            const fileCount = group.reduce((sum, a) => sum + a.entries.length, 0);
+            const pasted = group.filter((a) => a.text !== undefined).length;
+            return (
+              <div className="review-list-item" key={role}>
+                <span className={`review-item-badge ${role.toLowerCase()}`}>{role}</span>
+                <div className="review-item-info">
+                  <b>
+                    {group.length === 0 ? 'Not selected'
+                      : group.length === 1 ? group[0].name
+                        : `${group.length} artifacts combined`}
+                  </b>
+                  <small>
+                    {group.length > 1 && `${group.map((a) => a.name).join(', ')} · `}
+                    {fileCount} file{fileCount === 1 ? '' : 's'}
+                    {pasted > 0 && ` · ${pasted} pasted`}
+                  </small>
+                </div>
               </div>
-            </div>
-          )}
-          {files.map((entry) => (
-            <div className="review-list-item" key={entry.id}>
-              <span className={`review-item-badge ${entry.type}`}>
-                {entry.type === 'code' ? 'CODE' : 'REQ'}
-              </span>
-              <div className="review-item-info">
-                <b>{entry.file.name}</b>
-                <small>{Math.ceil(entry.file.size / 1024).toLocaleString()} KB</small>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -76,15 +96,22 @@ export function ReviewStep({ files, requirementsText, draft, onGoToStep, onRun, 
       </div>
 
       <div className="review-run-area">
-        <p>Your files and results stay in this browser until you decide to save them.</p>
+        <p>
+          {running
+            ? 'Embedding artifacts and classifying trace links. This can take a few minutes.'
+            : 'Your files and results stay in this browser until you decide to save them.'}
+        </p>
         <button
           type="button"
           className="button button-primary review-run-button"
           onClick={onRun}
-          disabled={!canRun}
+          disabled={!canRun || running}
         >
-          Run analysis <ArrowRight size={16} strokeWidth={2.2} />
+          {running ? 'Running analysis…' : (
+            <>Run analysis <ArrowRight size={16} strokeWidth={2.2} /></>
+          )}
         </button>
+        {error && <p className="form-hint warn">{error}</p>}
       </div>
     </div>
   );

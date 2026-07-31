@@ -1,113 +1,203 @@
 import { useRef, useState } from 'react';
-import { UploadCloud, FileText, X } from 'lucide-react';
+import { UploadCloud, FileText, Folder, FileArchive, X, Plus, Type } from 'lucide-react';
+import { findKind, kindForPath } from '../api/capabilitiesApi';
 
-const TYPE_OPTIONS = [
-  { value: '', label: 'Select artifact type' },
-  { value: 'requirements', label: 'Requirements' },
-  { value: 'code', label: 'Code (.zip)' },
-  // Add new artifact types here as the pipeline supports them
-  // (e.g. architecture model) - no new dropzone needed.
-];
+let artifactCounter = 0;
+const nextArtifactId = () => `artifact-${++artifactCounter}`;
 
-function fileId(file) {
-  return `${file.name}-${file.size}-${file.lastModified}`;
+/** Browsers expose a folder pick as files carrying webkitRelativePath. */
+const entryPath = (file) => file.webkitRelativePath || file.name;
+
+function artifactName(entries, isFolder) {
+  if (isFolder) {
+    const [first] = entries[0].path.split('/');
+    return first || 'folder';
+  }
+  if (entries.length === 1) return entries[0].path.split('/').at(-1);
+  return `${entries.length} files`;
 }
 
-function inferType(file) {
-  return file.name.toLowerCase().endsWith('.zip') ? 'code' : 'requirements';
+const totalBytes = (artifact) =>
+  artifact.entries.reduce((sum, entry) => sum + entry.file.size, 0);
+
+function formatBytes(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.max(1, Math.ceil(bytes / 1024)).toLocaleString()} KB`;
 }
 
-export function ArtifactUploader({ files, onFilesChange, requirementsText, onRequirementsTextChange }) {
-  const inputRef = useRef(null);
+function ArtifactIcon({ artifact }) {
+  if (artifact.text !== undefined) return <Type size={16} strokeWidth={2} />;
+  if (artifact.isFolder) return <Folder size={16} strokeWidth={2} />;
+  if (artifact.entries.some((entry) => entry.path.toLowerCase().endsWith('.zip'))) {
+    return <FileArchive size={16} strokeWidth={2} />;
+  }
+  return <FileText size={16} strokeWidth={2} />;
+}
+
+export function ArtifactUploader({ artifacts, onArtifactsChange, capabilities }) {
+  const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
-  const [pasting, setPasting] = useState(Boolean(requirementsText));
+  const [pasting, setPasting] = useState(false);
+  const [skippedCount, setSkippedCount] = useState(0);
 
-  const addFiles = (fileList) => {
-    const existingIds = new Set(files.map((f) => f.id));
-    const incoming = Array.from(fileList)
-      .map((file) => ({ id: fileId(file), file, type: inferType(file) }))
-      .filter((f) => !existingIds.has(f.id));
-    if (incoming.length) onFilesChange([...files, ...incoming]);
+  const acceptAttribute = capabilities
+    ? [...new Set(capabilities.artifact_kinds.flatMap((kind) => [
+      ...kind.extensions,
+      ...(kind.accepts_archive ? ['.zip'] : []),
+    ]))].join(',')
+    : undefined;
+
+  // One add-action produces one artifact *per kind*: picking ten .js files
+  // together means one codebase, but picking a requirements PDF alongside a
+  // code .zip must not fuse them into a single artifact.
+  const addArtifact = (fileList, isFolder) => {
+    const entries = Array.from(fileList).map((file) => ({ file, path: entryPath(file) }));
+    if (!entries.length) return;
+
+    const byKind = new Map();
+    let skipped = 0;
+    for (const entry of entries) {
+      const kind = kindForPath(capabilities, entry.path);
+      if (!kind) { skipped += 1; continue; }
+      if (!byKind.has(kind)) byKind.set(kind, []);
+      byKind.get(kind).push(entry);
+    }
+
+    setSkippedCount(skipped);
+    if (!byKind.size) return;
+
+    const labelFor = (kind) =>
+      capabilities?.artifact_kinds.find((option) => option.key === kind)?.label;
+
+    const split = byKind.size > 1;
+    const added = [...byKind.entries()].map(([kind, kindEntries]) => ({
+      id: nextArtifactId(),
+      // When one selection covers several kinds the shared folder name would be
+      // ambiguous, so qualify each piece with its kind.
+      name: split
+        ? `${artifactName(kindEntries, isFolder)}${labelFor(kind) ? ` (${labelFor(kind)})` : ''}`
+        : artifactName(kindEntries, isFolder),
+      kind,
+      entries: kindEntries,
+      isFolder,
+    }));
+
+    onArtifactsChange([...artifacts, ...added]);
   };
 
-  const removeFile = (id) => onFilesChange(files.filter((f) => f.id !== id));
-  const setType = (id, type) => onFilesChange(files.map((f) => (f.id === id ? { ...f, type } : f)));
+  const addTextArtifact = (text) => {
+    const textKind = capabilities?.artifact_kinds.find((kind) => kind.accepts_text);
+    if (!textKind) return;
+    onArtifactsChange([...artifacts, {
+      id: nextArtifactId(),
+      name: 'Pasted requirements',
+      kind: textKind.key,
+      entries: [],
+      text,
+    }]);
+  };
+
+  const removeArtifact = (id) =>
+    onArtifactsChange(artifacts.filter((artifact) => artifact.id !== id));
+
+  const setKind = (id, kind) =>
+    onArtifactsChange(artifacts.map((a) => (a.id === id ? { ...a, kind } : a)));
 
   const handleDrop = (event) => {
     event.preventDefault();
     setDragOver(false);
-    addFiles(event.dataTransfer.files);
+    addArtifact(event.dataTransfer.files, false);
   };
-
-  const pastedCount = requirementsText.trim() ? 1 : 0;
-  const totalCount = files.length + pastedCount;
-  const missingType = files.some((f) => !f.type);
-  const hasEntries = files.length > 0 || pastedCount > 0;
 
   return (
     <div className="uploader">
-      <label
+      <div
         className={`dropzone${dragOver ? ' drag-over' : ''}`}
         onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
       >
         <input
-          ref={inputRef}
+          ref={fileInputRef}
           type="file"
           multiple
-          accept=".pdf,.docx,.txt,.zip"
-          onChange={(event) => addFiles(event.target.files)}
+          hidden
+          accept={acceptAttribute}
+          onChange={(event) => { addArtifact(event.target.files, false); event.target.value = ''; }}
         />
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          hidden
+          webkitdirectory=""
+          directory=""
+          onChange={(event) => { addArtifact(event.target.files, true); event.target.value = ''; }}
+        />
+
         <span><UploadCloud size={24} strokeWidth={1.7} /></span>
         <b>Drag and drop files here</b>
-        <small>PDF, DOCX, or TXT for requirements &middot; ZIP for code &middot; up to 20&nbsp;MB each</small>
-        <em>Select files</em>
-      </label>
+        <small>
+          PDF, DOCX or TXT for requirements · source files, a folder, or a .zip for code
+          {capabilities && ` · up to ${Math.round(capabilities.max_total_upload_bytes / 1024 / 1024)} MB total`}
+        </small>
+        <div className="dropzone-actions">
+          <button type="button" className="button button-secondary" onClick={() => fileInputRef.current?.click()}>
+            <Plus size={14} strokeWidth={2.4} /> Select files
+          </button>
+          <button type="button" className="button button-secondary" onClick={() => folderInputRef.current?.click()}>
+            <Folder size={14} strokeWidth={2.2} /> Select folder
+          </button>
+        </div>
+      </div>
 
-      <button type="button" className="text-toggle" onClick={() => setPasting((v) => !v)}>
+      <button type="button" className="text-toggle" onClick={() => setPasting((value) => !value)}>
         {pasting ? 'Hide text input' : 'Or paste requirements text instead'}
       </button>
       {pasting && (
-        <textarea
-          className="uploader-textarea"
-          value={requirementsText}
-          onChange={(event) => onRequirementsTextChange(event.target.value)}
-          placeholder="Paste your requirements here..."
-          rows="6"
-        />
+        <PasteBox onAdd={(text) => { addTextArtifact(text); setPasting(false); }} />
       )}
 
-      {hasEntries && (
+      {artifacts.length > 0 && (
         <div className="file-list">
           <span className="file-list-label">
-            Selected artifacts <b>{totalCount}</b>
+            Uploaded artifacts <b>{artifacts.length}</b>
           </span>
 
-          {pastedCount > 0 && (
-            <div className="file-row">
-              <span className="file-row-icon"><FileText size={16} strokeWidth={2} /></span>
+          {artifacts.map((artifact) => (
+            <div className="file-row" key={artifact.id}>
+              <span className="file-row-icon"><ArtifactIcon artifact={artifact} /></span>
               <div className="file-row-name">
-                <b>Pasted requirements text</b>
-                <small>{requirementsText.trim().length.toLocaleString()} characters</small>
+                <b>{artifact.name}</b>
+                <small>
+                  {artifact.text !== undefined
+                    ? `${artifact.text.trim().length.toLocaleString()} characters`
+                    : `${artifact.entries.length} file${artifact.entries.length === 1 ? '' : 's'} · ${formatBytes(totalBytes(artifact))}`}
+                </small>
               </div>
-              <span className="file-row-type-fixed">Requirements</span>
-            </div>
-          )}
-
-          {files.map((entry) => (
-            <div className="file-row" key={entry.id}>
-              <span className="file-row-icon"><FileText size={16} strokeWidth={2} /></span>
-              <div className="file-row-name">
-                <b>{entry.file.name}</b>
-                <small>{Math.ceil(entry.file.size / 1024).toLocaleString()} KB</small>
-              </div>
-              <select value={entry.type} onChange={(event) => setType(entry.id, event.target.value)}>
-                {TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+              <select
+                value={artifact.kind ?? ''}
+                onChange={(event) => setKind(artifact.id, event.target.value)}
+                aria-label={`Artifact type for ${artifact.name}`}
+              >
+                <option value="">Select type</option>
+                {capabilities?.artifact_kinds.map((kind) => (
+                  <option
+                    key={kind.key}
+                    value={kind.key}
+                    disabled={artifact.text !== undefined && !kind.accepts_text}
+                  >
+                    {kind.label}
+                  </option>
                 ))}
               </select>
-              <button type="button" className="file-row-remove" onClick={() => removeFile(entry.id)} aria-label={`Remove ${entry.file.name}`}>
+              <button
+                type="button"
+                className="file-row-remove"
+                onClick={() => removeArtifact(artifact.id)}
+                aria-label={`Remove ${artifact.name}`}
+              >
                 <X size={15} strokeWidth={2.2} />
               </button>
             </div>
@@ -115,12 +205,69 @@ export function ArtifactUploader({ files, onFilesChange, requirementsText, onReq
         </div>
       )}
 
-      {totalCount > 0 && totalCount < 2 && (
-        <p className="form-hint warn">Add at least two artifacts &mdash; one requirements source and one codebase.</p>
+      {skippedCount > 0 && (
+        <p className="form-hint">
+          Skipped {skippedCount} file{skippedCount === 1 ? '' : 's'} of unsupported types.
+        </p>
       )}
-      {missingType && (
-        <p className="form-hint warn">Select an artifact type for each uploaded file.</p>
-      )}
+
+      <UploaderHints artifacts={artifacts} capabilities={capabilities} />
     </div>
+  );
+}
+
+function PasteBox({ onAdd }) {
+  const [text, setText] = useState('');
+  return (
+    <div className="paste-box">
+      <textarea
+        className="uploader-textarea"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        placeholder="Paste your requirements here..."
+        rows="6"
+      />
+      <button
+        type="button"
+        className="button button-secondary"
+        disabled={!text.trim()}
+        onClick={() => onAdd(text)}
+      >
+        <Plus size={14} strokeWidth={2.4} /> Add as artifact
+      </button>
+    </div>
+  );
+}
+
+function UploaderHints({ artifacts, capabilities }) {
+  if (!capabilities) return null;
+
+  const untyped = artifacts.some((artifact) => !artifact.kind);
+  const roleCounts = { source: 0, target: 0 };
+  for (const artifact of artifacts) {
+    const kind = findKind(capabilities, artifact.kind);
+    for (const role of kind?.roles ?? []) roleCounts[role] += 1;
+  }
+
+  const oversized = artifacts.reduce(
+    (sum, artifact) => sum + artifact.entries.reduce((n, entry) => n + entry.file.size, 0),
+    0,
+  ) > capabilities.max_total_upload_bytes;
+
+  return (
+    <>
+      {untyped && <p className="form-hint warn">Choose an artifact type for each upload.</p>}
+      {artifacts.length > 0 && !roleCounts.source && (
+        <p className="form-hint warn">Add a requirements artifact to trace from.</p>
+      )}
+      {artifacts.length > 0 && !roleCounts.target && (
+        <p className="form-hint warn">Add a code artifact to trace to.</p>
+      )}
+      {oversized && (
+        <p className="form-hint warn">
+          Total upload exceeds {Math.round(capabilities.max_total_upload_bytes / 1024 / 1024)} MB.
+        </p>
+      )}
+    </>
   );
 }

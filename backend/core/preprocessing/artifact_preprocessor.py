@@ -1,4 +1,4 @@
-from core.schemas import Artifact, Element
+from core.schemas import Artifact, Element, ElementLevel
 from core.preprocessing.base import Preprocessor
 
 class ArtifactPreprocessor(Preprocessor):
@@ -11,6 +11,7 @@ class ArtifactPreprocessor(Preprocessor):
                 type=artifact.type,
                 content=artifact.content,
                 granularity=0,
+                level=ElementLevel.ARTIFACT,
                 parent_id=None,
                 compare=True
             )
