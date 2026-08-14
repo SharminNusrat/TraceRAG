@@ -6,6 +6,7 @@
 # Generated app data / local storage
 dumps/
 chroma_data/
+app_data/
 
 # Python bytecode and caches
 __pycache__/

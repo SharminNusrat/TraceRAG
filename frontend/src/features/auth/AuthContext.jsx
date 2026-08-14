@@ -1,29 +1,55 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { fetchCurrentUser, loginAccount, registerAccount } from './api/authApi';
+import { clearToken, getToken, setToken } from '../../services/authToken';
 
 const AuthContext = createContext(null);
-const STORAGE_KEY = 'tracerag-user';
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => (
-    JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
-  ));
+  const [user, setUser] = useState(null);
+  // Only a stored token makes the startup check necessary; without one there
+  // is nothing to wait for and guarded routes can decide immediately.
+  const [loading, setLoading] = useState(() => Boolean(getToken()));
 
-  const value = useMemo(() => ({
-    user,
-    signIn: (details) => {
-      const nextUser = {
-        name: details.name || 'Alex Morgan',
-        email: details.email,
-      };
+  useEffect(() => {
+    if (!getToken()) return undefined;
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextUser));
-      setUser(nextUser);
-    },
-    signOut: () => {
-      localStorage.removeItem(STORAGE_KEY);
-      setUser(null);
-    },
-  }), [user]);
+    let active = true;
+    fetchCurrentUser()
+      .then((account) => {
+        if (active) setUser(account);
+      })
+      .catch(() => {
+        // Expired, revoked, or signed with a key the server no longer has.
+        clearToken();
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const value = useMemo(() => {
+    // Register and login return the same payload, so both land here.
+    const accept = (response) => {
+      setToken(response.access_token);
+      setUser(response.user);
+      return response.user;
+    };
+
+    return {
+      user,
+      loading,
+      signIn: async (credentials) => accept(await loginAccount(credentials)),
+      signUp: async (details) => accept(await registerAccount(details)),
+      signOut: () => {
+        clearToken();
+        setUser(null);
+      },
+    };
+  }, [user, loading]);
 
   return (
     <AuthContext.Provider value={value}>

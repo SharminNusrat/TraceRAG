@@ -1,5 +1,11 @@
 fastapi
 uvicorn[standard]
+sqlalchemy
+alembic
+psycopg[binary]
+pyjwt
+bcrypt
+email-validator
 chromadb
 ollama
 pymupdf

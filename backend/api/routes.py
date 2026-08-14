@@ -3,14 +3,13 @@ import logging
 import os
 import re
 import shutil
-import tempfile
 import zipfile
 from hashlib import sha256
 from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from api.schemas import (
-    AnalysisMode, AnalyzeRequest, AnalyzeResponse, CapabilitiesResponse, SourceType,
-    TraceLinkResponse, PreprocessorType, ClassifierType,
+    AnalysisMode, AnalyzeRequest, AnalyzeResponse, CapabilitiesResponse, ElementResponse,
+    SourceType, TraceLinkResponse, PreprocessorType, ClassifierType,
 )
 from api.capabilities import (
     ARTIFACT_KINDS_BY_KEY, MAX_TOTAL_UPLOAD_BYTES, MAX_UPLOAD_BYTES,
@@ -23,6 +22,7 @@ from core.embedding import OllamaEmbeddingCreator
 from core.classification import SimpleClassifier, ReasoningClassifier, OllamaChatProvider, GroqChatProvider
 from core.dependency import CodeDependencyAnalyzer
 from core.pipeline import TracePipeline
+from core.projects import artifact_store
 from config import settings
 
 router = APIRouter()
@@ -92,9 +92,9 @@ def sanitize_project_id(project_id: str) -> str:
     return sanitized.strip("-") or "project"
 
 
-def get_project_paths(project_id: str) -> tuple[str, str]:
-    project_root = PROJECT_DATA_ROOT / sanitize_project_id(project_id)
-    return str(project_root / "chroma"), str(project_root / "embeddings.sqlite")
+def get_chroma_path(project_id: str) -> str:
+    """Where this project's vectors are indexed."""
+    return str(PROJECT_DATA_ROOT / sanitize_project_id(project_id) / "chroma")
 
 
 
@@ -110,7 +110,7 @@ def build_pipeline_response(
     target_output_level: ElementLevel | None,
     dependency_expansion_depth: int,
     chroma_path: str,
-    persistent_cache_path: str | None,
+    use_persistent_cache: bool,
     reset_vector_stores: bool,
 ) -> AnalyzeResponse:
     pipeline = TracePipeline(
@@ -118,7 +118,7 @@ def build_pipeline_response(
         target_provider=target_provider,
         source_preprocessor=get_preprocessor(source_preprocessor),
         target_preprocessor=get_preprocessor(target_preprocessor),
-        embedder=OllamaEmbeddingCreator(persistent_cache_path=persistent_cache_path),
+        embedder=OllamaEmbeddingCreator(use_persistent_cache=use_persistent_cache),
         classifier=get_classifier(classifier),
         chroma_path=chroma_path,
         n_results=n_results,
@@ -132,6 +132,8 @@ def build_pipeline_response(
 
     return AnalyzeResponse(
         trace_links=[TraceLinkResponse(**link) for link in result["trace_links"]],
+        source_elements=[ElementResponse(**e) for e in result["source_elements"]],
+        target_elements=[ElementResponse(**e) for e in result["target_elements"]],
         unimplemented=result["unimplemented"],
         summary=result["summary"],
     )
@@ -139,12 +141,13 @@ def build_pipeline_response(
 
 def run_analysis(request: AnalyzeRequest) -> AnalyzeResponse:
     chroma_path = "./chroma_data/session"
-    persistent_cache_path = None
+    use_persistent_cache = False
     reset_vector_stores = True
 
     if request.analysis_mode == AnalysisMode.PROJECT:
         project_id = get_project_id(request)
-        chroma_path, persistent_cache_path = get_project_paths(project_id)
+        chroma_path = get_chroma_path(project_id)
+        use_persistent_cache = True
         reset_vector_stores = False
         logger.info(f"Using project mode with project_id={project_id}")
     else:
@@ -161,7 +164,7 @@ def run_analysis(request: AnalyzeRequest) -> AnalyzeResponse:
         target_output_level=request.target_output_level,
         dependency_expansion_depth=request.dependency_expansion_depth,
         chroma_path=chroma_path,
-        persistent_cache_path=persistent_cache_path,
+        use_persistent_cache=use_persistent_cache,
         reset_vector_stores=reset_vector_stores,
     )
 
@@ -387,6 +390,19 @@ def materialise_side(
     return side_dir
 
 
+def side_manifest(artifacts: list[dict], role: str) -> dict:
+    """Describe one side of the trace for later storage."""
+    # The stored unit is the side, not the artifact: materialise_side writes a
+    # whole side into one directory, which is what makes it a single corpus.
+    names = [artifact.get("name") or artifact.get("id") or "artifact" for artifact in artifacts]
+    return {
+        "role": role,
+        "artifact_type": artifacts[0]["kind"],
+        "name": ", ".join(names)[:255],
+        "directory": role,
+    }
+
+
 def build_provider(kind_key: str, side_dir: Path):
     """Pick the ingestion provider for an artifact kind.
 
@@ -430,6 +446,10 @@ def relativize_response(response: AnalyzeResponse, roots: list[Path]) -> Analyze
         link.target_id = relativize(link.target_id, roots)
         if link.explanation:
             link.explanation = relativize_text(link.explanation, roots)
+    for element in (*response.source_elements, *response.target_elements):
+        element.identifier = relativize(element.identifier, roots)
+        if element.parent_id:
+            element.parent_id = relativize(element.parent_id, roots)
     for item in response.unimplemented:
         if "identifier" in item:
             item["identifier"] = relativize(item["identifier"], roots)
@@ -533,7 +553,7 @@ async def analyze_upload(
     target_artifacts = resolve_side(artifact_list, target_ids, ROLE_TARGET)
 
     chroma_path = "./chroma_data/session"
-    persistent_cache_path = None
+    use_persistent_cache = False
     reset_vector_stores = True
 
     if analysis_mode == AnalysisMode.PROJECT:
@@ -542,17 +562,27 @@ async def analyze_upload(
         resolved_project_id = upload_project_id(
             source_artifacts + target_artifacts, paths, project_id
         )
-        chroma_path, persistent_cache_path = get_project_paths(resolved_project_id)
+        chroma_path = get_chroma_path(resolved_project_id)
+        use_persistent_cache = True
         reset_vector_stores = False
         logger.info(f"Using project mode with project_id={resolved_project_id}")
     else:
         logger.info("Using session mode")
 
-    workspace = Path(tempfile.mkdtemp(prefix="tracerag-"))
+    # The workspace outlives the request now: saving the run is a separate call
+    # that may not come for minutes, and the files have to still be there when
+    # it does. Anything nobody saves is reaped on the retention window.
+    artifact_store.purge_expired_uploads()
+    upload_id, workspace = artifact_store.create_upload_dir()
+
     budget = UploadBudget()
     try:
         source_dir = materialise_side(source_artifacts, files, paths, workspace / "source", budget)
         target_dir = materialise_side(target_artifacts, files, paths, workspace / "target", budget)
+        artifact_store.write_manifest(workspace, [
+            side_manifest(source_artifacts, ROLE_SOURCE),
+            side_manifest(target_artifacts, ROLE_TARGET),
+        ])
 
         response = build_pipeline_response(
             source_provider=build_provider(source_artifacts[0]["kind"], source_dir),
@@ -565,16 +595,19 @@ async def analyze_upload(
             target_output_level=target_output_level,
             dependency_expansion_depth=dependency_expansion_depth,
             chroma_path=chroma_path,
-            persistent_cache_path=persistent_cache_path,
+            use_persistent_cache=use_persistent_cache,
             reset_vector_stores=reset_vector_stores,
         )
+        response.upload_id = upload_id
         return relativize_response(response, [source_dir, target_dir])
     except HTTPException:
+        # A rejected upload produced no result, so there is nothing to save and
+        # nothing worth keeping on disk.
+        artifact_store.discard_upload(upload_id)
         raise
     except Exception as e:
         import traceback
+        artifact_store.discard_upload(upload_id)
         logger.error(f"Pipeline failed: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        shutil.rmtree(workspace, ignore_errors=True)

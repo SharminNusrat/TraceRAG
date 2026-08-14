@@ -143,8 +143,3 @@ def get_capabilities() -> CapabilitiesResponse:
         max_upload_bytes=MAX_UPLOAD_BYTES,
         max_total_upload_bytes=MAX_TOTAL_UPLOAD_BYTES,
     )
-
-
-def supported_extensions(kind_key: str) -> set[str]:
-    kind = ARTIFACT_KINDS_BY_KEY.get(kind_key)
-    return set(kind.extensions) if kind else set()

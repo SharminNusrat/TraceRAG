@@ -99,6 +99,19 @@ export function normalizeResult(response) {
   const links = response?.trace_links ?? [];
   const unimplemented = response?.unimplemented ?? [];
   const apiSummary = response?.summary ?? {};
+  const sourceElements = response?.source_elements ?? [];
+  const targetElements = response?.target_elements ?? [];
+
+  // Adjacency in both directions, so selecting an element on either side can
+  // resolve its counterparts in one lookup.
+  const targetsBySource = new Map();
+  const sourcesByTarget = new Map();
+  for (const link of links) {
+    if (!targetsBySource.has(link.source_id)) targetsBySource.set(link.source_id, []);
+    targetsBySource.get(link.source_id).push(link);
+    if (!sourcesByTarget.has(link.target_id)) sourcesByTarget.set(link.target_id, []);
+    sourcesByTarget.get(link.target_id).push(link);
+  }
 
   const groups = new Map();
   for (const link of links) {
@@ -122,6 +135,11 @@ export function normalizeResult(response) {
 
   return {
     requirements,
+    links,
+    sourceElements,
+    targetElements,
+    targetsBySource,
+    sourcesByTarget,
     unimplemented,
     summary: {
       requirements: apiSummary.total_source_elements ?? requirements.length,

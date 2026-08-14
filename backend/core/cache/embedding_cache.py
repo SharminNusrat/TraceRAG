@@ -1,55 +1,69 @@
-import json
-import sqlite3
-import time
+"""Persistent embedding cache, backed by the application database.
+
+Batch-only: a project means thousands of lookups, and one at a time would be
+thousands of round trips where two will do.
+"""
+
+import logging
 from hashlib import sha256
-from pathlib import Path
+
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+
+from core.db.models import EmbeddingCacheEntry
+from core.db.session import SessionLocal
+
+logger = logging.getLogger(__name__)
 
 
 class PersistentEmbeddingCache:
-    def __init__(self, db_path: str, namespace: str):
-        self.db_path = Path(db_path)
+
+    def __init__(self, namespace: str, session_factory=SessionLocal):
         self.namespace = namespace
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._initialize()
+        self.session_factory = session_factory
 
-    def get(self, text: str) -> list[float] | None:
-        key = self._key(text)
-        with sqlite3.connect(self.db_path) as conn:
-            row = conn.execute(
-                "SELECT embedding FROM embeddings WHERE namespace = ? AND text_hash = ?",
-                (self.namespace, key)
-            ).fetchone()
-        if row is None:
-            return None
-        return json.loads(row[0])
+    def get_many(self, texts: list[str]) -> dict[str, list[float]]:
+        """The embeddings already stored for these texts, keyed by text."""
+        if not texts:
+            return {}
 
-    def set(self, text: str, embedding: list[float]) -> None:
-        key = self._key(text)
-        payload = json.dumps(embedding)
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO embeddings(namespace, text_hash, embedding, updated_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (self.namespace, key, payload, time.time())
-            )
-            conn.commit()
-
-    def _initialize(self) -> None:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS embeddings (
-                    namespace TEXT NOT NULL,
-                    text_hash TEXT NOT NULL,
-                    embedding TEXT NOT NULL,
-                    updated_at REAL NOT NULL,
-                    PRIMARY KEY(namespace, text_hash)
+        by_hash = {self._key(text): text for text in texts}
+        with self.session_factory() as session:
+            rows = session.execute(
+                select(EmbeddingCacheEntry.text_hash, EmbeddingCacheEntry.embedding).where(
+                    EmbeddingCacheEntry.namespace == self.namespace,
+                    EmbeddingCacheEntry.text_hash.in_(list(by_hash)),
                 )
-                """
-            )
-            conn.commit()
+            ).all()
 
-    def _key(self, text: str) -> str:
+        return {by_hash[text_hash]: embedding for text_hash, embedding in rows}
+
+    def set_many(self, embeddings: dict[str, list[float]]) -> None:
+        """Store embeddings, overwriting any entry already under that key."""
+        # Upsert, not insert: two analyses running at once can produce the
+        # same text, and the second must not fail the whole batch.
+        if not embeddings:
+            return
+
+        rows = [
+            {
+                "namespace": self.namespace,
+                "text_hash": self._key(text),
+                "embedding": embedding,
+            }
+            for text, embedding in embeddings.items()
+        ]
+
+        statement = insert(EmbeddingCacheEntry).values(rows)
+        statement = statement.on_conflict_do_update(
+            index_elements=["namespace", "text_hash"],
+            set_={"embedding": statement.excluded.embedding},
+        )
+
+        with self.session_factory() as session:
+            session.execute(statement)
+            session.commit()
+
+    @staticmethod
+    def _key(text: str) -> str:
         return sha256(text.encode("utf-8")).hexdigest()

@@ -137,7 +137,7 @@ export function ArtifactUploader({ artifacts, onArtifactsChange, capabilities })
         />
 
         <span><UploadCloud size={24} strokeWidth={1.7} /></span>
-        <b>Drag and drop files here</b>
+        <b>Drag and Drop Files Here</b>
         <small>
           PDF, DOCX or TXT for requirements · source files, a folder, or a .zip for code
           {capabilities && ` · up to ${Math.round(capabilities.max_total_upload_bytes / 1024 / 1024)} MB total`}

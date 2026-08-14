@@ -1,18 +1,26 @@
 from enum import Enum
 
 class SimplePromptTemplate(str, Enum):
+    # Asks for the same tagged verdict the reasoning prompt does: free prose
+    # cannot be read reliably, since a hedged "No, though arguably yes..."
+    # contains the word yes.
+
     DEFAULT = (
         "{source_type}: '''{source_content}'''\n"
         "{target_type}: '''{target_content}'''\n"
-        "Are they related? Answer with 'yes' or 'no'."
+        "Does the {target_type} implement the {source_type}?\n"
+        "Reply with exactly one of <trace>yes</trace> or <trace>no</trace>. "
+        "Output nothing else - no reasoning, no explanation, no punctuation."
     )
 
 class ReasoningPromptTemplate(str, Enum): 
     DEFAULT_SYSTEM = (
         "You are an expert in software traceability. "
         "Your task is to determine whether a source artifact and a target artifact are related. "
-        "Answer with <trace>yes</trace> or <trace>no</trace>. "
-        "If related, explain why in one sentence inside <explanation>your explanation</explanation>."
+        "Always begin your reply with exactly one of <trace>yes</trace> or <trace>no</trace>. "
+        "If related, follow it with one sentence inside "
+        "<explanation>your explanation</explanation>. "
+        "Put no text outside these tags."
     )
 
     DEFAULT_USER = (

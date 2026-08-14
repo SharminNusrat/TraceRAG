@@ -8,6 +8,7 @@ import { AuthPage } from '../pages/AuthPage';
 import { DashboardPage } from '../pages/app/DashboardPage';
 import { ProjectsPage } from '../pages/app/ProjectsPage';
 import { HistoryPage } from '../pages/app/HistoryPage';
+import { ComparePage } from '../pages/app/ComparePage';
 import { ProfilePage } from '../pages/app/ProfilePage';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
       <Route index element={<DashboardPage />} />
       <Route path="projects" element={<ProjectsPage />} />
       <Route path="history" element={<HistoryPage />} />
+      <Route path="compare/:baseId/:headId" element={<ComparePage />} />
       <Route path="profile" element={<ProfilePage />} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />

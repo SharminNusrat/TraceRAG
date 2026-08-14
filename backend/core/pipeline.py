@@ -92,4 +92,10 @@ class TracePipeline:
         logger.info("Aggregating results")
         trace_links = self.aggregator.aggregate(source_elements, target_elements, all_results)
 
-        return TraceMatrix(source_elements, target_elements, trace_links)
+        return TraceMatrix(
+            source_elements,
+            target_elements,
+            trace_links,
+            source_level=self.aggregator.source_level,
+            target_level=self.aggregator.target_level,
+        )

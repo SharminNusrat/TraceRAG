@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, X } from 'lucide-react';
-import { Brand } from '../components/common/Brand';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { WorkflowNav } from '../components/common/WorkflowNav';
 import { Stepper } from '../components/common/Stepper';
 import { useAnalysis } from '../features/analysis/AnalysisContext';
 import { AnalysisSettings } from '../features/analysis/components/AnalysisSettings';
 import { ArtifactUploader } from '../features/analysis/components/ArtifactUploader';
 import { ReviewStep } from '../features/analysis/components/ReviewStep';
 import { runAnalysisUpload } from '../features/analysis/api/analyzeApi';
+import { getProject, saveAnalysis } from '../features/projects/api/projectsApi';
 import {
   findKind,
   findPreprocessor,
@@ -19,12 +20,23 @@ const STEPS = ['Upload Artifacts', 'Analysis Settings', 'Review & Run'];
 
 export function AnalysisPage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const { draft, setDraft, setResult, setRunMeta } = useAnalysis();
   const { capabilities, error: capabilitiesError } = useCapabilities();
   const [artifacts, setArtifacts] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState(null);
+
+  // Started from a project, so the run already knows where it belongs and is
+  // filed there on completion instead of asking again afterwards.
+  const projectId = params.get('project');
+  const [project, setProject] = useState(null);
+
+  useEffect(() => {
+    if (!projectId) return;
+    getProject(projectId).then(setProject).catch(() => setProject(null));
+  }, [projectId]);
 
   const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
 
@@ -104,10 +116,25 @@ export function AnalysisPage() {
     setRunning(true);
     setError(null);
     try {
-      // Session mode only until projects are owned by a signed-in user.
+      const startedAt = performance.now();
       const response = await runAnalysisUpload(draft, artifacts, sides);
+      const duration = (performance.now() - startedAt) / 1000;
       setResult(response);
-      setRunMeta({ classifier: draft.classifier });
+
+      const meta = { classifier: draft.classifier, duration };
+
+      if (projectId) {
+        try {
+          const saved = await saveAnalysis(projectId, { draft, result: response, duration });
+          meta.savedTo = saved;
+        } catch (saveError) {
+          // The analysis itself succeeded, so show it either way and let the
+          // results page offer a manual save rather than losing the run.
+          meta.saveError = saveError.message;
+        }
+      }
+
+      setRunMeta(meta);
       navigate('/results');
     } catch (requestError) {
       setError(requestError.message);
@@ -120,21 +147,15 @@ export function AnalysisPage() {
 
   return (
     <main className="workflow-page">
-      <nav className="workflow-nav">
-        <Brand />
-        <span>New analysis</span>
-        <button
-          type="button"
-          className="workflow-exit-btn"
-          onClick={() => navigate('/')}
-          aria-label="Exit analysis"
-        >
-          <X size={15} strokeWidth={2.2} />
-          <span>Exit</span>
-        </button>
-      </nav>
+      <WorkflowNav title="New Analysis" exitLabel="Exit Analysis" />
 
       <div className="workflow-content">
+        {project && (
+          <p className="workflow-target">
+            Results will be saved to <b>{project.project_name}</b>.
+          </p>
+        )}
+
         <Stepper steps={STEPS} currentStep={currentStep} onStepClick={goToStep} />
 
         <div className="step-content-card">
@@ -147,7 +168,7 @@ export function AnalysisPage() {
           {currentStep === 0 && (
             <>
               <div className="step-content-header">
-                <h1>Upload your artifacts</h1>
+                <h1>Upload Your Artifacts</h1>
                 <p>
                   Add the requirements and code you want to trace between. Code can be
                   individual files, a whole folder, or a .zip archive.
@@ -164,7 +185,7 @@ export function AnalysisPage() {
           {currentStep === 1 && (
             <>
               <div className="step-content-header">
-                <h1>Analysis settings</h1>
+                <h1>Analysis Settings</h1>
                 <p>
                   Choose how each artifact is split, and the level you want recovered
                   links reported at. The defaults work well for most repositories.

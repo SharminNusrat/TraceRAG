@@ -1,17 +1,21 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, GitBranch, Info, Layers, Link2, X } from 'lucide-react';
-import { Brand } from '../components/common/Brand';
+import { ArrowRight, CheckCircle2, GitBranch, Info, Layers, Link2 } from 'lucide-react';
+import { WorkflowNav } from '../components/common/WorkflowNav';
 import { Button } from '../components/common/Button';
 import { useAnalysis } from '../features/analysis/AnalysisContext';
 import { useAuth } from '../features/auth/AuthContext';
 import { normalizeResult } from '../features/analysis/api/analyzeApi';
 import { buildMatrixRows } from '../features/analysis/matrix';
 import { TraceabilityMatrix } from '../features/analysis/components/TraceabilityMatrix';
+import { TracePanels } from '../features/analysis/components/TracePanels';
 import { ExportMenu } from '../features/analysis/components/ExportMenu';
+import { SaveAnalysisDialog } from '../features/projects/components/SaveAnalysisDialog';
+import { ArtifactStrip } from '../features/projects/components/ArtifactStrip';
 import { mockResult } from '../features/analysis/mockResult';
 
 const TABS = [
+  ['panels', 'Linked Artifacts'],
   ['explorer', 'Trace Explorer'],
   ['matrix', 'Traceability Matrix'],
 ];
@@ -55,11 +59,14 @@ function ExplainToggle({ link, classifier }) {
 export function ResultsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { result, runMeta } = useAnalysis();
+  const { draft, result, runMeta } = useAnalysis();
   const classifier = runMeta?.classifier;
   const [selected, setSelected] = useState(0);
-  const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState('matrix');
+  // A run started from a project is already filed away by the time it lands
+  // here, so there is nothing left to save.
+  const [saved, setSaved] = useState(runMeta?.savedTo ?? null);
+  const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState('panels');
 
   // Falls back to the sample response when the page is opened directly.
   const view = useMemo(() => normalizeResult(result ?? mockResult), [result]);
@@ -71,42 +78,33 @@ export function ResultsPage() {
   const link = requirement?.best;
 
   const stats = [
-    { icon: Link2, value: view.summary.trace_links, label: 'Trace links found' },
-    { icon: CheckCircle2, value: view.summary.high_confidence, label: 'High-confidence links' },
-    { icon: Layers, value: view.summary.to_review, label: 'Requirements to review' },
-    { icon: GitBranch, value: view.summary.unimplemented, label: 'Potentially unimplemented' },
+    { icon: Link2, value: view.summary.trace_links, label: 'Trace Links Found' },
+    { icon: CheckCircle2, value: view.summary.high_confidence, label: 'High-Confidence Links' },
+    { icon: Layers, value: view.summary.to_review, label: 'Requirements to Review' },
+    { icon: GitBranch, value: view.summary.unimplemented, label: 'Potentially Unimplemented' },
   ];
 
+  // Only a real run can be saved. Opening /results directly falls back to the
+  // sample response, and filing that under a project would store fiction.
+  const canSave = Boolean(result);
+
   const save = () => {
-    if (user) {
-      setSaved(true);
+    if (!user) {
+      navigate('/auth?intent=save&returnTo=/results');
       return;
     }
-
-    navigate('/auth?intent=save&returnTo=/results');
+    setSaving(true);
   };
 
   return (
     <main className="results-page">
-      <nav className="workflow-nav">
-        <Brand />
-        <span>Analysis results</span>
-        <button
-          type="button"
-          className="workflow-exit-btn"
-          onClick={() => navigate('/')}
-          aria-label="Exit results"
-        >
-          <X size={15} strokeWidth={2.2} />
-          <span>Exit</span>
-        </button>
-      </nav>
+      <WorkflowNav title="Analysis Results" exitLabel="Exit Results" />
 
-      <div className="results-content">
+      <div className={tab === 'panels' ? 'results-content wide' : 'results-content'}>
         <header className="results-header">
           <div>
             <div className="eyebrow"><span />Analysis complete</div>
-            <h1>Traceability results</h1>
+            <h1>Traceability Results</h1>
             <p>
               {view.summary.requirements} requirements · {view.summary.trace_links} trace links ·
               completed just now
@@ -119,9 +117,24 @@ export function ResultsPage() {
               disabled={!matrixRows.length}
               scopeLabel={`Complete matrix · ${matrixRows.length} rows`}
             />
-            <Button onClick={save}>{saved ? 'Saved to project' : 'Save results'}</Button>
+            <Button
+              onClick={save}
+              disabled={!canSave || Boolean(saved)}
+              title={canSave ? undefined : 'Run an analysis first'}
+            >
+              {saved ? `Saved to ${saved.project_name}` : 'Save results'}
+            </Button>
           </div>
         </header>
+
+        {runMeta?.saveError && (
+          <p className="auth-error" role="alert">
+            The analysis ran, but saving it failed: {runMeta.saveError}. Use
+            “Save Results” to try again.
+          </p>
+        )}
+
+        <ArtifactStrip artifacts={runMeta?.artifacts} savedAs={runMeta?.savedAs} />
 
         <section className="result-stats">
           {stats.map(({ icon: Icon, value, label }) => (
@@ -145,6 +158,8 @@ export function ResultsPage() {
             </button>
           ))}
         </div>
+
+        {tab === 'panels' && <TracePanels view={view} />}
 
         {tab === 'matrix' && (
           <TraceabilityMatrix rows={matrixRows} summary={view.summary} />
@@ -230,7 +245,7 @@ export function ResultsPage() {
             ) : (
               <article className="trace-detail">
                 <header>
-                  <div><h2>No trace links recovered</h2></div>
+                  <div><h2>No Trace Links Recovered</h2></div>
                 </header>
                 <p className="trace-detail-empty">
                   The classifier did not link any requirement to the codebase. Try a coarser
@@ -241,6 +256,16 @@ export function ResultsPage() {
           </section>
         )}
       </div>
+
+      {saving && (
+        <SaveAnalysisDialog
+          draft={draft}
+          result={result}
+          duration={runMeta?.duration}
+          onSaved={(analysis) => { setSaved(analysis); setSaving(false); }}
+          onClose={() => setSaving(false)}
+        />
+      )}
     </main>
   );
 }

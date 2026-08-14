@@ -16,6 +16,19 @@ export const mockResult = {
     { identifier: 'srs::4.7', content: '4.7 Audit Export\nThe system shall export an audit trail.' },
     { identifier: 'srs::4.8', content: '4.8 Data Retention\nRecords shall be purged after 90 days.' },
   ],
+  source_elements: [
+    { identifier: 'srs::3.1', level: 'section', type: 'requirement', parent_id: 'srs', content: '3.1 User Authentication\nUsers can authenticate with email and password.' },
+    { identifier: 'srs::3.2', level: 'section', type: 'requirement', parent_id: 'srs', content: '3.2 Project Workspaces\nThe system shall create a new project workspace.' },
+    { identifier: 'srs::3.3', level: 'section', type: 'requirement', parent_id: 'srs', content: '3.3 Analysis History\nUsers can review previous analysis results.' },
+    { identifier: 'srs::4.7', level: 'section', type: 'requirement', parent_id: 'srs', content: '4.7 Audit Export\nThe system shall export an audit trail.' },
+    { identifier: 'srs::4.8', level: 'section', type: 'requirement', parent_id: 'srs', content: '4.8 Data Retention\nRecords shall be purged after 90 days.' },
+  ],
+  target_elements: [
+    { identifier: 'src/auth/login.ts::AuthService::signIn(email, password)', level: 'function', type: 'source code method', parent_id: 'src/auth/login.ts::AuthService', content: 'async signIn(email, password) {\n  const user = await this.repo.find(email);\n  return this.verify(user, password);\n}' },
+    { identifier: 'src/projects/createProject.ts::createProject(owner, name)', level: 'function', type: 'source code method', parent_id: 'src/projects/createProject.ts', content: 'export function createProject(owner, name) {\n  return db.projects.insert({ owner, name });\n}' },
+    { identifier: 'src/history/results.tsx::ResultsView::render()', level: 'function', type: 'source code method', parent_id: 'src/history/results.tsx::ResultsView', content: 'render() {\n  return <ResultsTable rows={this.props.rows} />;\n}' },
+    { identifier: 'src/util/format.ts::formatDate(value)', level: 'function', type: 'source code method', parent_id: 'src/util/format.ts', content: 'export function formatDate(value) {\n  return new Date(value).toISOString();\n}' },
+  ],
   trace_links: [
     {
       source_id: 'srs::3.1',

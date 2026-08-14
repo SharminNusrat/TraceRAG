@@ -1,42 +1,33 @@
-import { Button } from '../../components/common/Button';
 import { PageHeader } from '../../components/common/PageHeader';
 import { useAuth } from '../../features/auth/AuthContext';
 
+/**
+ * Read-only for now. Editing a profile, email notifications and a choice of
+ * default results view were all mocked up with nothing behind them, so they
+ * are gone rather than left as controls that quietly do nothing.
+ */
 export function ProfilePage() {
   const { user } = useAuth();
-  const initials = user.name.split(' ').map((part) => part[0]).join('');
+  const initials = user.full_name.split(' ').map((part) => part[0]).join('').slice(0, 2);
+  const joined = new Date(user.created_at);
 
   return (
     <>
-      <PageHeader title="Profile & preferences" />
+      <PageHeader title="Profile" />
       <section className="profile-card">
         <span>{initials}</span>
         <div>
-          <h2>{user.name}</h2>
+          <h2>{user.full_name}</h2>
           <p>{user.email}</p>
         </div>
-        <Button variant="secondary">Edit profile</Button>
       </section>
-      <section className="preferences">
-        <h2>Preferences</h2>
-        <label>
-          <span>
-            <b>Email notifications</b>
-            <small>Receive a summary when an analysis completes.</small>
-          </span>
-          <input type="checkbox" defaultChecked />
-        </label>
-        <label>
-          <span>
-            <b>Default results view</b>
-            <small>Open completed analyses in the trace matrix.</small>
-          </span>
-          <select defaultValue="matrix">
-            <option value="matrix">Trace matrix</option>
-            <option value="graph">Trace graph</option>
-          </select>
-        </label>
-      </section>
+      {!Number.isNaN(joined.getTime()) && (
+        <p className="dialog-note">
+          Member since {joined.toLocaleDateString(undefined, {
+            day: 'numeric', month: 'long', year: 'numeric',
+          })}.
+        </p>
+      )}
     </>
   );
 }

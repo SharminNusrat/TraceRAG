@@ -1,8 +1,12 @@
-from groq import Groq, RateLimitError
 import itertools
+import logging
+from groq import Groq, RateLimitError
 from core.classification.chat_provider import ChatProvider
 
-DEFAULT_MODEL = "llama-3.1-8b-instant"
+logger = logging.getLogger(__name__)
+
+# llama-3.1-8b-instant was decommissioned on 16 August 2026.
+DEFAULT_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_TEMPERATURE = 0.0
 
 class GroqChatProvider(ChatProvider):
@@ -14,30 +18,7 @@ class GroqChatProvider(ChatProvider):
         self._key_cycle = itertools.cycle(api_keys)
         # self.current_key = next(self._key_cycle)
         self.current_key = None
-        # self.client = Groq(api_key=self.current_key)
         self.client = None
-        
-    # def chat(self, prompt: str, system_message: str = None) -> str:
-    #     messages = []
-    #     if system_message:
-    #         messages.append({"role": "system", "content": system_message})
-    #     messages.append({"role": "user", "content": prompt})
-
-    #     attempts = 0
-    #     while attempts < len(self.api_keys):
-    #         try:
-    #             response = self.client.chat.completions.create(
-    #                 model=self.model,
-    #                 messages=messages,
-    #                 temperature=self.temperature
-    #             )
-    #             return response.choices[0].message.content
-    #         except RateLimitError:
-    #             print(f"Rate limit hit for key {self.current_key}. Switching to next key.")
-    #             self._rotate_key()
-    #             attempts += 1
-
-    #     raise RuntimeError("All API keys have hit their rate limits.")
 
     def chat(self, prompt: str, system_message: str = None) -> str:
         messages = []
@@ -57,7 +38,7 @@ class GroqChatProvider(ChatProvider):
                 )
                 return response.choices[0].message.content
             except RateLimitError:
-                print(f"Rate limit hit for key {self.current_key}. Trying next key.")
+                logger.warning(f"Rate limit on key {attempts + 1}/{len(self.api_keys)}, rotating")
                 attempts += 1
 
         raise RuntimeError("All API keys have hit their rate limits.")

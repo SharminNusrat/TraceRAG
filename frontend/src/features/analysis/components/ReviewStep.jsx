@@ -1,4 +1,4 @@
-import { FileText, Settings, ArrowRight } from 'lucide-react';
+import { FileText, Settings, ArrowRight, Loader2 } from 'lucide-react';
 import { findKind, findPreprocessor } from '../api/capabilitiesApi';
 
 function describeSide(capabilities, artifact, preprocessorKey, outputLevelKey) {
@@ -9,6 +9,18 @@ function describeSide(capabilities, artifact, preprocessorKey, outputLevelKey) {
     preprocessor: preprocessor?.label ?? preprocessorKey ?? '—',
     level: level?.label ?? '—',
   };
+}
+
+/**
+ * Indeterminate on purpose: the run is a single blocking request, so there is
+ * no real percentage to report. A bar that pretends otherwise would be a lie.
+ */
+function RunProgress() {
+  return (
+    <div className="run-progress" role="progressbar" aria-label="Analysis in progress">
+      <span />
+    </div>
+  );
 }
 
 export function ReviewStep({ artifacts, sides, draft, capabilities, onGoToStep, onRun, canRun, running, error }) {
@@ -107,10 +119,13 @@ export function ReviewStep({ artifacts, sides, draft, capabilities, onGoToStep, 
           onClick={onRun}
           disabled={!canRun || running}
         >
-          {running ? 'Running analysis…' : (
+          {running ? (
+            <><Loader2 size={17} strokeWidth={2.4} className="spinner" /> Running analysis…</>
+          ) : (
             <>Run analysis <ArrowRight size={16} strokeWidth={2.2} /></>
           )}
         </button>
+        {running && <RunProgress />}
         {error && <p className="form-hint warn">{error}</p>}
       </div>
     </div>

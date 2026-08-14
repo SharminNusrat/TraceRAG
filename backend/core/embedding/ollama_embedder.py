@@ -27,18 +27,19 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
         self,
         model: str = DEFAULT_MODEL,
         batch_size: int = DEFAULT_BATCH_SIZE,
-        persistent_cache_path: str | None = None,
+        use_persistent_cache: bool = False,
         cache_namespace: str | None = None
     ):
         self.model = model
         self.batch_size = batch_size
         self._cache: dict[str, list[float]] = {}
         self._tokenizer = AutoTokenizer.from_pretrained(self.TOKENIZER_NAME)
+        # The namespace pins the embedding space: change the model, tokenizer
+        # or token limit and lookups miss instead of returning vectors that are
+        # no longer comparable.
         namespace = cache_namespace or f"{self.model}:{self.TOKENIZER_NAME}:{self.MAX_TOKENS}"
         self._persistent_cache = (
-            PersistentEmbeddingCache(persistent_cache_path, namespace)
-            if persistent_cache_path
-            else None
+            PersistentEmbeddingCache(namespace) if use_persistent_cache else None
         )
 
     def create_embeddings(self, elements: list[Element]) -> list[list[float]]:
@@ -50,24 +51,26 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
                 logger.warning(f"Truncating: {e.identifier} ({len(tokens)} tokens)")
             contents.append(self._truncate_content(embedding_text))
         
-        uncached_texts = []
-        for text in set(contents):
-            if text in self._cache:
-                continue
+        missing = [text for text in set(contents) if text not in self._cache]
 
-            cached_embedding = self._persistent_cache.get(text) if self._persistent_cache else None
-            if cached_embedding is not None:
-                self._cache[text] = cached_embedding
-            else:
-                uncached_texts.append(text)
+        # One query for the whole run rather than one per text.
+        if self._persistent_cache and missing:
+            stored = self._persistent_cache.get_many(missing)
+            self._cache.update(stored)
+            logger.info(f"Embedding cache: {len(stored)}/{len(missing)} hits")
+
+        uncached_texts = [text for text in missing if text not in self._cache]
 
         for batch_start in range(0, len(uncached_texts), self.batch_size):
             texts = uncached_texts[batch_start:batch_start + self.batch_size]
             response = ollama.embed(model=self.model, input=texts)
-            for text, embedding in zip(texts, response["embeddings"]):
-                self._cache[text] = embedding
-                if self._persistent_cache:
-                    self._persistent_cache.set(text, embedding)
+            fresh = dict(zip(texts, response["embeddings"]))
+            self._cache.update(fresh)
+            # Written per batch, so a run interrupted halfway keeps the work it
+            # has already paid for.
+            if self._persistent_cache:
+                self._persistent_cache.set_many(fresh)
+
         return [self._cache[text] for text in contents]
 
     def _build_embedding_text(self, element: Element) -> str:

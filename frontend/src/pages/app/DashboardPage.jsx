@@ -1,44 +1,90 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/common/Button';
 import { PageHeader } from '../../components/common/PageHeader';
+import {
+  analysisLabel,
+  listAnalyses,
+  listProjects,
+  relativeTime,
+} from '../../features/projects/api/projectsApi';
 
-const recentAnalyses = [
-  ['Authentication coverage', 18, 46],
-  ['Release 2.4 requirements', 24, 72],
-  ['Payment workflow review', 11, 31],
-];
+const RECENT_SHOWN = 5;
 
 export function DashboardPage() {
+  const [projects, setProjects] = useState(null);
+  const [analyses, setAnalyses] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([listProjects(), listAnalyses()])
+      .then(([projectRows, analysisRows]) => {
+        if (!active) return;
+        setProjects(projectRows);
+        setAnalyses(analysisRows);
+      })
+      .catch(() => {
+        if (!active) return;
+        setProjects([]);
+        setAnalyses([]);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const loading = projects === null || analyses === null;
+  const totalLinks = (analyses ?? []).reduce((sum, a) => sum + a.link_count, 0);
+  const recent = (analyses ?? []).slice(0, RECENT_SHOWN);
+
   return (
     <>
       <PageHeader
-        eyebrow="My workspace"
-        title="Your traceability, at a glance"
-        actions={<Link to="/analysis"><Button>+ New analysis</Button></Link>}
+        eyebrow="My Workspace"
+        title="Your Traceability, at a Glance"
+        actions={<Link to="/analysis"><Button>+ New Analysis</Button></Link>}
       />
+
       <section className="metrics">
-        <Metric value="3" label="Active projects" note="Across your workspace" />
-        <Metric value="12" label="Saved analyses" note="4 completed this month" />
-        <Metric value="86%" label="Average confidence" note="Across recent analyses" />
+        <Metric value={loading ? '—' : projects.length} label="Projects" />
+        <Metric value={loading ? '—' : analyses.length} label="Saved Analyses" />
+        <Metric value={loading ? '—' : totalLinks} label="Trace Links Recovered" />
       </section>
+
       <section className="dashboard-card">
         <header>
-          <div><h2>Recent analyses</h2><p>Pick up where you left off.</p></div>
+          <div><h2>Recent Analyses</h2><p>Pick up where you left off.</p></div>
           <Link to="/app/history">View all →</Link>
         </header>
-        {recentAnalyses.map(([name, requirementCount, linkCount], index) => (
-          <div className="analysis-row" key={name}>
-            <span>↗</span>
-            <div><b>{name}</b><small>{requirementCount} requirements · {linkCount} trace links</small></div>
-            <em>Completed</em>
-            <time>{index + 1}d ago</time>
-          </div>
+
+        {loading && <p className="dialog-note">Loading…</p>}
+
+        {!loading && recent.length === 0 && (
+          <p className="dialog-note">
+            Nothing saved yet. <Link to="/analysis">Run an analysis</Link> and save it to see
+            it here.
+          </p>
+        )}
+
+        {recent.map((analysis, index) => (
+          <Link
+            className="analysis-row"
+            to="/app/history"
+            key={analysis.analysis_id}
+          >
+            <span>{index + 1}</span>
+            <div>
+              {/* The project is what identifies the row; when the run happened
+                  is the detail underneath it. */}
+              <b>{analysis.project_name} · {analysis.link_count} trace links</b>
+              <small>{analysisLabel(analysis)}</small>
+            </div>
+            <time>{relativeTime(analysis.created_at)}</time>
+          </Link>
         ))}
       </section>
     </>
   );
 }
 
-function Metric({ value, label, note }) {
-  return <article className="metric"><b>{value}</b><strong>{label}</strong><small>{note}</small></article>;
+function Metric({ value, label }) {
+  return <article className="metric"><b>{value}</b><strong>{label}</strong></article>;
 }

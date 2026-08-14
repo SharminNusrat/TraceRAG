@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, GitBranch, Search, ShieldCheck } from 'lucide-react';
 import { Brand } from '../components/common/Brand';
 import { Button } from '../components/common/Button';
+import { useAuth } from '../features/auth/AuthContext';
 
 const features = [
   {
@@ -23,16 +24,26 @@ const features = [
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   return (
     <main className="landing">
       <nav className="topbar">
         <Brand />
         <div>
-          <Link className="text-link" to="/auth">Sign in</Link>
-          <Button className="compact pill" onClick={() => navigate('/auth?mode=signup')}>
-            Create account
-          </Button>
+          {/* Already signed in: offer the workspace, not another sign-in. */}
+          {user ? (
+            <Button className="compact pill" onClick={() => navigate('/app')}>
+              Go to workspace
+            </Button>
+          ) : (
+            <>
+              <Link className="text-link" to="/auth">Sign in</Link>
+              <Button className="compact pill" onClick={() => navigate('/auth?mode=signup')}>
+                Create account
+              </Button>
+            </>
+          )}
         </div>
       </nav>
 
