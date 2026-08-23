@@ -1,5 +1,17 @@
-import { ArrowRight, Layers } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { findKind, findPreprocessor, resolveSides } from '../api/capabilitiesApi';
+
+// Dependency expansion walks a call graph, so the backend runs it only when
+// the target side is source code and ignores the setting otherwise. Mirrored
+// here so the control says so instead of quietly doing nothing.
+const KIND_CODE = 'code';
+
+const ANALYSIS_MODES = [
+  ['project', 'Reuse embeddings (project)',
+    'Keeps the embedding cache between runs, so re-running the same artifacts skips work already done.'],
+  ['session', 'Fresh each run (session)',
+    'Embeds everything from scratch and keeps nothing. Use when comparing runs that must not share state.'],
+];
 
 /**
  * Two distinct concepts, deliberately labelled apart:
@@ -56,67 +68,16 @@ const describeGroup = (artifacts, singular) => (
   artifacts.length === 1 ? artifacts[0].name : `${artifacts.length} ${singular}s combined`
 );
 
-function TraceScope({ sides, draft, onChange }) {
-  const { sources, targets, selectedSources } = sides;
-
-  // Nothing to decide: one artifact each side.
-  if (sources.length <= 1 && targets.length <= 1) {
-    return (
-      <div className="trace-pair resolved">
-        <span className="trace-pair-label">Tracing</span>
-        <b>{sources[0]?.name ?? '—'}</b>
-        <ArrowRight size={14} strokeWidth={2.4} />
-        <b>{targets[0]?.name ?? '—'}</b>
-      </div>
-    );
-  }
-
+/** What this run will trace between. Which side each artifact is on is set in
+ *  the upload step, so this only reports the resulting pair. */
+function TracePair({ sides }) {
+  const { selectedSources, selectedTargets } = sides;
   return (
-    <div className="trace-pair">
-      <div className="trace-pair-header">
-        <h4>What should be traced?</h4>
-        <p>
-          Uploads of the same kind are analysed together by default. You can narrow
-          the source side to a single artifact.
-        </p>
-      </div>
-
-      <div className="trace-scope-grid">
-        <label>
-          Source
-          <select
-            value={draft.sourceArtifactId ?? ''}
-            onChange={(event) => onChange('sourceArtifactId', event.target.value || null)}
-          >
-            {sources.length > 1 && (
-              <option value="">All sources together ({sources.length} artifacts)</option>
-            )}
-            {sources.map((artifact) => (
-              <option key={artifact.id} value={artifact.id}>{artifact.name}</option>
-            ))}
-          </select>
-          <small className="field-hint">
-            {selectedSources.length > 1
-              ? 'Every source artifact is analysed as one corpus.'
-              : 'Only this artifact is traced.'}
-          </small>
-        </label>
-
-        <span className="trace-pair-arrow"><ArrowRight size={16} strokeWidth={2.4} /></span>
-
-        <div className="trace-target-summary">
-          <span className="trace-target-label">Target</span>
-          <div className="trace-target-value">
-            <Layers size={14} strokeWidth={2} />
-            <b>{describeGroup(targets, 'artifact')}</b>
-          </div>
-          <small className="field-hint">
-            {targets.length > 1
-              ? 'All target uploads are treated as one codebase. To trace against only part of it, upload just that folder, file or .zip.'
-              : 'Treated as one codebase.'}
-          </small>
-        </div>
-      </div>
+    <div className="trace-pair resolved">
+      <span className="trace-pair-label">Tracing</span>
+      <b>{selectedSources.length ? describeGroup(selectedSources, 'artifact') : '—'}</b>
+      <ArrowRight size={14} strokeWidth={2.4} />
+      <b>{selectedTargets.length ? describeGroup(selectedTargets, 'artifact') : '—'}</b>
     </div>
   );
 }
@@ -124,11 +85,26 @@ function TraceScope({ sides, draft, onChange }) {
 export function AnalysisSettings({ draft, onChange, artifacts, capabilities }) {
   if (!capabilities) return <p className="form-hint">Loading analysis options…</p>;
 
-  const sides = resolveSides(artifacts, capabilities, draft);
+  const sides = resolveSides(artifacts, capabilities);
+
+  // Retrieval runs per source element, so the control is named after whatever
+  // the source side is currently being split into.
+  const sourceKind = findKind(capabilities, sides.selectedSources[0]?.kind);
+  const sourceLevel = findPreprocessor(sourceKind, draft.sourcePreprocessor)
+    ?.output_levels.find((level) => level.key === draft.sourceOutputLevel);
+  const sourceNoun = sourceLevel ? sourceLevel.label.toLowerCase() : 'source element';
+  const targetIsCode = sides.selectedTargets[0]?.kind === KIND_CODE;
+
+  // Only kinds that are not prose gain anything from a summary, and the
+  // registry says which those are.
+  const targetKind = findKind(capabilities, sides.selectedTargets[0]?.kind);
+  const summarisable = [sourceKind, targetKind]
+    .filter((kind) => kind?.summarize)
+    .map((kind) => kind.label.toLowerCase());
 
   return (
     <div className="analysis-settings">
-      <TraceScope sides={sides} draft={draft} onChange={onChange} />
+      <TracePair sides={sides} />
 
       <div className="side-settings-grid">
         <SideSettings
@@ -169,7 +145,7 @@ export function AnalysisSettings({ draft, onChange, artifacts, capabilities }) {
           </small>
         </label>
         <label>
-          Candidates per requirement
+          Candidates per {sourceNoun}
           <input
             min="1"
             max="25"
@@ -177,7 +153,9 @@ export function AnalysisSettings({ draft, onChange, artifacts, capabilities }) {
             value={draft.nResults}
             onChange={(event) => onChange('nResults', event.target.value)}
           />
-          <small className="field-hint">How many code elements each requirement is compared against.</small>
+          <small className="field-hint">
+            How many target elements each {sourceNoun} is compared against.
+          </small>
         </label>
         <label>
           Dependency expansion depth
@@ -187,9 +165,44 @@ export function AnalysisSettings({ draft, onChange, artifacts, capabilities }) {
             type="number"
             value={draft.dependencyExpansionDepth}
             onChange={(event) => onChange('dependencyExpansionDepth', event.target.value)}
+            disabled={!targetIsCode}
           />
           <small className="field-hint">
-            Follow calls/inheritance this many hops from each matched element. 0 disables it.
+            {targetIsCode
+              ? 'Follow calls/inheritance this many hops from each matched element. 0 disables it.'
+              : 'Only applies when the target side is source code — expansion walks a call graph.'}
+          </small>
+        </label>
+        <label>
+          Embedding reuse
+          <select
+            value={draft.analysisMode}
+            onChange={(event) => onChange('analysisMode', event.target.value)}
+          >
+            {ANALYSIS_MODES.map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <small className="field-hint">
+            {ANALYSIS_MODES.find(([value]) => value === draft.analysisMode)?.[2]}
+          </small>
+        </label>
+        <label>
+          Summarize before embedding
+          <select
+            value={draft.summarizeElements ? 'on' : 'off'}
+            onChange={(event) => onChange('summarizeElements', event.target.value === 'on')}
+            disabled={!summarisable.length}
+          >
+            <option value="on">On</option>
+            <option value="off">Off</option>
+          </select>
+          <small className="field-hint">
+            {summarisable.length
+              ? `Describes each ${summarisable.join(' and ')} element in one sentence `
+                + 'so it embeds on meaning, not just identifiers. Costs extra model calls '
+                + 'the first time; reused afterwards.'
+              : 'Both sides are already written in prose, so there is nothing to summarize.'}
           </small>
         </label>
       </div>

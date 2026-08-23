@@ -24,6 +24,16 @@ MAX_TOTAL_UPLOAD_BYTES = 30 * 1024 * 1024
 ROLE_SOURCE = "source"
 ROLE_TARGET = "target"
 
+# Kind keys, so the few places that must special-case one do not spell it out.
+KIND_REQUIREMENTS = "requirements"
+KIND_CODE = "code"
+KIND_ARCHITECTURE = "architecture"
+
+# Any artifact kind can sit on either side: the point is to link any two kinds,
+# not requirements to code specifically. Kinds keep a `roles` list so a future
+# one-directional type stays expressible.
+BOTH_SIDES = [ROLE_SOURCE, ROLE_TARGET]
+
 # Human wording for each semantic level, reused across preprocessors.
 LEVEL_LABELS: dict[ElementLevel, tuple[str, str]] = {
     ElementLevel.ARTIFACT: ("Whole document", "One link per document"),
@@ -34,6 +44,7 @@ LEVEL_LABELS: dict[ElementLevel, tuple[str, str]] = {
     ElementLevel.CLASS: ("Class", "Report links on the enclosing class"),
     ElementLevel.FUNCTION: ("Method / function", "Report links on the individual method"),
     ElementLevel.CHUNK: ("Code chunk", "Report links on the individual chunk"),
+    ElementLevel.COMPONENT: ("Component", "Report links on the individual component"),
 }
 
 
@@ -83,32 +94,60 @@ CODE_PREPROCESSORS = [
     ),
 ]
 
+MODEL_PREPROCESSORS = [
+    PreprocessorOption(
+        key=PreprocessorType.MODEL_UML,
+        label="Components",
+        description="Split a UML model into its components. Interfaces become context on them.",
+        output_levels=_levels(ElementLevel.COMPONENT, ElementLevel.ARTIFACT),
+    ),
+]
+
 ARTIFACT_KINDS: list[ArtifactKindOption] = [
     ArtifactKindOption(
-        key="requirements",
+        key=KIND_REQUIREMENTS,
         label="Requirements",
         description="An SRS or requirements document.",
         extensions=[".txt", ".pdf", ".docx"],
         accepts_archive=False,
         accepts_folder=True,
         accepts_text=True,
-        roles=[ROLE_SOURCE],
+        # Already prose: an LLM summary of a requirement restates it.
+        summarize=False,
+        roles=BOTH_SIDES,
         preprocessors=REQUIREMENT_PREPROCESSORS,
         default_preprocessor=PreprocessorType.SECTION,
         default_output_level=ElementLevel.SECTION,
     ),
     ArtifactKindOption(
-        key="code",
+        key=KIND_CODE,
         label="Code",
         description="Source files, a folder, or a .zip archive.",
         extensions=[".py", ".js", ".ts", ".java"],
         accepts_archive=True,
         accepts_folder=True,
         accepts_text=False,
-        roles=[ROLE_TARGET],
+        summarize=True,
+        roles=BOTH_SIDES,
         preprocessors=CODE_PREPROCESSORS,
         default_preprocessor=PreprocessorType.METHOD,
         default_output_level=ElementLevel.FUNCTION,
+    ),
+    ArtifactKindOption(
+        key=KIND_ARCHITECTURE,
+        label="Architecture model",
+        description="A UML model file (.uml or .xmi) describing components and interfaces.",
+        # No .xml: it says nothing about the contents, so a folder holding a
+        # model beside a pom.xml would ingest both.
+        extensions=[".uml", ".xmi"],
+        accepts_archive=False,
+        accepts_folder=True,
+        accepts_text=False,
+        summarize=True,
+        roles=BOTH_SIDES,
+        preprocessors=MODEL_PREPROCESSORS,
+        default_preprocessor=PreprocessorType.MODEL_UML,
+        default_output_level=ElementLevel.COMPONENT,
     ),
 ]
 
@@ -138,6 +177,7 @@ def get_capabilities() -> CapabilitiesResponse:
             classifier=fields["classifier"].default,
             n_results=fields["n_results"].default,
             dependency_expansion_depth=fields["dependency_expansion_depth"].default,
+            summarize_elements=fields["summarize_elements"].default,
             analysis_mode=fields["analysis_mode"].default,
         ),
         max_upload_bytes=MAX_UPLOAD_BYTES,

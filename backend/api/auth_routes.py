@@ -35,9 +35,6 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     user = authenticate_user(db, request.email, request.password)
     if user is None:
-        # Deliberately the same message for an unknown email and a wrong
-        # password, so the endpoint cannot be used to discover who is
-        # registered.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",

@@ -8,19 +8,21 @@ from hashlib import sha256
 from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from api.schemas import (
-    AnalysisMode, AnalyzeRequest, AnalyzeResponse, CapabilitiesResponse, ElementResponse,
-    SourceType, TraceLinkResponse, PreprocessorType, ClassifierType,
+    AnalysisMode, AnalyzeRequest, AnalyzeResponse, ArtifactInput, CapabilitiesResponse,
+    ElementResponse, TraceLinkResponse, PreprocessorType, ClassifierType,
 )
 from api.capabilities import (
-    ARTIFACT_KINDS_BY_KEY, MAX_TOTAL_UPLOAD_BYTES, MAX_UPLOAD_BYTES,
+    ARTIFACT_KINDS_BY_KEY, KIND_CODE, MAX_TOTAL_UPLOAD_BYTES, MAX_UPLOAD_BYTES,
     ROLE_SOURCE, ROLE_TARGET, get_capabilities,
 )
 from core.schemas import ElementLevel
-from core.ingestion import CodeProvider, DocumentProvider, TextProvider
-from core.preprocessing import ArtifactPreprocessor, SentencePreprocessor, SectionPreprocessor, SummarizePreprocessor, CodeChunkingPreprocessor, CodeMethodPreprocessor, CodeTreePreprocessor
+from core.ingestion import CodeProvider, DocumentProvider, ModelProvider, TextProvider
+from core.preprocessing import ArtifactPreprocessor, SentencePreprocessor, SectionPreprocessor, SummarizePreprocessor, CodeChunkingPreprocessor, CodeMethodPreprocessor, CodeTreePreprocessor, ModelUmlPreprocessor
 from core.embedding import OllamaEmbeddingCreator
 from core.classification import SimpleClassifier, ReasoningClassifier, OllamaChatProvider, GroqChatProvider
 from core.dependency import CodeDependencyAnalyzer
+from core.summarization import ElementSummarizer
+from core.cache import PersistentSummaryCache
 from core.pipeline import TracePipeline
 from core.projects import artifact_store
 from config import settings
@@ -41,12 +43,30 @@ def request_default(field: str):
     return AnalyzeRequest.model_fields[field].default
 
 
-def get_source_provider(request: AnalyzeRequest):
-    match request.source_type:
-        case SourceType.DOCUMENT:
-            return DocumentProvider(request.requirements_path)
-        case SourceType.TEXT:
-            return TextProvider(request.requirements_text)
+def provider_for(side: ArtifactInput, role: str):
+    """Provider for one side of a path-based request."""
+    kind = ARTIFACT_KINDS_BY_KEY.get(side.kind)
+    if kind is None:
+        raise HTTPException(status_code=400, detail=f"Unknown artifact kind '{side.kind}'.")
+    if role not in kind.roles:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{kind.label}' artifacts cannot be the {role} of a trace.",
+        )
+
+    if side.text.strip():
+        if not kind.accepts_text:
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{kind.label}' artifacts cannot be provided as pasted text.",
+            )
+        return TextProvider(side.text)
+
+    if not side.path:
+        raise HTTPException(
+            status_code=400, detail=f"Give a path or text for the {role} artifact."
+        )
+    return build_provider(side.kind, side.path)
 
 
 def get_preprocessor(preprocessor_type: PreprocessorType):
@@ -65,11 +85,17 @@ def get_preprocessor(preprocessor_type: PreprocessorType):
             return CodeMethodPreprocessor()
         case PreprocessorType.TREE:
             return CodeTreePreprocessor()
+        case PreprocessorType.MODEL_UML:
+            return ModelUmlPreprocessor()
+
+
+def get_chat_provider():
+    # provider = OllamaChatProvider() # Working perfectly
+    return GroqChatProvider(api_keys=settings.groq_api_keys_list) # Also working
 
 
 def get_classifier(classifier_type: ClassifierType):
-    # provider = OllamaChatProvider() # Working perfectly
-    provider = GroqChatProvider(api_keys=settings.groq_api_keys_list) # Also working
+    provider = get_chat_provider()
     match classifier_type:
         case ClassifierType.SIMPLE:
             return SimpleClassifier(provider=provider)
@@ -77,13 +103,30 @@ def get_classifier(classifier_type: ClassifierType):
             return ReasoningClassifier(provider=provider)
 
 
+def get_summarizer(kind_key: str, enabled: bool, use_cache: bool) -> ElementSummarizer | None:
+    """A summarizer for one side, or None when that side needs no summaries.
+
+    Which kinds benefit is declared in the artifact registry, so a new type
+    opts in there rather than here.
+    """
+    kind = ARTIFACT_KINDS_BY_KEY.get(kind_key)
+    if not enabled or kind is None or not kind.summarize:
+        return None
+
+    provider = get_chat_provider()
+    # Keyed by the model, so switching models does not mix two different
+    # descriptions of the same code into one index.
+    cache = PersistentSummaryCache(provider.model_name()) if use_cache else None
+    return ElementSummarizer(provider=provider, cache=cache)
+
+
 def get_project_id(request: AnalyzeRequest) -> str:
     if request.project_id:
         return sanitize_project_id(request.project_id)
 
-    codebase_path = os.path.abspath(request.codebase_path)
-    basename = os.path.basename(codebase_path.rstrip("\\/")) or "project"
-    digest = sha256(codebase_path.encode("utf-8")).hexdigest()[:10]
+    target_path = os.path.abspath(request.target.path or "project")
+    basename = os.path.basename(target_path.rstrip("\\/")) or "project"
+    digest = sha256(target_path.encode("utf-8")).hexdigest()[:10]
     return sanitize_project_id(f"{basename}-{digest}")
 
 
@@ -102,6 +145,8 @@ def get_chroma_path(project_id: str) -> str:
 def build_pipeline_response(
     source_provider,
     target_provider,
+    source_kind: str,
+    target_kind: str,
     source_preprocessor: PreprocessorType,
     target_preprocessor: PreprocessorType,
     classifier: ClassifierType,
@@ -112,19 +157,34 @@ def build_pipeline_response(
     chroma_path: str,
     use_persistent_cache: bool,
     reset_vector_stores: bool,
+    summarize_elements: bool = request_default("summarize_elements"),
 ) -> AnalyzeResponse:
     pipeline = TracePipeline(
         source_provider=source_provider,
         target_provider=target_provider,
         source_preprocessor=get_preprocessor(source_preprocessor),
         target_preprocessor=get_preprocessor(target_preprocessor),
+        # Only the sides whose artifacts are not prose; the rest get None.
+        source_summarizer=get_summarizer(
+            source_kind, summarize_elements, use_persistent_cache
+        ),
+        target_summarizer=get_summarizer(
+            target_kind, summarize_elements, use_persistent_cache
+        ),
         embedder=OllamaEmbeddingCreator(use_persistent_cache=use_persistent_cache),
         classifier=get_classifier(classifier),
         chroma_path=chroma_path,
         n_results=n_results,
         source_output_level=source_output_level,
         target_output_level=target_output_level,
-        dependency_analyzer=CodeDependencyAnalyzer() if dependency_expansion_depth > 0 else None,
+        # Expansion walks a call graph, so it only means anything when the
+        # target really is source code. Any other kind ignores the setting
+        # rather than running an analyzer that would find nothing.
+        dependency_analyzer=(
+            CodeDependencyAnalyzer()
+            if target_kind == KIND_CODE and dependency_expansion_depth > 0
+            else None
+        ),
         dependency_expansion_depth=dependency_expansion_depth,
         reset_vector_stores=reset_vector_stores,
     )
@@ -154,8 +214,10 @@ def run_analysis(request: AnalyzeRequest) -> AnalyzeResponse:
         logger.info("Using session mode")
 
     return build_pipeline_response(
-        source_provider=get_source_provider(request),
-        target_provider=CodeProvider(request.codebase_path),
+        source_provider=provider_for(request.source, ROLE_SOURCE),
+        target_provider=provider_for(request.target, ROLE_TARGET),
+        source_kind=request.source.kind,
+        target_kind=request.target.kind,
         source_preprocessor=request.source_preprocessor,
         target_preprocessor=request.target_preprocessor,
         classifier=request.classifier,
@@ -163,6 +225,7 @@ def run_analysis(request: AnalyzeRequest) -> AnalyzeResponse:
         source_output_level=request.source_output_level,
         target_output_level=request.target_output_level,
         dependency_expansion_depth=request.dependency_expansion_depth,
+        summarize_elements=request.summarize_elements,
         chroma_path=chroma_path,
         use_persistent_cache=use_persistent_cache,
         reset_vector_stores=reset_vector_stores,
@@ -179,6 +242,9 @@ def capabilities():
 async def analyze(request: AnalyzeRequest):
     try:
         return run_analysis(request)
+    except HTTPException:
+        # A rejected request is the caller's problem, not a server fault.
+        raise
     except Exception as e:
         import traceback
         logger.error(f"Pipeline failed: {e}")
@@ -403,18 +469,18 @@ def side_manifest(artifacts: list[dict], role: str) -> dict:
     }
 
 
-def build_provider(kind_key: str, side_dir: Path):
-    """Pick the ingestion provider for an artifact kind.
+def build_provider(kind_key: str, path):
+    """Reads a directory of artifacts of one kind.
 
     Extend this alongside the ARTIFACT_KINDS registry when adding a new type.
-    Every side reads from a directory, so pasted text is written out as a file
-    rather than going through TextProvider.
     """
     match kind_key:
         case "requirements":
-            return DocumentProvider(str(side_dir))
+            return DocumentProvider(str(path))
         case "code":
-            return CodeProvider(str(side_dir))
+            return CodeProvider(str(path))
+        case "architecture":
+            return ModelProvider(str(path))
 
     raise HTTPException(status_code=400, detail=f"No provider registered for '{kind_key}'.")
 
@@ -514,6 +580,7 @@ async def analyze_upload(
     classifier: ClassifierType = Form(request_default("classifier")),
     n_results: int = Form(request_default("n_results")),
     dependency_expansion_depth: int = Form(request_default("dependency_expansion_depth")),
+    summarize_elements: bool = Form(request_default("summarize_elements")),
     analysis_mode: AnalysisMode = Form(request_default("analysis_mode")),
     project_id: str | None = Form(None),
 ):
@@ -587,6 +654,8 @@ async def analyze_upload(
         response = build_pipeline_response(
             source_provider=build_provider(source_artifacts[0]["kind"], source_dir),
             target_provider=build_provider(target_artifacts[0]["kind"], target_dir),
+            source_kind=source_artifacts[0]["kind"],
+            target_kind=target_artifacts[0]["kind"],
             source_preprocessor=source_preprocessor,
             target_preprocessor=target_preprocessor,
             classifier=classifier,
@@ -594,6 +663,7 @@ async def analyze_upload(
             source_output_level=source_output_level,
             target_output_level=target_output_level,
             dependency_expansion_depth=dependency_expansion_depth,
+            summarize_elements=summarize_elements,
             chroma_path=chroma_path,
             use_persistent_cache=use_persistent_cache,
             reset_vector_stores=reset_vector_stores,

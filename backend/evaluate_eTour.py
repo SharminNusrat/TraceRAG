@@ -56,9 +56,8 @@ def call_api() -> dict:
     - Create artifacts with identifier as the UC ID (e.g., "UC1", "UC2")
     """
     payload = {
-        "source_type": "document",
-        "requirements_path": str(REQ_DIR.absolute()),
-        "codebase_path": str(CODE_DIR.absolute()),
+        "source": {"kind": "requirements", "path": str(REQ_DIR.absolute())},
+        "target": {"kind": "code", "path": str(CODE_DIR.absolute())},
         "source_preprocessor": "single",
         "target_preprocessor": "method",
         "classifier": "simple",

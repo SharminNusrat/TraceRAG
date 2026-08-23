@@ -40,7 +40,7 @@ export function AnalysisPage() {
 
   const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
 
-  const sides = resolveSides(artifacts, capabilities, draft);
+  const sides = resolveSides(artifacts, capabilities);
 
   // Adopt the backend's run defaults once, so values set in AnalyzeRequest
   // (classifier, n_results, dependency depth, analysis mode) actually apply
@@ -48,27 +48,28 @@ export function AnalysisPage() {
   const [defaultsApplied, setDefaultsApplied] = useState(false);
   useEffect(() => {
     if (!capabilities?.defaults || defaultsApplied) return;
-    const { classifier, n_results, dependency_expansion_depth, analysis_mode } = capabilities.defaults;
+    const {
+      classifier, n_results, dependency_expansion_depth, summarize_elements, analysis_mode,
+    } = capabilities.defaults;
     setDraft((current) => ({
       ...current,
       classifier,
       nResults: n_results,
       dependencyExpansionDepth: dependency_expansion_depth,
+      summarizeElements: summarize_elements,
       analysisMode: analysis_mode,
     }));
     setDefaultsApplied(true);
   }, [capabilities, defaultsApplied]);
 
-  // Drop a pinned source that no longer exists, and keep each side's
-  // preprocessor/output level valid for the kind it is pointing at.
+  // Keep each side's preprocessor and output level valid for the kind that
+  // side currently holds - changing an artifact's type or side can invalidate
+  // a choice that was fine a moment ago.
   useEffect(() => {
     if (!capabilities) return;
 
     setDraft((current) => {
       const next = { ...current };
-
-      const pinnedStillExists = sides.sources.some((a) => a.id === current.sourceArtifactId);
-      if (current.sourceArtifactId && !pinnedStillExists) next.sourceArtifactId = null;
 
       for (const [artifact, prefix] of [
         [sides.selectedSources[0], 'source'],
@@ -95,7 +96,7 @@ export function AnalysisPage() {
       const unchanged = Object.keys(next).every((key) => next[key] === current[key]);
       return unchanged ? current : next;
     });
-  }, [capabilities, artifacts, draft.sourceArtifactId, draft.sourcePreprocessor, draft.targetPreprocessor]);
+  }, [capabilities, artifacts, draft.sourcePreprocessor, draft.targetPreprocessor]);
 
   const untyped = artifacts.some((artifact) => !artifact.kind);
   const withinBudget = !capabilities || artifacts.reduce(
@@ -103,10 +104,14 @@ export function AnalysisPage() {
     0,
   ) <= capabilities.max_total_upload_bytes;
 
-  const canProceedFromUpload =
-    sides.sources.length > 0 && sides.targets.length > 0 && !untyped && withinBudget;
-  const canRun = canProceedFromUpload
-    && sides.sourceIds.length > 0 && sides.targetIds.length > 0;
+  // Mirrors what the backend enforces: both sides filled, and one artifact
+  // kind per side so a single preprocessor and provider apply to it.
+  const canProceedFromUpload = sides.sourceIds.length > 0
+    && sides.targetIds.length > 0
+    && !sides.mixedSides.length
+    && !untyped
+    && withinBudget;
+  const canRun = canProceedFromUpload;
 
   const next = () => { if (currentStep < STEPS.length - 1) setCurrentStep(currentStep + 1); };
   const back = () => { if (currentStep > 0) setCurrentStep(currentStep - 1); };
@@ -170,8 +175,9 @@ export function AnalysisPage() {
               <div className="step-content-header">
                 <h1>Upload Your Artifacts</h1>
                 <p>
-                  Add the requirements and code you want to trace between. Code can be
-                  individual files, a whole folder, or a .zip archive.
+                  Add the two artifacts you want to trace between, then set which one
+                  each side of the trace reads from. An upload can be individual files,
+                  a whole folder, or a .zip archive.
                 </p>
               </div>
               <ArtifactUploader

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, Search, SlidersHorizontal } from 'lucide-react';
 import {
-  MATRIX_COLUMNS,
+  matrixColumns,
   STATUS_LINKED,
   STATUS_MISSING,
   filterRows,
@@ -23,12 +23,13 @@ const CONFIDENCE_OPTIONS = [
   ['low', 'Low'],
 ];
 
-export function TraceabilityMatrix({ rows, summary }) {
+export function TraceabilityMatrix({ rows, summary, labels }) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [confidence, setConfidence] = useState('all');
   const [sort, setSort] = useState({ key: 'similarity', direction: 'desc' });
 
+  const columns = useMemo(() => matrixColumns(labels), [labels]);
   const visibleRows = useMemo(() => sortRows(
     filterRows(rows, { query, status, confidence }),
     sort,
@@ -59,7 +60,7 @@ export function TraceabilityMatrix({ rows, summary }) {
           <input
             type="search"
             value={query}
-            placeholder="Search requirements or code…"
+            placeholder={`Search ${labels?.source.lowerPlural ?? 'sources'} or ${labels?.target.lowerPlural ?? 'targets'}…`}
             onChange={(event) => setQuery(event.target.value)}
             aria-label="Search the traceability matrix"
           />
@@ -84,7 +85,12 @@ export function TraceabilityMatrix({ rows, summary }) {
           </select>
         </div>
 
-        <ExportMenu rows={visibleRows} summary={summary} disabled={!visibleRows.length} />
+        <ExportMenu
+          rows={visibleRows}
+          summary={summary}
+          labels={labels}
+          disabled={!visibleRows.length}
+        />
       </header>
 
       <div className="matrix-meta">
@@ -106,7 +112,7 @@ export function TraceabilityMatrix({ rows, summary }) {
         <table className="matrix-table">
           <thead>
             <tr>
-              {MATRIX_COLUMNS.map((column) => (
+              {columns.map((column) => (
                 <th
                   key={column.key}
                   style={{ width: column.width }}

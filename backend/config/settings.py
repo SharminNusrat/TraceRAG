@@ -1,12 +1,23 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings
+
+# Relative paths in here are anchored to the backend package, never to the
+# directory the server happened to be started from. Starting it from somewhere
+# else would otherwise point at an empty artifact store while the database
+# still described the files in the old one.
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
 
 class Settings(BaseSettings):
     groq_api_keys: str = ""
     ollama_host: str = "http://localhost:11434"
     chroma_path: str = "./chroma_data"
 
-    # Application database: accounts, projects and saved analyses.
-    database_url: str = "sqlite:///./app_data/tracerag.db"
+    # Application database: accounts, projects and saved analyses. No default:
+    # a fallback would quietly open an empty database while the artifact store
+    # on disk belonged to the real one, and the garbage collector reads that
+    # database to decide what to keep.
+    database_url: str = ""
 
     # Where uploaded artifacts live once an analysis is saved.
     storage_path: str = "./app_data/artifacts"
@@ -23,6 +34,12 @@ class Settings(BaseSettings):
     @property
     def groq_api_keys_list(self) -> list[str]:
         return [key.strip() for key in self.groq_api_keys.split(",") if key.strip()]
+
+    @property
+    def storage_root(self) -> Path:
+        """Where artifacts live, as an absolute path."""
+        path = Path(self.storage_path)
+        return path if path.is_absolute() else (BACKEND_DIR / path).resolve()
 
     class Config:
         env_file = ".env"

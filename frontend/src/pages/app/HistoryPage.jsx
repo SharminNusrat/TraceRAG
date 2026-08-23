@@ -3,13 +3,14 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GitCompare, RefreshCw, Trash2, X } from 'lucide-react';
 import { PageHeader } from '../../components/common/PageHeader';
 import { useAnalysis } from '../../features/analysis/AnalysisContext';
+import { RerunDialog } from '../../features/projects/components/RerunDialog';
 import {
-  analysisLabel,
+
   deleteAnalysis,
   getAnalysis,
   listAnalyses,
   relativeTime,
-  rerunAnalysis,
+  runTimestamp,
 } from '../../features/projects/api/projectsApi';
 
 export function HistoryPage() {
@@ -18,8 +19,10 @@ export function HistoryPage() {
   const [params, setParams] = useSearchParams();
   const [analyses, setAnalyses] = useState(null);
   const [error, setError] = useState(null);
-  const [rerunning, setRerunning] = useState(null);
   const [selected, setSelected] = useState([]);
+  // The analysis whose re-run is being set up, if any. The dialog owns the run
+  // itself, so the rows only need to know that one is in progress.
+  const [configuring, setConfiguring] = useState(null);
 
   // Opening a project card lands here filtered to that project, which reuses
   // this whole page rather than duplicating it as a project detail view.
@@ -65,7 +68,15 @@ export function HistoryPage() {
       // Lets the results view show - and hand back - the files this run was
       // actually performed against.
       artifacts: detail.artifacts,
-      savedAs: analysisLabel(detail),
+      savedAs: runTimestamp(detail),
+      // It is already a stored analysis - opened from history, or just written
+      // by a re-run. Without this the results view believes it is looking at an
+      // unsaved run and offers to save it, which files a second copy.
+      savedTo: {
+        analysis_id: detail.analysis_id,
+        project_id: detail.project_id,
+        project_name: detail.project_name,
+      },
     });
     navigate('/results');
   };
@@ -84,26 +95,13 @@ export function HistoryPage() {
     }
   };
 
-  const rerun = async (analysis) => {
-    const label = analysisLabel(analysis);
-    if (!window.confirm(
-      `Re-run ${label} over its stored artifacts?\n\n`
-      + 'This runs the full pipeline again and may take several minutes. '
-      + 'The result is saved as a new analysis alongside this one.',
-    )) return;
-
+  const startRerun = (analysis) => {
     setError(null);
-    setRerunning(analysis.analysis_id);
-    try {
-      show(await rerunAnalysis(analysis.analysis_id));
-    } catch (requestError) {
-      setError(requestError.message);
-      setRerunning(null);
-    }
+    setConfiguring(analysis);
   };
 
   const remove = async (analysis) => {
-    const label = analysisLabel(analysis);
+    const label = runTimestamp(analysis);
     if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
 
     setError(null);
@@ -161,7 +159,7 @@ export function HistoryPage() {
       {Boolean(analyses?.length) && (
         <section className="history-card">
           {analyses.map((analysis, index) => {
-            const busy = rerunning === analysis.analysis_id;
+            const busy = configuring?.analysis_id === analysis.analysis_id;
             return (
               <article className="analysis-row" key={analysis.analysis_id}>
                 <input
@@ -169,34 +167,47 @@ export function HistoryPage() {
                   className="row-select"
                   checked={selected.includes(analysis.analysis_id)}
                   onChange={() => toggle(analysis.analysis_id)}
-                  aria-label={`Select ${analysisLabel(analysis)} for comparison`}
+                  aria-label={`Select ${runTimestamp(analysis)} for comparison`}
                 />
                 {/* Position in this list - newest first - not the database id. */}
                 <span>{index + 1}</span>
                 <div>
-                  <b>{analysisLabel(analysis)}</b>
+                  {/* The project leads the row, as it does on the overview,
+                      with when the run happened underneath - that is what
+                      identifies a run. The note, if there is one, says why
+                      this run exists, which is what two runs are read against. */}
+                  <b>{analysis.project_name}</b>
                   <small>
-                    {analysis.project_name} · {analysis.link_count} trace links ·{' '}
+                    {runTimestamp(analysis)} · {analysis.link_count} trace links ·{' '}
                     {analysis.classifier_type} classifier
-                    {analysis.artifact_count > 0 && ` · ${analysis.artifact_count} artifacts`}
+                    {analysis.artifact_count > 0 && (
+                      analysis.files_available
+                        ? ` · ${analysis.artifact_count} artifacts`
+                        : ` · ${analysis.artifact_count} artifacts (files no longer on disk)`
+                    )}
                   </small>
+                  {analysis.note && <p className="analysis-note">{analysis.note}</p>}
                 </div>
                 <button
                   type="button"
                   className="row-open"
                   onClick={() => open(analysis.analysis_id)}
-                  disabled={Boolean(rerunning)}
+                  disabled={Boolean(configuring)}
                 >
                   Open
                 </button>
-                {/* Only an analysis that kept its files can be run again. */}
+                {/* Only an analysis whose files are still on disk can be run
+                    again. The rows outlive the bytes, so this is checked here
+                    rather than discovered after the dialog has been filled in. */}
                 {analysis.artifact_count > 0 && (
                   <button
                     type="button"
                     className="row-rerun"
-                    onClick={() => rerun(analysis)}
-                    disabled={Boolean(rerunning)}
-                    title="Run the pipeline again over the stored artifacts"
+                    onClick={() => startRerun(analysis)}
+                    disabled={Boolean(configuring) || !analysis.files_available}
+                    title={analysis.files_available
+                      ? 'Run the pipeline again over the stored artifacts'
+                      : 'The stored files for this run are no longer on disk'}
                   >
                     <RefreshCw size={13} strokeWidth={2} className={busy ? 'spin' : undefined} />
                     {busy ? 'Running…' : 'Re-run'}
@@ -207,8 +218,8 @@ export function HistoryPage() {
                   type="button"
                   className="card-delete"
                   onClick={() => remove(analysis)}
-                  disabled={Boolean(rerunning)}
-                  aria-label={`Delete ${analysisLabel(analysis)}`}
+                  disabled={Boolean(configuring)}
+                  aria-label={`Delete ${runTimestamp(analysis)}`}
                 >
                   <Trash2 size={14} strokeWidth={2} />
                 </button>
@@ -216,6 +227,14 @@ export function HistoryPage() {
             );
           })}
         </section>
+      )}
+
+      {configuring && (
+        <RerunDialog
+          analysis={configuring}
+          onClose={() => setConfiguring(null)}
+          onDone={(detail) => { setConfiguring(null); show(detail); }}
+        />
       )}
     </>
   );

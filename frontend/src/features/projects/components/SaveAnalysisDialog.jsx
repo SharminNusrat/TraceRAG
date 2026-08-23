@@ -14,7 +14,7 @@ export function SaveAnalysisDialog({ draft, result, duration, onSaved, onClose }
   const [projects, setProjects] = useState(null);
   const [projectId, setProjectId] = useState(NEW_PROJECT);
   const [newName, setNewName] = useState('');
-  const [versionName, setVersionName] = useState('');
+  const [note, setNote] = useState('');
   const [error, setError] = useState(null);
   const [pending, setPending] = useState(false);
 
@@ -52,7 +52,7 @@ export function SaveAnalysisDialog({ draft, result, duration, onSaved, onClose }
       const saved = await saveAnalysis(target.project_id, {
         draft,
         result,
-        versionName: versionName.trim(),
+        note: note.trim(),
         duration,
       });
       onSaved(saved);
@@ -103,16 +103,25 @@ export function SaveAnalysisDialog({ draft, result, duration, onSaved, onClose }
             )}
 
             <label>
-              Version Name <span className="dialog-optional">optional</span>
+              <span className="field-name">
+                Note<span className="dialog-optional">optional</span>
+              </span>
               <input
-                value={versionName}
-                onChange={(event) => setVersionName(event.target.value)}
-                // Unlabelled free-text fields are exactly what browsers offer
-                // saved form values for, and anything they inject lands in the
-                // database as the analysis name.
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                // A free-text field is exactly what browsers offer saved form
+                // values for, and whatever they inject is stored against the
+                // run. Chrome ignores autocomplete="off" on its own, but
+                // honours an unrecognised token.
+                name="tracerag-note"
                 autoComplete="off"
-                placeholder="Run with dependency expansion"
+                data-lpignore="true"
+                data-form-type="other"
+                placeholder="e.g. Baseline, method level"
               />
+              <small className="field-hint">
+                Anything worth remembering about this run when you come back to it.
+              </small>
             </label>
 
             {error && <p className="auth-error" role="alert">{error}</p>}

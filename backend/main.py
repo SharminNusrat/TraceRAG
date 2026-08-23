@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api import auth_router, project_router, router
 from core.db import init_db
-from core.projects.artifact_store import purge_expired_uploads
+from core.projects.artifact_store import purge_expired_uploads, purge_trash
 
 logging.basicConfig(level=logging.INFO)
 
@@ -15,6 +15,9 @@ async def lifespan(app: FastAPI):
     # Uploads whose run was never saved are dead weight; clear the backlog at
     # startup as well as on each new upload.
     purge_expired_uploads()
+    # Retired blobs nobody came back for. Done here rather than during a sweep,
+    # so the window to notice a wrong sweep is real time, not the next delete.
+    purge_trash()
     yield
 
 

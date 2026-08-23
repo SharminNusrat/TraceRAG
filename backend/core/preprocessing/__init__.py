@@ -6,3 +6,4 @@ from core.preprocessing.summarize_preprocessor import SummarizePreprocessor
 from core.preprocessing.code_chunking_preprocessor import CodeChunkingPreprocessor
 from core.preprocessing.code_method_preprocessor import CodeMethodPreprocessor
 from core.preprocessing.code_tree_preprocessor import CodeTreePreprocessor
+from core.preprocessing.model_uml_preprocessor import ModelUmlPreprocessor

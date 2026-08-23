@@ -77,11 +77,15 @@ export function ResultsPage() {
   const requirement = requirements[activeIndex];
   const link = requirement?.best;
 
+  // Named after what this run actually traced between, not "requirements to
+  // code" - either side can be any artifact kind the backend supports.
+  const { source, target } = view.labels;
+
   const stats = [
     { icon: Link2, value: view.summary.trace_links, label: 'Trace Links Found' },
     { icon: CheckCircle2, value: view.summary.high_confidence, label: 'High-Confidence Links' },
-    { icon: Layers, value: view.summary.to_review, label: 'Requirements to Review' },
-    { icon: GitBranch, value: view.summary.unimplemented, label: 'Potentially Unimplemented' },
+    { icon: Layers, value: view.summary.to_review, label: `${source.plural} to Review` },
+    { icon: GitBranch, value: view.summary.unimplemented, label: `${source.plural} With No Link` },
   ];
 
   // Only a real run can be saved. Opening /results directly falls back to the
@@ -106,14 +110,15 @@ export function ResultsPage() {
             <div className="eyebrow"><span />Analysis complete</div>
             <h1>Traceability Results</h1>
             <p>
-              {view.summary.requirements} requirements · {view.summary.trace_links} trace links ·
-              completed just now
+              {view.summary.requirements} {source.lowerPlural} → {view.targetElements.length}{' '}
+              {target.lowerPlural} · {view.summary.trace_links} trace links
             </p>
           </div>
           <div className="results-actions">
             <ExportMenu
               rows={matrixRows}
               summary={view.summary}
+              labels={view.labels}
               disabled={!matrixRows.length}
               scopeLabel={`Complete matrix · ${matrixRows.length} rows`}
             />
@@ -162,13 +167,13 @@ export function ResultsPage() {
         {tab === 'panels' && <TracePanels view={view} />}
 
         {tab === 'matrix' && (
-          <TraceabilityMatrix rows={matrixRows} summary={view.summary} />
+          <TraceabilityMatrix rows={matrixRows} summary={view.summary} labels={view.labels} />
         )}
 
         {tab === 'explorer' && (
           <section className="results-workbench">
             <aside className="requirement-panel">
-              <header><b>Requirements</b><span>{requirements.length} linked</span></header>
+              <header><b>{source.plural}</b><span>{requirements.length} linked</span></header>
               <div className="requirement-list">
                 {requirements.map((item, index) => (
                   <button
@@ -186,7 +191,7 @@ export function ResultsPage() {
                   </button>
                 ))}
                 {!requirements.length && (
-                  <p className="requirement-empty">No linked requirements.</p>
+                  <p className="requirement-empty">No linked {source.lowerPlural}.</p>
                 )}
               </div>
             </aside>
@@ -207,7 +212,7 @@ export function ResultsPage() {
                   <div>
                     <span><ArrowRight size={15} strokeWidth={2.2} /></span>
                     <section>
-                      <small>Implementation link</small>
+                      <small>Linked {target.lower}</small>
                       <h3>{link.target_id}</h3>
                     </section>
                     <b>{Math.round(link.confidence * 100)}%</b>
@@ -235,10 +240,11 @@ export function ResultsPage() {
                 )}
 
                 <div className="connection">
-                  <div><small>REQUIREMENT</small>{link.source_id}</div>
+                  <div><small>{source.singular.toUpperCase()}</small>{link.source_id}</div>
                   <i>→</i>
                   <div className="code">
-                    <small>CODE</small>{link.target_id.split('/').at(-1)}
+                    <small>{target.singular.toUpperCase()}</small>
+                    {link.target_id.split('/').at(-1)}
                   </div>
                 </div>
               </article>
@@ -248,8 +254,9 @@ export function ResultsPage() {
                   <div><h2>No Trace Links Recovered</h2></div>
                 </header>
                 <p className="trace-detail-empty">
-                  The classifier did not link any requirement to the codebase. Try a coarser
-                  code granularity or a higher links-per-requirement setting.
+                  The classifier did not link any {source.lower} to a {target.lower}. Try a
+                  coarser output level on the target side, or raise the candidates
+                  considered per {source.lower}.
                 </p>
               </article>
             )}

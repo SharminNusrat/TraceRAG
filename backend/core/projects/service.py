@@ -58,14 +58,14 @@ def delete_project(db: Session, project: Project) -> None:
 def save_analysis(
     db: Session,
     project: Project,
-    version_name: str | None,
+    note: str | None,
     config,
     result,
     execution_duration: float | None,
 ) -> Analysis:
     analysis = Analysis(
         project_id=project.project_id,
-        version_name=(version_name or "").strip() or None,
+        note=(note or "").strip() or None,
         source_preprocessor=config.source_preprocessor.value,
         target_preprocessor=config.target_preprocessor.value,
         source_output_level=config.source_output_level.value if config.source_output_level else None,
@@ -73,6 +73,7 @@ def save_analysis(
         top_k=config.n_results,
         dependency_expansion_depth=config.dependency_expansion_depth,
         classifier_type=config.classifier.value,
+        summarize_elements=config.summarize_elements,
         execution_duration=execution_duration,
         snapshot_json=json.dumps({
             "source_elements": [e.model_dump() for e in result.source_elements],
@@ -172,10 +173,35 @@ def copy_artifacts(db: Session, source: Analysis, target: Analysis) -> int:
 
 
 def collect_garbage(db: Session) -> int:
-    """Drop blobs no artifact references any more."""
+    """Retire blobs no artifact references any more."""
     return artifact_store.collect_garbage(
         set(db.scalars(select(ArtifactFile.sha256).distinct()))
     )
+
+
+def analyses_with_files(db: Session, analysis_ids: list[int]) -> set[int]:
+    """Which of these analyses still have every one of their files on disk.
+
+    Answered here rather than when a re-run or a download is attempted, so a
+    run whose bytes are gone can say so in the list instead of after a form
+    has been filled in.
+    """
+    if not analysis_ids:
+        return set()
+
+    rows = db.execute(
+        select(Artifact.analysis_id, ArtifactFile.sha256)
+        .join(ArtifactFile, ArtifactFile.artifact_id == Artifact.artifact_id)
+        .where(Artifact.analysis_id.in_(analysis_ids))
+    ).all()
+
+    # One filesystem check per distinct digest, not per row: a re-run shares
+    # its original's blobs, so the same digest appears under several analyses.
+    present = {digest: artifact_store.blob_exists(digest) for _, digest in rows}
+
+    holders = {analysis_id for analysis_id, _ in rows}
+    incomplete = {analysis_id for analysis_id, digest in rows if not present[digest]}
+    return holders - incomplete
 
 
 def get_analysis(db: Session, user_id: int, analysis_id: int) -> Analysis | None:
@@ -249,6 +275,9 @@ COMPARED_SETTINGS = ALIGNING_SETTINGS + (
     "classifier_type",
     "top_k",
     "dependency_expansion_depth",
+    # Not aligning: summaries change which candidates retrieval returns, but
+    # not what an element is called, so the two runs' links still line up.
+    "summarize_elements",
 )
 
 LINK_FIELDS = ("similarity_score", "confidence_level", "explanation")

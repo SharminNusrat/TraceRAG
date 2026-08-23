@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, Link2, Search } from 'lucide-react';
+import { ArrowRight, Link2, Network, Search } from 'lucide-react';
+import { ResizableColumns } from '../../../components/common/ResizableColumns';
 import { toLabel } from '../api/analyzeApi';
+import { isArchitecture } from '../sideLabels';
+import { ArchitectureGraph } from './ArchitectureGraph';
 
 const SORTS = [
   ['none', 'None'],
@@ -22,7 +25,7 @@ const linkKey = (link) => `${link.source_id}→${link.target_id}`;
  * visible at a glance.
  */
 export function TracePanels({ view }) {
-  const { links, sourceElements, targetElements, targetsBySource, sourcesByTarget } = view;
+  const { links, sourceElements, targetElements, targetsBySource, sourcesByTarget, labels } = view;
 
   const [selection, setSelection] = useState(null); // {kind:'link'|'source'|'target', id}
   const [sort, setSort] = useState('none');
@@ -73,7 +76,7 @@ export function TracePanels({ view }) {
   ));
 
   return (
-    <section className="trace-panels">
+    <ResizableColumns className="trace-panels" storageKey="tracerag-panel-widths">
       <Panel
         title="Trace Links"
         count={`${visibleLinks.length} of ${links.length}`}
@@ -132,7 +135,8 @@ export function TracePanels({ view }) {
       </Panel>
 
       <ElementPanel
-        title="Source Artifact"
+        title={labels?.source.plural ?? 'Source Artifact'}
+        noun={labels?.source}
         elements={sourceElements}
         selection={selection}
         kind="source"
@@ -143,7 +147,8 @@ export function TracePanels({ view }) {
       />
 
       <ElementPanel
-        title="Target Artifact"
+        title={labels?.target.plural ?? 'Target Artifact'}
+        noun={labels?.target}
         elements={targetElements}
         selection={selection}
         kind="target"
@@ -152,11 +157,11 @@ export function TracePanels({ view }) {
         countFor={(id) => (sourcesByTarget.get(id) ?? []).length}
         onSelect={(id) => toggle('target', id)}
       />
-    </section>
+    </ResizableColumns>
   );
 }
 
-function Panel({ title, count, toolbar, children }) {
+function Panel({ title, count, toolbar, bodyClass, children }) {
   return (
     <div className="trace-panel">
       <header className="trace-panel-header">
@@ -164,13 +169,22 @@ function Panel({ title, count, toolbar, children }) {
         <span>{count}</span>
       </header>
       {toolbar && <div className="trace-panel-toolbar">{toolbar}</div>}
-      <div className="trace-panel-body">{children}</div>
+      <div className={bodyClass ? `trace-panel-body ${bodyClass}` : 'trace-panel-body'}>
+        {children}
+      </div>
     </div>
   );
 }
 
-function ElementPanel({ title, elements, kind, selection, activeIds, linkedIds, countFor, onSelect }) {
+function ElementPanel({ title, noun, elements, kind, selection, activeIds, linkedIds, countFor, onSelect }) {
   const [query, setQuery] = useState('');
+  const [asGraph, setAsGraph] = useState(true);
+
+  const drawable = isArchitecture(elements);
+  const drawn = elements.filter((element) => element.model_units);
+  // Coverage, not a link count: many source elements land on the same
+  // component, so a model of a dozen boxes can carry hundreds of links.
+  const linkedCount = drawn.filter((element) => linkedIds.has(element.identifier)).length;
 
   const visible = useMemo(() => {
     if (!query.trim()) return elements;
@@ -180,21 +194,52 @@ function ElementPanel({ title, elements, kind, selection, activeIds, linkedIds, 
     ));
   }, [elements, query]);
 
+  if (drawable && asGraph) {
+    return (
+      <Panel
+        title={title}
+        count={`${linkedCount} of ${drawn.length} ${noun?.lowerPlural ?? 'elements'} linked`}
+        // The diagram scrolls its own canvas, so the panel body must not.
+        bodyClass="holds-diagram"
+        toolbar={(
+          <button type="button" className="panel-chip active" onClick={() => setAsGraph(false)}>
+            <Network size={12} strokeWidth={2.2} /> Diagram
+          </button>
+        )}
+      >
+        <ArchitectureGraph
+          elements={elements}
+          activeIds={activeIds}
+          linkedIds={linkedIds}
+          selectedId={selection?.kind === kind ? selection.id : null}
+          onSelect={onSelect}
+        />
+      </Panel>
+    );
+  }
+
   return (
     <Panel
       title={title}
       count={`${visible.length} of ${elements.length}`}
       toolbar={(
-        <div className="panel-search">
-          <Search size={13} strokeWidth={2} />
-          <input
-            type="search"
-            value={query}
-            placeholder={`Filter ${title.toLowerCase()}…`}
-            onChange={(event) => setQuery(event.target.value)}
-            aria-label={`Filter ${title}`}
-          />
-        </div>
+        <>
+          <div className="panel-search">
+            <Search size={13} strokeWidth={2} />
+            <input
+              type="search"
+              value={query}
+              placeholder={`Filter ${noun?.lowerPlural ?? title.toLowerCase()}…`}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label={`Filter ${title}`}
+            />
+          </div>
+          {drawable && (
+            <button type="button" className="panel-chip" onClick={() => setAsGraph(true)}>
+              <Network size={12} strokeWidth={2.2} /> Diagram
+            </button>
+          )}
+        </>
       )}
     >
       {visible.map((element, index) => {

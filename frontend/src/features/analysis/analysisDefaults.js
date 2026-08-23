@@ -6,10 +6,9 @@
  * them"; the settings step fills them from the backend's defaults.
  */
 export const defaultAnalysisDraft = {
-  // null = analyse every source artifact together as one corpus. An artifact
-  // id here narrows the trace to just that artifact. The target side is always
-  // grouped, so it has no equivalent setting.
-  sourceArtifactId: null,
+  // Which artifact sits on which side is carried on the artifact itself, set
+  // in the upload step - any kind can be either side, so the file type cannot
+  // decide it.
   sourcePreprocessor: 'section',
   targetPreprocessor: 'method',
   sourceOutputLevel: null,
@@ -19,5 +18,6 @@ export const defaultAnalysisDraft = {
   classifier: 'reasoning',
   nResults: 10,
   dependencyExpansionDepth: 0,
+  summarizeElements: true,
   analysisMode: 'session',
 };

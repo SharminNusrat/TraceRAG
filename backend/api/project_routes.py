@@ -62,13 +62,33 @@ def to_project_response(project: Project, analysis_count: int) -> ProjectRespons
     )
 
 
+def to_artifact_response(artifact: Artifact) -> ArtifactResponse:
+    return ArtifactResponse(
+        artifact_id=artifact.artifact_id,
+        name=artifact.name,
+        artifact_type=artifact.artifact_type,
+        role=artifact.role,
+        file_count=artifact.file_count,
+        byte_size=artifact.byte_size,
+        uploaded_at=artifact.uploaded_at,
+        files_available=all(
+            artifact_store.blob_exists(file.sha256) for file in artifact.files
+        ),
+    )
+
+
 def to_analysis_summary(
-    analysis: Analysis, link_count: int, artifact_count: int, project_name: str
+    analysis: Analysis,
+    link_count: int,
+    artifact_count: int,
+    project_name: str,
+    files_available: bool = False,
 ):
     return AnalysisSummaryResponse(
         analysis_id=analysis.analysis_id,
         project_id=analysis.project_id,
-        version_name=analysis.version_name,
+        note=analysis.note,
+        files_available=files_available,
         classifier_type=analysis.classifier_type,
         top_k=analysis.top_k,
         dependency_expansion_depth=analysis.dependency_expansion_depth,
@@ -90,6 +110,7 @@ def config_of(analysis: Analysis) -> AnalysisConfig:
         classifier=analysis.classifier_type,
         n_results=analysis.top_k,
         dependency_expansion_depth=analysis.dependency_expansion_depth,
+        summarize_elements=analysis.summarize_elements,
     )
 
 
@@ -120,13 +141,23 @@ def to_analysis_detail(analysis: Analysis) -> AnalysisDetailResponse:
         analysis_id=analysis.analysis_id,
         project_id=analysis.project_id,
         project_name=analysis.project.project_name,
-        version_name=analysis.version_name,
+        note=analysis.note,
         config=config_of(analysis),
         execution_duration=analysis.execution_duration,
         created_at=analysis.created_at,
         result=result,
-        artifacts=[ArtifactResponse.model_validate(a) for a in analysis.artifacts],
+        artifacts=[to_artifact_response(a) for a in analysis.artifacts],
     )
+
+
+def summaries_for(db: Session, rows: list[tuple]) -> list[AnalysisSummaryResponse]:
+    """A page of analyses, each saying whether its files are still there."""
+    # One query and one filesystem pass for the whole page, rather than per row.
+    available = service.analyses_with_files(db, [row[0].analysis_id for row in rows])
+    return [
+        to_analysis_summary(*row, files_available=row[0].analysis_id in available)
+        for row in rows
+    ]
 
 
 def require_project(db: Session, user: User, project_id: int) -> Project:
@@ -174,7 +205,7 @@ def get_project(
 
     return ProjectDetailResponse(
         **to_project_response(project, len(rows)).model_dump(),
-        analyses=[to_analysis_summary(*row) for row in rows],
+        analyses=summaries_for(db, rows),
     )
 
 
@@ -206,14 +237,16 @@ def save_analysis(
     analysis = service.save_analysis(
         db,
         project,
-        version_name=request.version_name,
+        note=request.note,
         config=request.config,
         result=request.result,
         execution_duration=request.execution_duration,
     )
     artifact_count = service.claim_artifacts(db, analysis, request.upload_id)
     return to_analysis_summary(
-        analysis, len(analysis.trace_links), artifact_count, project.project_name
+        analysis, len(analysis.trace_links), artifact_count, project.project_name,
+        # Just written, so anything it claimed is on disk by definition.
+        files_available=artifact_count > 0,
     )
 
 
@@ -226,7 +259,7 @@ def list_analyses(
 ):
     """Recent saved runs, newest first, across every project by default."""
     rows = service.list_analyses(db, user.user_id, project_id=project_id, limit=limit)
-    return [to_analysis_summary(*row) for row in rows]
+    return summaries_for(db, rows)
 
 
 @router.get("/analyses/{analysis_id}", response_model=AnalysisDetailResponse)
@@ -272,11 +305,14 @@ def compare_analyses(
         )
 
     diff = service.compare_analyses(db, base, head)
+    available = service.analyses_with_files(db, [base.analysis_id, head.analysis_id])
     return ComparisonResponse(
         base=to_analysis_summary(base, len(base.trace_links), len(base.artifacts),
-                                 base.project.project_name),
+                                 base.project.project_name,
+                                 base.analysis_id in available),
         head=to_analysis_summary(head, len(head.trace_links), len(head.artifacts),
-                                 head.project.project_name),
+                                 head.project.project_name,
+                                 head.analysis_id in available),
         **diff,
     )
 
@@ -328,6 +364,8 @@ def rerun_analysis(
                                            directories[ROLE_SOURCE]),
             target_provider=build_provider(sides[ROLE_TARGET].artifact_type,
                                            directories[ROLE_TARGET]),
+            source_kind=sides[ROLE_SOURCE].artifact_type,
+            target_kind=sides[ROLE_TARGET].artifact_type,
             source_preprocessor=config.source_preprocessor,
             target_preprocessor=config.target_preprocessor,
             classifier=config.classifier,
@@ -335,6 +373,7 @@ def rerun_analysis(
             source_output_level=config.source_output_level,
             target_output_level=config.target_output_level,
             dependency_expansion_depth=config.dependency_expansion_depth,
+            summarize_elements=config.summarize_elements,
             chroma_path=get_chroma_path(f"project-{original.project_id}"),
             # The embedding cache is keyed by content, so unchanged text costs
             # nothing to re-embed. The vector store is rebuilt, because a
@@ -351,7 +390,7 @@ def rerun_analysis(
         analysis = service.save_analysis(
             db,
             original.project,
-            version_name=request.version_name,
+            note=request.note,
             config=config,
             result=result,
             execution_duration=duration,

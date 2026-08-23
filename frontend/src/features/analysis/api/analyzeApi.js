@@ -1,4 +1,5 @@
 import { httpClient } from '../../../services/httpClient';
+import { sideLabels } from '../sideLabels';
 
 /**
  * Maps the draft onto the path-based AnalyzeRequest schema. Requires the
@@ -42,7 +43,11 @@ export function toUploadFormData(draft, artifacts, sides) {
   const paths = [];
   let index = 0;
 
-  for (const artifact of artifacts) {
+  // An artifact left off both sides is not part of this run, so there is no
+  // reason to send its bytes.
+  const used = new Set([...sides.sourceIds, ...sides.targetIds]);
+
+  for (const artifact of artifacts.filter((item) => used.has(item.id))) {
     const entry = {
       id: artifact.id,
       name: artifact.name,
@@ -73,6 +78,7 @@ export function toUploadFormData(draft, artifacts, sides) {
   body.append('classifier', draft.classifier);
   body.append('n_results', String(Number(draft.nResults)));
   body.append('dependency_expansion_depth', String(Number(draft.dependencyExpansionDepth)));
+  body.append('summarize_elements', String(Boolean(draft.summarizeElements)));
   if (draft.analysisMode) body.append('analysis_mode', draft.analysisMode);
 
   return body;
@@ -92,8 +98,8 @@ export function toLabel(content, fallback, maxLength = 120) {
 
 /**
  * Reshapes the raw AnalyzeResponse for the results view: links are grouped by
- * requirement (the API returns up to n_results per source) and summary keys are
- * mapped to the names the UI reads.
+ * source element (the API returns up to n_results per source) and summary keys
+ * are mapped to the names the UI reads.
  */
 export function normalizeResult(response) {
   const links = response?.trace_links ?? [];
@@ -141,6 +147,12 @@ export function normalizeResult(response) {
     targetsBySource,
     sourcesByTarget,
     unimplemented,
+    // What this particular run traced between, so headings, table columns and
+    // exports name the actual artifacts instead of always saying "requirement".
+    labels: {
+      source: sideLabels(sourceElements, 'source'),
+      target: sideLabels(targetElements, 'target'),
+    },
     summary: {
       requirements: apiSummary.total_source_elements ?? requirements.length,
       trace_links: apiSummary.total_links ?? links.length,

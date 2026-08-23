@@ -5,6 +5,7 @@ class ArtifactType(str, Enum):
     """Enumeration of artifact types."""
     REQUIREMENT = "requirement"
     SOURCE_CODE = "source code"
+    ARCHITECTURE_MODEL = "architecture model"
 
 class Artifact(Knowledge):
     """Class representing an artifact."""

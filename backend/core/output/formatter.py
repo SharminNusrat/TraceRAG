@@ -69,6 +69,8 @@ class TraceMatrix:
             "level": element.level.value,
             "type": element.type,
             "parent_id": element.parent_id,
+            # Only architecture elements carry these; everything else sends null.
+            "model_units": element.model_units.model_dump() if element.model_units else None,
         }
 
     def to_dict(self) -> dict:

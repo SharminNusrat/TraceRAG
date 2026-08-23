@@ -39,7 +39,12 @@ export function ReviewStep({ artifacts, sides, draft, capabilities, onGoToStep, 
     ['Target split into', target.preprocessor],
     ['Target links reported at', target.level],
     ['Classifier', classifierLabel],
-    ['Candidates per requirement', draft.nResults],
+    ['Candidates per source element', draft.nResults],
+    ['Dependency expansion', Number(draft.dependencyExpansionDepth)
+      ? `${draft.dependencyExpansionDepth} hop${Number(draft.dependencyExpansionDepth) === 1 ? '' : 's'}`
+      : 'Off'],
+    ['Embedding reuse', draft.analysisMode === 'project' ? 'Reused between runs' : 'Fresh each run'],
+    ['Summarize before embedding', draft.summarizeElements ? 'On' : 'Off'],
   ];
 
   return (

@@ -24,9 +24,10 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-STORAGE_ROOT = Path(settings.storage_path)
+STORAGE_ROOT = settings.storage_root
 UPLOAD_ROOT = STORAGE_ROOT / "uploads"
 BLOB_ROOT = STORAGE_ROOT / "blobs"
+TRASH_ROOT = STORAGE_ROOT / "trash"
 MANIFEST_NAME = "manifest.json"
 
 # Upload ids come from the client, so they are matched against this before
@@ -38,6 +39,17 @@ READ_CHUNK = 1024 * 1024
 # A blob is written before the row referencing it is committed, so only sweep
 # what has been unreferenced for a while.
 GC_GRACE_SECONDS = 3600
+
+# Retired blobs wait here before being deleted for good. The collector decides
+# what is garbage by asking the database, so a database that is empty, freshly
+# migrated, or simply not the right one makes every blob look unreferenced -
+# which is how an analysis lost its files once already. Retiring instead of
+# deleting makes that recoverable rather than final.
+TRASH_RETENTION_DAYS = 7
+# A sweep that would take most of the store is not garbage collection, it is a
+# symptom. Refuse it and say so rather than acting on an answer that cannot be
+# right.
+MAX_SWEEP_FRACTION = 0.5
 
 
 # ----- Pending uploads -----
@@ -163,7 +175,30 @@ def open_blob(digest: str) -> bytes | None:
     try:
         return path.read_bytes()
     except OSError:
+        # Something still wants a blob that was swept, so the sweep was wrong.
+        # Put it back rather than leaving it in the bin to expire.
+        return _unretire(digest)
+
+
+def _unretire(digest: str) -> bytes | None:
+    retired = TRASH_ROOT / digest
+    if not retired.is_file():
         return None
+
+    destination = blob_path(digest)
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        retired.replace(destination)
+        logger.warning(f"Restored retired blob {digest[:12]} - it was still referenced")
+        return destination.read_bytes()
+    except OSError as error:
+        logger.warning(f"Could not restore retired blob {digest[:12]}: {error}")
+        return None
+
+
+def blob_exists(digest: str) -> bool:
+    """Whether the bytes for a digest can still be served."""
+    return blob_path(digest).is_file() or (TRASH_ROOT / digest).is_file()
 
 
 def materialise(entries: list[tuple[str, str]], destination: Path) -> int:
@@ -205,25 +240,85 @@ def build_zip(entries: list[tuple[str, str]]) -> io.BytesIO:
 
 
 def collect_garbage(referenced: set[str]) -> int:
-    """Delete blobs no artifact points at any more. Returns how many."""
-    # Mark and sweep, not reference counting: the database already knows every
-    # digest in use, and a separate count could drift out of step with it.
+    """Retire blobs no artifact points at any more. Returns how many.
+
+    Mark and sweep, not reference counting: the database already knows every
+    digest in use, and a separate count could drift out of step with it. But
+    that makes the sweep only as trustworthy as the answer it is given, so an
+    answer that cannot be right is refused rather than acted on, and what is
+    swept is retired rather than deleted.
+    """
     if not BLOB_ROOT.is_dir():
         return 0
 
     cutoff = time.time() - GC_GRACE_SECONDS
+    blobs = [path for path in BLOB_ROOT.rglob("*") if path.is_file()]
+    # Too new to be sure nobody is mid-save on it.
+    stale = [
+        path for path in blobs
+        if path.name not in referenced and _modified_before(path, cutoff)
+    ]
+    if not stale:
+        return 0
+
+    if not referenced:
+        logger.error(
+            f"Refusing to sweep {len(stale)} blob(s): the database references none "
+            f"at all. An empty database does not own a full artifact store - check "
+            f"DATABASE_URL points at the right one."
+        )
+        return 0
+
+    if len(stale) > len(blobs) * MAX_SWEEP_FRACTION:
+        logger.error(
+            f"Refusing to sweep {len(stale)} of {len(blobs)} blob(s): that is most "
+            f"of the store, so the database being consulted is probably not the one "
+            f"these files belong to."
+        )
+        return 0
+
+    retired = sum(1 for path in stale if _retire(path))
+    if retired:
+        logger.info(
+            f"Retired {retired} unreferenced blob(s) to {TRASH_ROOT.name}/, "
+            f"deleted after {TRASH_RETENTION_DAYS} days"
+        )
+    return retired
+
+
+def _modified_before(path: Path, cutoff: float) -> bool:
+    try:
+        return path.stat().st_mtime < cutoff
+    except OSError:
+        return False
+
+
+def _retire(path: Path) -> bool:
+    """Move a blob to the bin, where a mistake can still be undone."""
+    try:
+        TRASH_ROOT.mkdir(parents=True, exist_ok=True)
+        path.replace(TRASH_ROOT / path.name)
+        return True
+    except OSError as error:
+        logger.warning(f"Could not retire blob {path.name[:12]}: {error}")
+        return False
+
+
+def purge_trash() -> int:
+    """Delete retired blobs nobody came back for. Returns how many."""
+    if not TRASH_ROOT.is_dir():
+        return 0
+
+    cutoff = time.time() - TRASH_RETENTION_DAYS * 86400
     removed = 0
-    for path in BLOB_ROOT.rglob("*"):
+    for path in TRASH_ROOT.iterdir():
         try:
-            if not path.is_file() or path.name in referenced:
-                continue
-            if path.stat().st_mtime >= cutoff:
-                continue  # too new to be sure nobody is mid-save on it
-            path.unlink()
-            removed += 1
+            if path.is_file() and path.stat().st_mtime < cutoff:
+                path.unlink()
+                removed += 1
         except OSError:
             continue
 
     if removed:
-        logger.info(f"Collected {removed} unreferenced blob(s)")
+        logger.info(f"Deleted {removed} retired blob(s) past the {TRASH_RETENTION_DAYS}-day window")
     return removed

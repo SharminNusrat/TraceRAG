@@ -22,6 +22,7 @@ export function ProjectsPage() {
   const [error, setError] = useState(null);
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [creating, setCreating] = useState(false);
 
   const load = () => listProjects().then(setProjects).catch((e) => {
@@ -54,7 +55,10 @@ export function ProjectsPage() {
     setError(null);
     setCreating(true);
     try {
-      const project = await createProject({ name: name.trim() });
+      const project = await createProject({
+        name: name.trim(),
+        description: description.trim() || null,
+      });
       // Straight into the first run, which will file itself under this project.
       navigate(`/analysis?project=${project.project_id}`);
     } catch (requestError) {
@@ -90,6 +94,17 @@ export function ProjectsPage() {
                   autoFocus
                   autoComplete="off"
                   placeholder="eTour traceability"
+                />
+              </label>
+              <label>
+                <span className="field-name">
+                  Description<span className="dialog-optional">optional</span>
+                </span>
+                <textarea
+                  rows="2"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="What this project traces, and why."
                 />
               </label>
               <p className="dialog-note">

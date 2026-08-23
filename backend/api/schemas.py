@@ -16,11 +16,6 @@ def as_utc(value: datetime) -> datetime:
 UtcDatetime = Annotated[datetime, AfterValidator(as_utc)]
 
 
-class SourceType(str, Enum):
-    DOCUMENT = "document"
-    TEXT = "text"
-
-
 class PreprocessorType(str, Enum):
     SINGLE = "single"
     SENTENCE = "sentence"
@@ -29,6 +24,7 @@ class PreprocessorType(str, Enum):
     LINE = "line"
     METHOD = "method"
     TREE = "tree"
+    MODEL_UML = "model_uml"
 
 
 class ClassifierType(str, Enum):
@@ -41,11 +37,19 @@ class AnalysisMode(str, Enum):
     PROJECT = "project"
 
 
+class ArtifactInput(BaseModel):
+    """One side of a trace: what kind of artifact, and where to read it from."""
+    kind: str = "requirements"
+    path: str = ""
+    # Pasted instead of stored on disk. Only kinds with accepts_text allow it.
+    text: str = ""
+
+
 class AnalyzeRequest(BaseModel):
-    source_type: SourceType = SourceType.DOCUMENT
-    requirements_path: str = ""
-    requirements_text: str = ""
-    codebase_path: str
+    # Symmetric on purpose: neither side is fixed to a kind, so linking code to
+    # requirements, or a model to code, needs no change here.
+    source: ArtifactInput = ArtifactInput(kind="requirements")
+    target: ArtifactInput = ArtifactInput(kind="code")
     source_preprocessor: PreprocessorType = PreprocessorType.SECTION
     target_preprocessor: PreprocessorType = PreprocessorType.METHOD
     classifier: ClassifierType = ClassifierType.REASONING
@@ -55,6 +59,9 @@ class AnalyzeRequest(BaseModel):
     source_output_level: ElementLevel | None = None
     target_output_level: ElementLevel | None = None
     dependency_expansion_depth: int = 1
+    # Enriches elements with a one-sentence LLM summary before embedding, for
+    # sides whose artifact kind is not prose. Off means no extra model calls.
+    summarize_elements: bool = True
     analysis_mode: AnalysisMode = AnalysisMode.PROJECT
     project_id: str | None = None
 
@@ -69,12 +76,20 @@ class TraceLinkResponse(BaseModel):
     explanation: str | None = None
 
 
+class ModelUnitsResponse(BaseModel):
+    """An architecture component's relationships, for drawing the diagram."""
+    name: str | None = None
+    provides: list[str] = []
+    requires: list[str] = []
+
+
 class ElementResponse(BaseModel):
     identifier: str
     content: str
     level: str
     type: str
     parent_id: str | None = None
+    model_units: ModelUnitsResponse | None = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -114,6 +129,9 @@ class ArtifactKindOption(BaseModel):
     accepts_archive: bool
     accepts_folder: bool
     accepts_text: bool
+    # Whether an LLM summary helps this kind. True for artifacts that are not
+    # written in prose, where the raw text embeds poorly on its own.
+    summarize: bool
     roles: list[str]
     preprocessors: list[PreprocessorOption]
     default_preprocessor: PreprocessorType
@@ -131,6 +149,7 @@ class AnalysisDefaults(BaseModel):
     classifier: ClassifierType
     n_results: int
     dependency_expansion_depth: int
+    summarize_elements: bool
     analysis_mode: AnalysisMode
 
 
@@ -194,10 +213,15 @@ class AnalysisConfig(BaseModel):
     classifier: ClassifierType
     n_results: int
     dependency_expansion_depth: int = 0
+    # False by default: a caller that does not mention summarisation did not
+    # use it, and claiming otherwise would misreport what the run actually did.
+    summarize_elements: bool = False
 
 
 class SaveAnalysisRequest(BaseModel):
-    version_name: str | None = Field(default=None, max_length=100)
+    # What is different about this run. Runs are identified by when they ran,
+    # so this is a remark, not a name.
+    note: str | None = Field(default=None, max_length=200)
     config: AnalysisConfig
     # The pipeline's own response, handed straight back for storage. Reusing the
     # type means the client saves exactly what it was given, with no reshaping
@@ -211,7 +235,7 @@ class SaveAnalysisRequest(BaseModel):
 
 class RerunRequest(BaseModel):
     """Run a saved analysis again over the artifacts it already holds."""
-    version_name: str | None = Field(default=None, max_length=100)
+    note: str | None = Field(default=None, max_length=200)
     # Omit to repeat the original settings; supply to answer "what would this
     # have found at class granularity, or with dependency expansion on?".
     config: AnalysisConfig | None = None
@@ -227,6 +251,9 @@ class ArtifactResponse(BaseModel):
     file_count: int
     byte_size: int
     uploaded_at: UtcDatetime
+    # Whether the bytes are still on disk. The rows outlive the files, so a
+    # stored artifact can be listed and still be impossible to hand back.
+    files_available: bool
 
 
 class AnalysisSummaryResponse(BaseModel):
@@ -235,7 +262,7 @@ class AnalysisSummaryResponse(BaseModel):
 
     analysis_id: int
     project_id: int
-    version_name: str | None
+    note: str | None
     classifier_type: str
     top_k: int
     dependency_expansion_depth: int
@@ -244,6 +271,9 @@ class AnalysisSummaryResponse(BaseModel):
     link_count: int
     artifact_count: int
     project_name: str
+    # False when the run kept artifacts but their bytes are gone, which is what
+    # decides whether it can be re-run or downloaded.
+    files_available: bool
 
 
 class AnalysisDetailResponse(BaseModel):
@@ -251,7 +281,7 @@ class AnalysisDetailResponse(BaseModel):
     analysis_id: int
     project_id: int
     project_name: str
-    version_name: str | None
+    note: str | None
     config: AnalysisConfig
     execution_duration: float | None
     created_at: UtcDatetime

@@ -29,38 +29,71 @@ export const findKind = (capabilities, key) =>
 export const findPreprocessor = (kind, key) =>
   kind?.preprocessors.find((preprocessor) => preprocessor.key === key) ?? null;
 
-/** Artifacts whose kind can act as the given side of a trace. */
-export function artifactsForRole(artifacts, capabilities, role) {
-  if (!capabilities) return [];
-  return artifacts.filter((artifact) => {
-    const kind = findKind(capabilities, artifact.kind);
-    return kind?.roles.includes(role);
-  });
+export const SIDE_SOURCE = 'source';
+export const SIDE_TARGET = 'target';
+export const SIDE_UNUSED = 'unused';
+
+/** Whether an artifact's kind is allowed to sit on the given side. */
+export const canTakeSide = (capabilities, artifact, side) =>
+  Boolean(findKind(capabilities, artifact?.kind)?.roles.includes(side));
+
+/**
+ * The side to put a newly added artifact on.
+ *
+ * Since any kind can sit on either side, this only sets a sensible starting
+ * point - the uploader lets it be changed. Artifacts of a kind already on a
+ * side join it, because one side is analysed as a single corpus.
+ */
+export function defaultSide(existing, artifact, capabilities) {
+  const kindsOn = (side) => new Set(
+    existing.filter((item) => item.side === side).map((item) => item.kind),
+  );
+
+  const sourceKinds = kindsOn(SIDE_SOURCE);
+  if (sourceKinds.has(artifact.kind)) return SIDE_SOURCE;
+
+  const targetKinds = kindsOn(SIDE_TARGET);
+  if (targetKinds.has(artifact.kind)) return SIDE_TARGET;
+
+  if (!sourceKinds.size && canTakeSide(capabilities, artifact, SIDE_SOURCE)) return SIDE_SOURCE;
+  if (!targetKinds.size && canTakeSide(capabilities, artifact, SIDE_TARGET)) return SIDE_TARGET;
+  return SIDE_UNUSED;
 }
 
 /**
  * Works out which artifacts form each side of the trace.
  *
- * Target is always the whole group - every code artifact is one codebase. To
- * narrow it you upload only the folder/file/zip you care about.
- * Source defaults to the same grouping, but `draft.sourceArtifactId` can pin
- * the trace to a single source artifact.
+ * The kind no longer decides: any artifact type can be either side, so the
+ * assignment is the user's and is carried on the artifact itself. Everything
+ * on one side is analysed together as a single corpus, which is how a set of
+ * loose code files becomes one codebase - and why the backend requires each
+ * side to hold a single kind.
  */
-export function resolveSides(artifacts, capabilities, draft) {
-  const sources = artifactsForRole(artifacts, capabilities, 'source');
-  const targets = artifactsForRole(artifacts, capabilities, 'target');
+export function resolveSides(artifacts, capabilities) {
+  const onSide = (side) => artifacts.filter(
+    (artifact) => artifact.kind && artifact.side === side,
+  );
 
-  const pinned = sources.find((artifact) => artifact.id === draft?.sourceArtifactId);
-  const selectedSources = pinned ? [pinned] : sources;
+  const selectedSources = onSide(SIDE_SOURCE);
+  const selectedTargets = onSide(SIDE_TARGET);
+
+  const kindsOf = (group) => [...new Set(group.map((artifact) => artifact.kind))];
+  const sourceKinds = kindsOf(selectedSources);
+  const targetKinds = kindsOf(selectedTargets);
 
   return {
-    sources,
-    targets,
     selectedSources,
-    selectedTargets: targets,
+    selectedTargets,
     sourceIds: selectedSources.map((artifact) => artifact.id),
-    targetIds: targets.map((artifact) => artifact.id),
-    sourceGrouped: !pinned && sources.length > 1,
+    targetIds: selectedTargets.map((artifact) => artifact.id),
+    sourceKinds,
+    targetKinds,
+    // The backend applies one preprocessor and one provider per side, so a
+    // side holding two kinds cannot be run.
+    mixedSides: [
+      ...(sourceKinds.length > 1 ? ['source'] : []),
+      ...(targetKinds.length > 1 ? ['target'] : []),
+    ],
   };
 }
 
@@ -83,25 +116,4 @@ export function kindForPath(capabilities, path) {
     return capabilities.artifact_kinds.find((kind) => kind.accepts_archive)?.key ?? null;
   }
   return capabilities.artifact_kinds.find((kind) => kind.extensions.includes(extension))?.key ?? null;
-}
-
-/** Guess an artifact kind for a set of files: whichever kind claims the most. */
-export function inferKind(capabilities, entries) {
-  if (!capabilities) return null;
-
-  const counts = new Map();
-  for (const entry of entries) {
-    const kind = kindForPath(capabilities, entry.path);
-    if (kind) counts.set(kind, (counts.get(kind) ?? 0) + 1);
-  }
-
-  let best = null;
-  let bestScore = 0;
-  for (const [kind, score] of counts) {
-    if (score > bestScore) {
-      best = kind;
-      bestScore = score;
-    }
-  }
-  return best;
 }

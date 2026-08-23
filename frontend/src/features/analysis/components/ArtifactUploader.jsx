@@ -1,6 +1,21 @@
 import { useRef, useState } from 'react';
 import { UploadCloud, FileText, Folder, FileArchive, X, Plus, Type } from 'lucide-react';
-import { findKind, kindForPath } from '../api/capabilitiesApi';
+import {
+  SIDE_SOURCE,
+  SIDE_TARGET,
+  SIDE_UNUSED,
+  canTakeSide,
+  defaultSide,
+  findKind,
+  kindForPath,
+  resolveSides,
+} from '../api/capabilitiesApi';
+
+const SIDE_OPTIONS = [
+  [SIDE_SOURCE, 'Trace from'],
+  [SIDE_TARGET, 'Trace to'],
+  [SIDE_UNUSED, 'Not used'],
+];
 
 let artifactCounter = 0;
 const nextArtifactId = () => `artifact-${++artifactCounter}`;
@@ -71,38 +86,48 @@ export function ArtifactUploader({ artifacts, onArtifactsChange, capabilities })
       capabilities?.artifact_kinds.find((option) => option.key === kind)?.label;
 
     const split = byKind.size > 1;
-    const added = [...byKind.entries()].map(([kind, kindEntries]) => ({
-      id: nextArtifactId(),
-      // When one selection covers several kinds the shared folder name would be
-      // ambiguous, so qualify each piece with its kind.
-      name: split
-        ? `${artifactName(kindEntries, isFolder)}${labelFor(kind) ? ` (${labelFor(kind)})` : ''}`
-        : artifactName(kindEntries, isFolder),
-      kind,
-      entries: kindEntries,
-      isFolder,
-    }));
+    // Each new artifact is placed against the ones already there, so a second
+    // kind lands opposite the first instead of piling onto the same side.
+    const merged = [...artifacts];
+    for (const [kind, kindEntries] of byKind) {
+      const artifact = {
+        id: nextArtifactId(),
+        // When one selection covers several kinds the shared folder name would
+        // be ambiguous, so qualify each piece with its kind.
+        name: split
+          ? `${artifactName(kindEntries, isFolder)}${labelFor(kind) ? ` (${labelFor(kind)})` : ''}`
+          : artifactName(kindEntries, isFolder),
+        kind,
+        entries: kindEntries,
+        isFolder,
+      };
+      merged.push({ ...artifact, side: defaultSide(merged, artifact, capabilities) });
+    }
 
-    onArtifactsChange([...artifacts, ...added]);
+    onArtifactsChange(merged);
   };
 
   const addTextArtifact = (text) => {
     const textKind = capabilities?.artifact_kinds.find((kind) => kind.accepts_text);
     if (!textKind) return;
-    onArtifactsChange([...artifacts, {
+    const artifact = {
       id: nextArtifactId(),
-      name: 'Pasted requirements',
+      name: `Pasted ${textKind.label.toLowerCase()}`,
       kind: textKind.key,
       entries: [],
       text,
-    }]);
+    };
+    onArtifactsChange([
+      ...artifacts,
+      { ...artifact, side: defaultSide(artifacts, artifact, capabilities) },
+    ]);
   };
 
   const removeArtifact = (id) =>
     onArtifactsChange(artifacts.filter((artifact) => artifact.id !== id));
 
-  const setKind = (id, kind) =>
-    onArtifactsChange(artifacts.map((a) => (a.id === id ? { ...a, kind } : a)));
+  const update = (id, changes) =>
+    onArtifactsChange(artifacts.map((a) => (a.id === id ? { ...a, ...changes } : a)));
 
   const handleDrop = (event) => {
     event.preventDefault();
@@ -138,8 +163,12 @@ export function ArtifactUploader({ artifacts, onArtifactsChange, capabilities })
 
         <span><UploadCloud size={24} strokeWidth={1.7} /></span>
         <b>Drag and Drop Files Here</b>
+        {/* Listed from /capabilities rather than spelled out, so a newly
+            supported artifact kind announces itself here with no edit. */}
         <small>
-          PDF, DOCX or TXT for requirements · source files, a folder, or a .zip for code
+          {capabilities?.artifact_kinds
+            .map((kind) => `${kind.extensions.join(', ')}${kind.accepts_archive ? ', .zip' : ''} for ${kind.label.toLowerCase()}`)
+            .join(' · ')}
           {capabilities && ` · up to ${Math.round(capabilities.max_total_upload_bytes / 1024 / 1024)} MB total`}
         </small>
         <div className="dropzone-actions">
@@ -178,7 +207,7 @@ export function ArtifactUploader({ artifacts, onArtifactsChange, capabilities })
               </div>
               <select
                 value={artifact.kind ?? ''}
-                onChange={(event) => setKind(artifact.id, event.target.value)}
+                onChange={(event) => update(artifact.id, { kind: event.target.value })}
                 aria-label={`Artifact type for ${artifact.name}`}
               >
                 <option value="">Select type</option>
@@ -189,6 +218,24 @@ export function ArtifactUploader({ artifacts, onArtifactsChange, capabilities })
                     disabled={artifact.text !== undefined && !kind.accepts_text}
                   >
                     {kind.label}
+                  </option>
+                ))}
+              </select>
+              {/* Any kind can be either side, so which side this artifact is on
+                  is a choice, not something the file type decides. */}
+              <select
+                className={`side-select ${artifact.side ?? SIDE_UNUSED}`}
+                value={artifact.side ?? SIDE_UNUSED}
+                onChange={(event) => update(artifact.id, { side: event.target.value })}
+                aria-label={`Trace side for ${artifact.name}`}
+              >
+                {SIDE_OPTIONS.map(([value, label]) => (
+                  <option
+                    key={value}
+                    value={value}
+                    disabled={value !== SIDE_UNUSED && !canTakeSide(capabilities, artifact, value)}
+                  >
+                    {label}
                   </option>
                 ))}
               </select>
@@ -243,26 +290,33 @@ function UploaderHints({ artifacts, capabilities }) {
   if (!capabilities) return null;
 
   const untyped = artifacts.some((artifact) => !artifact.kind);
-  const roleCounts = { source: 0, target: 0 };
-  for (const artifact of artifacts) {
-    const kind = findKind(capabilities, artifact.kind);
-    for (const role of kind?.roles ?? []) roleCounts[role] += 1;
-  }
+  const sides = resolveSides(artifacts, capabilities);
 
   const oversized = artifacts.reduce(
     (sum, artifact) => sum + artifact.entries.reduce((n, entry) => n + entry.file.size, 0),
     0,
   ) > capabilities.max_total_upload_bytes;
 
+  const labelFor = (kind) => findKind(capabilities, kind)?.label ?? kind;
+
   return (
     <>
       {untyped && <p className="form-hint warn">Choose an artifact type for each upload.</p>}
-      {artifacts.length > 0 && !roleCounts.source && (
-        <p className="form-hint warn">Add a requirements artifact to trace from.</p>
+      {/* Any kind can sit on either side, so the hint asks which side is empty
+          rather than naming one particular type. */}
+      {artifacts.length > 0 && !sides.selectedSources.length && (
+        <p className="form-hint warn">Set one artifact to <b>Trace from</b>.</p>
       )}
-      {artifacts.length > 0 && !roleCounts.target && (
-        <p className="form-hint warn">Add a code artifact to trace to.</p>
+      {artifacts.length > 0 && !sides.selectedTargets.length && (
+        <p className="form-hint warn">Set one artifact to <b>Trace to</b>.</p>
       )}
+      {sides.mixedSides.map((side) => (
+        <p className="form-hint warn" key={side}>
+          The <b>{side === 'source' ? 'Trace from' : 'Trace to'}</b> side mixes{' '}
+          {(side === 'source' ? sides.sourceKinds : sides.targetKinds).map(labelFor).join(' and ')}{' '}
+          artifacts. One side takes one artifact type.
+        </p>
+      ))}
       {oversized && (
         <p className="form-hint warn">
           Total upload exceeds {Math.round(capabilities.max_total_upload_bytes / 1024 / 1024)} MB.

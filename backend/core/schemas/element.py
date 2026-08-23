@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional
 from core.schemas.knowledge import Knowledge
-from core.schemas.semantic_units import CodeSemanticUnits
+from core.schemas.semantic_units import CodeSemanticUnits, ModelSemanticUnits
 
 
 class ElementLevel(str, Enum):
@@ -21,6 +21,8 @@ class ElementLevel(str, Enum):
     CLASS = "class"
     FUNCTION = "function"    # a method or a top-level function
     CHUNK = "chunk"          # a fixed-size code chunk
+    COMPONENT = "component"  # an architecture model component
+    INTERFACE = "interface"  # an interface a component provides or requires
 
 
 class Element(Knowledge):
@@ -30,3 +32,9 @@ class Element(Knowledge):
     parent_id: Optional[str] = None
     compare: bool = True
     semantic_units: Optional[CodeSemanticUnits] = None
+    model_units: Optional[ModelSemanticUnits] = None
+    # One sentence saying what this element does, for artifacts that are not
+    # written in prose. Absent unless summarisation ran, and absent then too if
+    # the model could not be reached - it enriches the embedding, nothing
+    # depends on it.
+    summary: Optional[str] = None

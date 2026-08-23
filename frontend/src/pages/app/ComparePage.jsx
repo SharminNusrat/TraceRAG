@@ -3,19 +3,27 @@ import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Minus, Pencil, Plus } from 'lucide-react';
 import { PageHeader } from '../../components/common/PageHeader';
 import {
-  analysisLabel,
+  runTimestamp,
   compareAnalyses,
   relativeTime,
 } from '../../features/projects/api/projectsApi';
 
 const SETTING_LABELS = {
-  source_preprocessor: 'Requirements preprocessor',
-  target_preprocessor: 'Code preprocessor',
-  source_output_level: 'Source granularity',
-  target_output_level: 'Target granularity',
+  source_preprocessor: 'Source split into',
+  target_preprocessor: 'Target split into',
+  source_output_level: 'Source links reported at',
+  target_output_level: 'Target links reported at',
   classifier_type: 'Classifier',
   top_k: 'Top-K retrieval',
   dependency_expansion_depth: 'Dependency expansion',
+  summarize_elements: 'Summarize before embedding',
+};
+
+/** Booleans arrive as "True"/"False" from the server's string rendering. */
+const settingValue = (value) => {
+  if (value === null || value === undefined) return '—';
+  if (value === 'True' || value === 'False') return value === 'True' ? 'On' : 'Off';
+  return value;
 };
 
 const FIELD_LABELS = {
@@ -127,13 +135,13 @@ export function ComparePage() {
       <section className="compare-heads">
         <article>
           <small>Before</small>
-          <b>{analysisLabel(base)}</b>
+          <b>{runTimestamp(base)}</b>
           <span>{base.link_count} links · {relativeTime(base.created_at)}</span>
         </article>
         <i>→</i>
         <article>
           <small>After</small>
-          <b>{analysisLabel(head)}</b>
+          <b>{runTimestamp(head)}</b>
           <span>{head.link_count} links · {relativeTime(head.created_at)}</span>
         </article>
       </section>
@@ -169,9 +177,9 @@ export function ComparePage() {
           {diff.config_differences.map((row) => (
             <div key={row.setting}>
               <span>{SETTING_LABELS[row.setting] ?? row.setting}</span>
-              <code>{row.base ?? '—'}</code>
+              <code>{settingValue(row.base)}</code>
               <i>→</i>
-              <code>{row.head ?? '—'}</code>
+              <code>{settingValue(row.head)}</code>
             </div>
           ))}
         </section>

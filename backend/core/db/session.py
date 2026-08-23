@@ -14,6 +14,15 @@ class Base(DeclarativeBase):
     pass
 
 
+if not settings.database_url:
+    # Opening the wrong database is not a small mistake here: the artifact
+    # garbage collector asks it which files are still needed, and deletes the
+    # rest. Better to refuse to start than to start against nothing.
+    raise RuntimeError(
+        "DATABASE_URL is not set. Point it at the PostgreSQL database in .env "
+        "before starting the server."
+    )
+
 engine = create_engine(settings.database_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 

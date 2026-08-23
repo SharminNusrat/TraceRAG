@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../components/common/Button';
 import { PageHeader } from '../../components/common/PageHeader';
 import {
-  analysisLabel,
   listAnalyses,
   listProjects,
   relativeTime,
+  runTimestamp,
 } from '../../features/projects/api/projectsApi';
 
 const RECENT_SHOWN = 5;
@@ -75,7 +75,7 @@ export function DashboardPage() {
               {/* The project is what identifies the row; when the run happened
                   is the detail underneath it. */}
               <b>{analysis.project_name} · {analysis.link_count} trace links</b>
-              <small>{analysisLabel(analysis)}</small>
+              <small>{runTimestamp(analysis)}</small>
             </div>
             <time>{relativeTime(analysis.created_at)}</time>
           </Link>

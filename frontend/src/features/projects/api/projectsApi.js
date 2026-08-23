@@ -37,12 +37,12 @@ export const compareAnalyses = (baseId, headId) => httpClient(
  * would this have found at a different granularity?". Runs the full pipeline,
  * so it can take minutes.
  */
-export const rerunAnalysis = (analysisId, { versionName, config } = {}) => httpClient(
+export const rerunAnalysis = (analysisId, { note, config } = {}) => httpClient(
   `/analyses/${analysisId}/rerun`,
   {
     method: 'POST',
     body: JSON.stringify({
-      version_name: versionName || null,
+      note: note || null,
       config: config ?? null,
     }),
   },
@@ -62,15 +62,16 @@ export function toAnalysisConfig(draft) {
     classifier: draft.classifier,
     n_results: Number(draft.nResults),
     dependency_expansion_depth: Number(draft.dependencyExpansionDepth),
+    summarize_elements: Boolean(draft.summarizeElements),
   };
 }
 
-export const saveAnalysis = (projectId, { draft, result, versionName, duration }) => httpClient(
+export const saveAnalysis = (projectId, { draft, result, note, duration }) => httpClient(
   `/projects/${projectId}/analyses`,
   {
     method: 'POST',
     body: JSON.stringify({
-      version_name: versionName || null,
+      note: note || null,
       config: toAnalysisConfig(draft),
       // The pipeline response is stored verbatim - no reshaping here, so a
       // reopened analysis renders through exactly the same path as a live one.
@@ -118,20 +119,17 @@ export function formatBytes(bytes) {
 }
 
 /**
- * What to call an analysis in a list.
- *
- * Falls back to when it ran, not to its database id: the id is an internal
+ * When a run happened, always - never its database id, which is an internal
  * key that means nothing to the reader and looks like a count of something.
  */
-export function analysisLabel(analysis) {
-  if (analysis.version_name) return analysis.version_name;
-
+export function runTimestamp(analysis) {
   const when = new Date(analysis.created_at);
   if (Number.isNaN(when.getTime())) return 'Untitled run';
 
   return `Run on ${when.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
     + `, ${when.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 }
+
 
 const UNITS = [
   ['minute', 60],

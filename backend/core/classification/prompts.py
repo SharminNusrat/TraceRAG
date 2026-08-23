@@ -5,10 +5,16 @@ class SimplePromptTemplate(str, Enum):
     # cannot be read reliably, since a hedged "No, though arguably yes..."
     # contains the word yes.
 
+    # "or any part of it" is doing real work. A requirement usually names
+    # several capabilities and an element delivers one of them, so asking
+    # whether it implements *the requirement* invites a literal reader to say
+    # no: login() does not, on its own, implement "create an account, log in,
+    # update profiles and reset passwords". Without this, a whole run of
+    # method-level classification came back empty.
     DEFAULT = (
         "{source_type}: '''{source_content}'''\n"
         "{target_type}: '''{target_content}'''\n"
-        "Does the {target_type} implement the {source_type}?\n"
+        "Does this {target_type} implement the {source_type}, or any part of it?\n"
         "Reply with exactly one of <trace>yes</trace> or <trace>no</trace>. "
         "Output nothing else - no reasoning, no explanation, no punctuation."
     )

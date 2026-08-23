@@ -6,6 +6,7 @@ from core.embedding.base import EmbeddingCreator
 from core.storage.chroma_store import ChromaStore, SOURCE_COLLECTION, TARGET_COLLECTION
 from core.classification.base import Classifier, ClassificationResult
 from core.dependency import CodeDependencyAnalyzer, DependencyLinkExpander
+from core.summarization import ElementSummarizer
 from core.output.result_aggregator import ResultAggregator
 from core.output.formatter import TraceMatrix
 
@@ -29,11 +30,18 @@ class TracePipeline:
         dependency_analyzer: CodeDependencyAnalyzer | None = None,
         dependency_expansion_depth: int = 0,
         reset_vector_stores: bool = True,
+        # Given only for sides whose artifacts are not prose. A requirement
+        # already reads as a sentence, so summarising it costs tokens and adds
+        # nothing the embedding did not already have.
+        source_summarizer: ElementSummarizer | None = None,
+        target_summarizer: ElementSummarizer | None = None,
     ):
         self.source_provider = source_provider
         self.target_provider = target_provider
         self.source_preprocessor = source_preprocessor
         self.target_preprocessor = target_preprocessor
+        self.source_summarizer = source_summarizer
+        self.target_summarizer = target_summarizer
         self.embedder = embedder
         self.classifier = classifier
         self.n_results = n_results
@@ -53,6 +61,15 @@ class TracePipeline:
         logger.info("Preprocessing artifacts")
         source_elements = self.source_preprocessor.preprocess(source_artifacts)
         target_elements = self.target_preprocessor.preprocess(target_artifacts)
+
+        # Before embedding, so the summary is part of the vector rather than
+        # something bolted on beside it.
+        if self.source_summarizer:
+            logger.info("Summarizing source elements")
+            self.source_summarizer.summarize(source_elements)
+        if self.target_summarizer:
+            logger.info("Summarizing target elements")
+            self.target_summarizer.summarize(target_elements)
 
         if self.reset_vector_stores:
             logger.info("Resetting vector stores")

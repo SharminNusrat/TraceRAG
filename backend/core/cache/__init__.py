@@ -1,1 +1,2 @@
 from core.cache.embedding_cache import PersistentEmbeddingCache
+from core.cache.summary_cache import PersistentSummaryCache

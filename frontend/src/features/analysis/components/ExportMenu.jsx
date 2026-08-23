@@ -8,7 +8,7 @@ const FORMATS = [
   { key: 'pdf', label: 'PDF', hint: 'Printable table', icon: FileType, run: exportPdf },
 ];
 
-export function ExportMenu({ rows, summary, disabled, scopeLabel, variant = 'secondary' }) {
+export function ExportMenu({ rows, summary, labels, disabled, scopeLabel, variant = 'secondary' }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
@@ -33,7 +33,7 @@ export function ExportMenu({ rows, summary, disabled, scopeLabel, variant = 'sec
     setBusy(format.key);
     setError(null);
     try {
-      await format.run(rows, summary);
+      await format.run(rows, summary, labels);
       setOpen(false);
     } catch (exportError) {
       setError(`${format.label} export failed: ${exportError.message}`);

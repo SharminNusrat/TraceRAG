@@ -1,20 +1,28 @@
 import { toLabel } from './api/analyzeApi';
 
-/** Column definitions drive the table head, the sort keys and every export. */
-export const MATRIX_COLUMNS = [
-  { key: 'requirement', label: 'Requirement', width: 150 },
-  { key: 'requirementText', label: 'Description', width: 300 },
-  { key: 'code', label: 'Code', width: 260 },
-  { key: 'similarity', label: 'Similarity', width: 85, align: 'right' },
-  { key: 'status', label: 'Status', width: 90 },
-];
+/**
+ * Column definitions drive the table head, the sort keys and every export.
+ *
+ * The two identifier columns are named after whatever this run actually traced
+ * between, so a documentation-to-model matrix does not claim to hold
+ * requirements and code.
+ */
+export function matrixColumns(labels) {
+  return [
+    { key: 'requirement', label: labels?.source.singular ?? 'Source', width: 150 },
+    { key: 'requirementText', label: 'Description', width: 300 },
+    { key: 'code', label: labels?.target.singular ?? 'Target', width: 260 },
+    { key: 'similarity', label: 'Similarity', width: 85, align: 'right' },
+    { key: 'status', label: 'Status', width: 90 },
+  ];
+}
 
 export const STATUS_LINKED = 'Linked';
 export const STATUS_MISSING = 'Missing';
 
 /**
- * Flattens the grouped result into one row per requirement/code pair, then
- * appends a "Missing" row for every requirement the pipeline never linked.
+ * Flattens the grouped result into one row per source/target pair, then appends
+ * a "Missing" row for every source element the pipeline never linked.
  */
 export function buildMatrixRows(view) {
   const rows = [];

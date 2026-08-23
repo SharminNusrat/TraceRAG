@@ -74,26 +74,36 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
         return [self._cache[text] for text in contents]
 
     def _build_embedding_text(self, element: Element) -> str:
-        if element.semantic_units is None:
-            return element.content
+        """What actually gets embedded: the element, plus what is known about it.
+
+        An artifact that is not prose - a method body, a UML component - embeds
+        poorly on its own text. Whatever describes it in words goes in first,
+        and the element's own text follows as the evidence behind it.
+        """
+        described = []
+        if element.summary:
+            described.append(f"Summary: {element.summary}")
 
         semantic_text = self._format_semantic_units(element.semantic_units)
-        if not semantic_text:
+        if semantic_text:
+            described.append(semantic_text)
+
+        if not described:
             return element.content
 
-        implementation_excerpt = self._truncate_to_tokens(
+        # The description has to leave room for itself, so the element's own
+        # text comes in as an excerpt rather than in full.
+        described.append("Implementation excerpt:")
+        described.append(self._truncate_to_tokens(
             element.content,
             max_tokens=max(128, self.MAX_TOKENS // 3)
-        )
+        ))
+        return "\n".join(part for part in described if part.strip())
 
-        parts = [
-            semantic_text,
-            "Implementation excerpt:",
-            implementation_excerpt
-        ]
-        return "\n".join(part for part in parts if part.strip())
+    def _format_semantic_units(self, units: CodeSemanticUnits | None) -> str:
+        if units is None:
+            return ""
 
-    def _format_semantic_units(self, units: CodeSemanticUnits) -> str:
         lines = []
         if units.class_name:
             lines.append(f"Class name: {units.class_name}")

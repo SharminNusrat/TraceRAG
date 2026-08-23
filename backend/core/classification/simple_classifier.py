@@ -45,5 +45,14 @@ class SimpleClassifier(Classifier):
 
     def _parse_response(self, response: str) -> bool:
         cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
+
+        # The prompt asks for the tag, so read the tag. Searching the reply for
+        # the word "yes" instead turns any model that reasons out loud into a
+        # yes: "no, though one might say yes" would count as a link.
+        trace_match = re.search(r'<trace>(yes|no)</trace>', cleaned, re.IGNORECASE)
+        if trace_match:
+            return trace_match.group(1).lower() == "yes"
+
+        # No tag at all, so there is nothing better to go on than the prose.
         return "yes" in cleaned.lower()
     

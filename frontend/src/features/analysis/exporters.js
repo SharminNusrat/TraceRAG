@@ -1,8 +1,8 @@
 // fflate and jspdf are imported dynamically inside the exporters below, so the
 // ~500 KB of PDF/zip machinery stays out of the initial page load.
-import { MATRIX_COLUMNS, formatSimilarity } from './matrix';
+import { matrixColumns, formatSimilarity } from './matrix';
 
-const HEADERS = MATRIX_COLUMNS.map((column) => column.label);
+const headersFor = (labels) => matrixColumns(labels).map((column) => column.label);
 
 function toCells(row) {
   return [
@@ -43,8 +43,8 @@ function csvCell(value) {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-export function exportCsv(rows) {
-  const lines = [HEADERS, ...rows.map((row) => toCells(row).map((cell, index) => (
+export function exportCsv(rows, summary, labels) {
+  const lines = [headersFor(labels), ...rows.map((row) => toCells(row).map((cell, index) => (
     index === 3 ? formatSimilarity(row.similarity) : cell
   )))];
   const csv = lines.map((line) => line.map(csvCell).join(',')).join('\r\n');
@@ -79,8 +79,10 @@ function sheetCell(value, rowNumber, columnIndex, styleId) {
   return `<c r="${ref}"${style} t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
 }
 
-function buildSheet(rows) {
-  const header = `<row r="1">${HEADERS
+function buildSheet(rows, labels) {
+  const columns = matrixColumns(labels);
+  const headers = columns.map((column) => column.label);
+  const header = `<row r="1">${headers
     .map((label, index) => sheetCell(label, 1, index, 1))
     .join('')}</row>`;
 
@@ -92,7 +94,7 @@ function buildSheet(rows) {
     return `<row r="${rowNumber}">${cells}</row>`;
   }).join('');
 
-  const cols = MATRIX_COLUMNS
+  const cols = columns
     .map((column, index) => `<col min="${index + 1}" max="${index + 1}" width="${Math.round(column.width / 7)}" customWidth="1"/>`)
     .join('');
 
@@ -101,7 +103,7 @@ function buildSheet(rows) {
 <sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <cols>${cols}</cols>
 <sheetData>${header}${body}</sheetData>
-<autoFilter ref="A1:${columnLetter(HEADERS.length - 1)}${rows.length + 1}"/>
+<autoFilter ref="A1:${columnLetter(headers.length - 1)}${rows.length + 1}"/>
 </worksheet>`;
 }
 
@@ -146,7 +148,7 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
-export async function exportXlsx(rows) {
+export async function exportXlsx(rows, summary, labels) {
   const { zipSync, strToU8 } = await import('fflate');
 
   const zipped = zipSync({
@@ -155,7 +157,7 @@ export async function exportXlsx(rows) {
     'xl/workbook.xml': strToU8(WORKBOOK),
     'xl/_rels/workbook.xml.rels': strToU8(WORKBOOK_RELS),
     'xl/styles.xml': strToU8(STYLES),
-    'xl/worksheets/sheet1.xml': strToU8(buildSheet(rows)),
+    'xl/worksheets/sheet1.xml': strToU8(buildSheet(rows, labels)),
   }, { level: 6 });
 
   const blob = new Blob([zipped], {
@@ -182,7 +184,7 @@ function wrapIdentifier(value, chunkSize = 30) {
     .join('\n');
 }
 
-export async function exportPdf(rows, summary) {
+export async function exportPdf(rows, summary, labels) {
   const [{ jsPDF }, { autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -197,14 +199,15 @@ export async function exportPdf(rows, summary) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(110);
+  const sourceNoun = (labels?.source.lowerPlural) ?? 'source elements';
   const subtitle = summary
-    ? `${summary.requirements} requirements · ${summary.trace_links} trace links · ${summary.high_confidence} high confidence`
+    ? `${summary.requirements} ${sourceNoun} · ${summary.trace_links} trace links · ${summary.high_confidence} high confidence`
     : `${rows.length} rows`;
   doc.text(`${subtitle}  —  generated ${new Date().toLocaleString()}`, 40, 58);
 
   autoTable(doc, {
     startY: 72,
-    head: [HEADERS],
+    head: [headersFor(labels)],
     body: rows.map((row) => [
       wrapIdentifier(row.requirement, 18),
       row.requirementText,

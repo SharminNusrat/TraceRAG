@@ -1,7 +1,7 @@
 """Tables: User -> Project -> Analysis -> TraceLink, cascading on delete."""
 
 from datetime import datetime, timezone
-from sqlalchemy import ARRAY, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import ARRAY, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.db.session import Base
 
@@ -69,7 +69,10 @@ class Analysis(Base):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.project_id", ondelete="CASCADE"), index=True, nullable=False
     )
-    version_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # What the user says is different about this run - "reported at class
+    # level", "summaries off". Runs are identified by when they ran; this says
+    # why this one exists, which is what a comparison is read against.
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     source_preprocessor: Mapped[str] = mapped_column(String(50), nullable=False)
     target_preprocessor: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -78,6 +81,10 @@ class Analysis(Base):
     top_k: Mapped[int] = mapped_column(Integer, nullable=False)
     dependency_expansion_depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     classifier_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Whether elements were described by the model before being embedded. It
+    # changes which candidates retrieval returns, so a re-run has to repeat it
+    # and a comparison has to be able to name it as the reason links moved.
+    summarize_elements: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     execution_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -168,6 +175,24 @@ class EmbeddingCacheEntry(Base):
     # A native float array rather than JSON: no parsing on read, and roughly
     # half the bytes for a 768-dimension vector.
     embedding: Mapped[list[float]] = mapped_column(ARRAY(Float), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class SummaryCacheEntry(Base):
+    """One element's summary, kept so the model is never asked for it twice."""
+    # Keyed like the embedding cache and for the same reason: a summary depends
+    # only on the text it describes, so unchanged code is summarised once and
+    # shared by every project that contains it. Purely derived data.
+
+    __tablename__ = "summary_cache"
+
+    # The model that wrote it - a different one writes different summaries, and
+    # mixing them would put two descriptions of the same code in one index.
+    namespace: Mapped[str] = mapped_column(String(200), primary_key=True)
+    text_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )

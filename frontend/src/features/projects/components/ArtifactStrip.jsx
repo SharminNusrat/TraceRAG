@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Download, FileText, FolderCode } from 'lucide-react';
+import { Download, FileText, FolderCode, Network } from 'lucide-react';
 import { downloadArtifact, formatBytes } from '../api/projectsApi';
 
-const ICONS = { requirements: FileText, code: FolderCode };
+const ICONS = { requirements: FileText, code: FolderCode, architecture: Network };
 
 /**
  * The stored inputs of a reopened analysis, with a way to pull them back down.
@@ -47,14 +47,19 @@ export function ArtifactStrip({ artifacts, savedAs }) {
                   {artifact.file_count === 1 ? '' : 's'} · {formatBytes(artifact.byte_size)}
                 </small>
               </div>
+              {/* The rows outlive the bytes, so an artifact can be listed and
+                  still be impossible to hand back. Say so on the button. */}
               <button
                 type="button"
                 onClick={() => download(artifact)}
-                disabled={busyId === artifact.artifact_id}
+                disabled={busyId === artifact.artifact_id || !artifact.files_available}
+                title={artifact.files_available ? undefined : 'These files are no longer on disk'}
                 aria-label={`Download ${artifact.name}`}
               >
                 <Download size={14} strokeWidth={2} />
-                {busyId === artifact.artifact_id ? 'Preparing…' : 'Download'}
+                {artifact.files_available
+                  ? (busyId === artifact.artifact_id ? 'Preparing…' : 'Download')
+                  : 'Unavailable'}
               </button>
             </article>
           );
