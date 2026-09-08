@@ -42,6 +42,10 @@ def init_db() -> None:
     # Absolute, so startup does not depend on which directory the server was
     # launched from.
     config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    # The logging section of alembic.ini is for the CLI. Applying it here would
+    # reset the root logger to WARNING and disable every logger the application
+    # had already created, leaving the server silent for the rest of its life.
+    config.attributes["configure_logger"] = False
     command.upgrade(config, "head")
 
 

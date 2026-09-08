@@ -15,15 +15,40 @@ function describeSide(capabilities, artifact, preprocessorKey, outputLevelKey) {
  * Indeterminate on purpose: the run is a single blocking request, so there is
  * no real percentage to report. A bar that pretends otherwise would be a lie.
  */
-function RunProgress() {
+/**
+ * How far the run has got.
+ *
+ * The bar fills for real once the server can say how much is left - which it
+ * can only do while classifying, the one step with a countable number of
+ * pieces. Before that it sweeps, because a bar that claims a percentage it
+ * does not have is worse than one that admits it is still working.
+ */
+function RunProgress({ progress }) {
+  const total = progress?.progress_total ?? 0;
+  const current = progress?.progress_current ?? 0;
+  const percent = total ? Math.round((current / total) * 100) : null;
+
   return (
-    <div className="run-progress" role="progressbar" aria-label="Analysis in progress">
-      <span />
-    </div>
+    <>
+      {progress?.stage && (
+        <p className="run-stage">
+          {progress.stage}
+          {total ? ` · ${current} of ${total}` : ''}
+        </p>
+      )}
+      <div
+        className={percent === null ? 'run-progress' : 'run-progress measured'}
+        role="progressbar"
+        aria-label="Analysis in progress"
+        aria-valuenow={percent ?? undefined}
+      >
+        <span style={percent === null ? undefined : { width: `${percent}%` }} />
+      </div>
+    </>
   );
 }
 
-export function ReviewStep({ artifacts, sides, draft, capabilities, onGoToStep, onRun, canRun, running, error }) {
+export function ReviewStep({ artifacts, sides, draft, capabilities, onGoToStep, onRun, canRun, running, progress, error }) {
   const sourceArtifact = sides.selectedSources[0];
   const targetArtifact = sides.selectedTargets[0];
 
@@ -115,7 +140,7 @@ export function ReviewStep({ artifacts, sides, draft, capabilities, onGoToStep, 
       <div className="review-run-area">
         <p>
           {running
-            ? 'Embedding artifacts and classifying trace links. This can take a few minutes.'
+            ? 'This runs on the server and can take a few minutes.'
             : 'Your files and results stay in this browser until you decide to save them.'}
         </p>
         <button
@@ -130,7 +155,7 @@ export function ReviewStep({ artifacts, sides, draft, capabilities, onGoToStep, 
             <>Run analysis <ArrowRight size={16} strokeWidth={2.2} /></>
           )}
         </button>
-        {running && <RunProgress />}
+        {running && <RunProgress progress={progress} />}
         {error && <p className="form-hint warn">{error}</p>}
       </div>
     </div>

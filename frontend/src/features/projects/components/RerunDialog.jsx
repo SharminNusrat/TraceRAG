@@ -6,11 +6,7 @@ import {
   findPreprocessor,
   useCapabilities,
 } from '../../analysis/api/capabilitiesApi';
-import { getAnalysis, rerunAnalysis, runTimestamp } from '../api/projectsApi';
-
-/** The artifact kind stored for one side of a saved run. */
-const kindOfSide = (artifacts, role) =>
-  artifacts.find((artifact) => artifact.role === role)?.artifact_type ?? null;
+import { getAnalysis, kindOfSide, rerunAnalysis, runTimestamp } from '../api/projectsApi';
 
 /**
  * Re-runs a saved analysis over the files it already holds.

@@ -51,18 +51,36 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
                 logger.warning(f"Truncating: {e.identifier} ({len(tokens)} tokens)")
             contents.append(self._truncate_content(embedding_text))
         
-        missing = [text for text in set(contents) if text not in self._cache]
+        distinct = set(contents)
+        missing = [text for text in distinct if text not in self._cache]
 
         # One query for the whole run rather than one per text.
         if self._persistent_cache and missing:
             stored = self._persistent_cache.get_many(missing)
             self._cache.update(stored)
-            logger.info(f"Embedding cache: {len(stored)}/{len(missing)} hits")
+            logger.info(
+                f"Embedding cache: {len(stored)}/{len(missing)} hits "
+                f"({len(distinct) - len(missing)} already in memory)"
+            )
 
         uncached_texts = [text for text in missing if text not in self._cache]
+        # Said plainly, because "did that re-embed or not?" is otherwise only
+        # answerable by timing it. Silent when there is nothing to do, so the
+        # per-element lookups the classifier makes do not drown the log.
+        if not uncached_texts:
+            return [self._cache[text] for text in contents]
 
-        for batch_start in range(0, len(uncached_texts), self.batch_size):
+        batches = -(-len(uncached_texts) // self.batch_size)
+        logger.info(
+            f"Embedding {len(uncached_texts)} new text(s) with {self.model} "
+            f"in {batches} batch(es) of {self.batch_size}"
+        )
+
+        for number, batch_start in enumerate(
+            range(0, len(uncached_texts), self.batch_size), start=1
+        ):
             texts = uncached_texts[batch_start:batch_start + self.batch_size]
+            logger.info(f"  ollama embed batch {number}/{batches} ({len(texts)} text(s))")
             response = ollama.embed(model=self.model, input=texts)
             fresh = dict(zip(texts, response["embeddings"]))
             self._cache.update(fresh)

@@ -1,14 +1,4 @@
-"""One-sentence summaries of elements that are not written in prose.
-
-A requirement is already a sentence, so its embedding has something to match
-against. A method body or a UML component is not - it embeds mostly on
-identifiers and punctuation. A short summary gives those elements a sentence
-of their own, alongside the names and comments already pulled out of the
-source rather than instead of them.
-
-Deliberately one sentence: the summary rides in the same embedding as the
-element's own text, so a long one would crowd out the code it describes and
-cost tokens twice over.
+"""One-sentence summaries of elements that are not written in prose (natural language).
 """
 
 import logging

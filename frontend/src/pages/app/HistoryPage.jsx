@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { GitCompare, RefreshCw, Trash2, X } from 'lucide-react';
+import { GitCompare, RefreshCw, Share2, Trash2, X } from 'lucide-react';
+import { Button } from '../../components/common/Button';
 import { PageHeader } from '../../components/common/PageHeader';
 import { useAnalysis } from '../../features/analysis/AnalysisContext';
 import { RerunDialog } from '../../features/projects/components/RerunDialog';
+import { SourcesPanel } from '../../features/sync/components/SourcesPanel';
 import {
 
   deleteAnalysis,
   getAnalysis,
+  kindOfSide,
   listAnalyses,
   relativeTime,
   runTimestamp,
@@ -65,6 +68,12 @@ export function HistoryPage() {
     setRunMeta({
       classifier: detail.config.classifier,
       duration: detail.execution_duration,
+      // The whole configuration, not just the classifier: the preprocessors
+      // and output levels decide what the identifiers in this result refer to,
+      // so a reopened run is not readable without them.
+      config: detail.config,
+      sourceKind: kindOfSide(detail.artifacts, 'source'),
+      targetKind: kindOfSide(detail.artifacts, 'target'),
       // Lets the results view show - and hand back - the files this run was
       // actually performed against.
       artifacts: detail.artifacts,
@@ -121,13 +130,29 @@ export function HistoryPage() {
           ? 'Saved analysis runs in this project.'
           : 'Saved analysis runs across all of your projects.'}
         actions={projectFilter && (
-          <button type="button" className="row-open" onClick={() => setParams({})}>
-            <X size={13} strokeWidth={2} /> Show all projects
-          </button>
+          <>
+            {/* Started from the project, so the run knows where it belongs -
+                which is what lets it take a side from a connected source
+                instead of asking for the files again. */}
+            <Link to={`/analysis?project=${projectFilter}`}>
+              <Button>+ New Analysis</Button>
+            </Link>
+            {/* The live answer, as opposed to what any one run found. */}
+            <Link className="row-open" to={`/app/links?project=${projectFilter}`}>
+              <Share2 size={13} strokeWidth={2} /> Trace links
+            </Link>
+            <button type="button" className="row-open" onClick={() => setParams({})}>
+              <X size={13} strokeWidth={2} /> Show all projects
+            </button>
+          </>
         )}
       />
 
       {error && <p className="auth-error" role="alert">{error}</p>}
+
+      {/* Only inside a project. Across all projects there is no single set of
+          sources to show, and nothing to sync. */}
+      {projectFilter && <SourcesPanel projectId={projectFilter} />}
 
       {analyses === null && <p className="dialog-note">Loading history…</p>}
 
@@ -176,7 +201,15 @@ export function HistoryPage() {
                       with when the run happened underneath - that is what
                       identifies a run. The note, if there is one, says why
                       this run exists, which is what two runs are read against. */}
-                  <b>{analysis.project_name}</b>
+                  <b>
+                    {analysis.project_name}
+                    {/* Which state of the artifacts this ran against. The
+                        version history lists the same events by number, and
+                        without this there is nothing linking the two. */}
+                    {analysis.version_number != null && (
+                      <span className="analysis-version">v{analysis.version_number}</span>
+                    )}
+                  </b>
                   <small>
                     {runTimestamp(analysis)} · {analysis.link_count} trace links ·{' '}
                     {analysis.classifier_type} classifier

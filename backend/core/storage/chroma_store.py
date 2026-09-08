@@ -2,9 +2,34 @@ import chromadb
 from core.schemas import Element, ElementLevel
 from core.storage.base import VectorStore
 
-SOURCE_COLLECTION = "source_elements"
-TARGET_COLLECTION = "target_elements"
 DEFAULT_CHROMA_PATH = "./chroma_data"
+
+
+def collection_names(source_kind: str, target_kind: str, config_key: str) -> tuple[str, str]:
+    """The collections the two sides of one run are indexed in.
+
+    Named by artifact kind rather than by side. A side is a property of one
+    run: requirements are the target when an issue is traced to them and the
+    source when they are traced to code, so naming the collection after the
+    side would embed the same elements once per side and leave a later run
+    unable to find what an earlier one stored.
+
+    The configuration is part of the name because it decides what the elements
+    are. Two configurations of one project hold different elements under the
+    same identifiers, and `replace_elements` treats anything it was not given
+    as stale - so sharing a collection meant each run deleted the other's work.
+
+    One exception: both sides may hold the same kind, and they are still two
+    different corpora. They stay apart, or retrieval would offer a source
+    element as a candidate for itself.
+    """
+    # Kinds come from the capabilities registry, so they are already plain
+    # identifiers - safe in a Chroma collection name without escaping.
+    source = f"{source_kind}_{config_key}"
+    target = f"{target_kind}_{config_key}"
+    if source == target:
+        target = f"{target_kind}-target_{config_key}"
+    return source, target
 
 class ChromaStore(VectorStore):
 
