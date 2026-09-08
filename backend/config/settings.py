@@ -13,6 +13,25 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     chroma_path: str = "./chroma_data"
 
+    # A token belonging to the server itself. Used *only* to raise the rate
+    # limit on repositories that are already public - never to reach a private
+    # one, which would hand every signed-in user whatever this token can see.
+    github_token: str = ""
+
+    # The OAuth app users authorise, so each person connects with their own
+    # GitHub account and TraceRAG can only reach what they granted. Leave
+    # unset and the Connect GitHub button reports that it is not configured.
+    github_client_id: str = ""
+    github_client_secret: str = ""
+
+    # Where to send the browser back to once GitHub has answered. The OAuth
+    # callback lands on the API, not the app, so it has to know the way home.
+    frontend_url: str = "http://localhost:5173"
+
+    @property
+    def github_oauth_configured(self) -> bool:
+        return bool(self.github_client_id and self.github_client_secret)
+
     # Application database: accounts, projects and saved analyses. No default:
     # a fallback would quietly open an empty database while the artifact store
     # on disk belonged to the real one, and the garbage collector reads that

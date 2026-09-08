@@ -20,6 +20,29 @@ export const listAnalyses = (projectId) => httpClient(
 
 export const getAnalysis = (analysisId) => httpClient(`/analyses/${analysisId}`);
 
+/** Every way a project has been read. One graph belongs to each. */
+export const listConfigs = (projectId) => httpClient(`/projects/${projectId}/configs`);
+
+/** Every state a project's artifacts have been in, newest first. */
+export const listVersions = (projectId) => httpClient(`/projects/${projectId}/versions`);
+
+/**
+ * One configuration's graph as it currently stands.
+ *
+ * `config_id` may be left out only when the project has a single configuration
+ * - two of them read the artifacts into different elements, so there is no
+ * single answer to give.
+ */
+export const getGraph = (projectId, { configId, linkStatus, limit, offset } = {}) => {
+  const query = new URLSearchParams();
+  if (configId) query.set('config_id', configId);
+  if (linkStatus) query.set('link_status', linkStatus);
+  if (limit) query.set('limit', limit);
+  if (offset) query.set('offset', offset);
+  const suffix = query.toString();
+  return httpClient(`/projects/${projectId}/graph${suffix ? `?${suffix}` : ''}`);
+};
+
 export const deleteAnalysis = (analysisId) => httpClient(`/analyses/${analysisId}`, {
   method: 'DELETE',
 });
@@ -47,6 +70,15 @@ export const rerunAnalysis = (analysisId, { note, config } = {}) => httpClient(
     }),
   },
 );
+
+/**
+ * The artifact kind stored for one side of a saved run.
+ *
+ * A stored config names its preprocessors and levels by key; which kind the
+ * side held is what turns those keys back into the labels the user chose from.
+ */
+export const kindOfSide = (artifacts, role) =>
+  artifacts?.find((artifact) => artifact.role === role)?.artifact_type ?? null;
 
 /**
  * Turns the run draft into the config the API stores alongside a result.

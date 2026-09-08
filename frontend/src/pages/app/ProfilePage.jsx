@@ -1,5 +1,6 @@
 import { PageHeader } from '../../components/common/PageHeader';
 import { useAuth } from '../../features/auth/AuthContext';
+import { GitHubConnection } from '../../features/sync/components/GitHubConnection';
 
 /**
  * Read-only for now. Editing a profile, email notifications and a choice of
@@ -28,6 +29,11 @@ export function ProfilePage() {
           })}.
         </p>
       )}
+
+      {/* Where the OAuth callback sends the browser back to, so this is also
+          the page that reports whether connecting worked. */}
+      <h2 className="section-heading">Connected Accounts</h2>
+      <GitHubConnection />
     </>
   );
 }

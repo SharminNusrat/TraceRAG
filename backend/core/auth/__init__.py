@@ -10,7 +10,7 @@ from core.auth.service import (
     get_user_by_email,
     get_user_by_id,
 )
-from core.auth.dependencies import get_current_user
+from core.auth.dependencies import get_current_user, get_current_user_optional
 
 __all__ = [
     "create_access_token",
@@ -22,4 +22,5 @@ __all__ = [
     "get_user_by_email",
     "get_user_by_id",
     "get_current_user",
+    "get_current_user_optional",
 ]

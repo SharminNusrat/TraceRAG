@@ -239,6 +239,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .metric small{font-size:var(--fs-xs);color:var(--muted-2);margin-top:5px}
 .dashboard-card,.history-card{margin-top:17px}
 .dashboard-card>header{display:flex;justify-content:space-between;padding:20px 21px 13px}
+/* The header carries the card's side padding; anything after it has none of
+   its own and would otherwise start hard against the card's edge. */
+.dashboard-card>.dialog-note{padding:0 21px 20px}
 .dashboard-card h2,.preferences h2{font-size:var(--fs-lg);margin:0;color:var(--ink)}
 .dashboard-card p{font-size:var(--fs-sm);color:var(--muted);margin:5px 0}
 .dashboard-card a{font-size:var(--fs-xs);color:var(--accent);font-weight:800}
@@ -257,6 +260,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   font-size:var(--fs-xs);color:var(--muted);font-style:italic;
 }
 .analysis-row time{font-size:var(--fs-xs);color:var(--muted-2)}
+/* The version this run analysed, worn as a tag beside the name so it matches
+   the way the version history labels the same thing. */
+.analysis-version{
+  display:inline-block;margin-left:9px;padding:1px 8px;border-radius:20px;
+  background:var(--accent-soft);color:var(--accent);
+  font-size:var(--fs-2xs);font-weight:800;letter-spacing:.3px;vertical-align:middle;
+}
 .project-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}
 .project-card{padding:21px}
 /* Not a child selector: the card body is wrapped in a link, so the avatar is
@@ -412,14 +422,42 @@ a.analysis-row:hover{background:var(--surface-alt)}
 
 /* -- Modal dialog -- */
 .dialog-backdrop{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:22px;background:rgba(20,18,42,.45)}
-.dialog-card{width:min(100%,430px);max-height:90vh;overflow-y:auto;padding:22px;border-radius:14px;background:var(--surface);border:1px solid var(--border);box-shadow:0 25px 65px rgba(30,27,75,.22)}
+/* overflow-x hidden as well as y: a dialog scrolls down when it is long, never
+   sideways. Anything wide enough to need it is a bug in the field below. */
+.dialog-card{width:min(100%,520px);max-height:90vh;overflow-y:auto;overflow-x:hidden;padding:22px;border-radius:14px;background:var(--surface);border:1px solid var(--border);box-shadow:0 25px 65px rgba(30,27,75,.22)}
+/* A default scrollbar paints an opaque strip down the right edge, squaring off
+   the two corners on that side while the left keeps its radius - which reads
+   as a lopsided box. A transparent track lets the card's own rounded corners
+   show through, and the thumb floats inside it. */
+.dialog-card{scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.dialog-card::-webkit-scrollbar{width:11px}
+.dialog-card::-webkit-scrollbar-track{background:transparent}
+.dialog-card::-webkit-scrollbar-thumb{
+  background:var(--border);border-radius:99px;
+  /* Inset from the edge, so it clears the corner instead of cutting it. */
+  border:3px solid transparent;background-clip:content-box;
+}
+.dialog-card::-webkit-scrollbar-thumb:hover{background:var(--muted-2);background-clip:content-box}
 .dialog-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:19px}
 .dialog-head h2{font-size:var(--fs-lg);color:var(--ink);margin:0}
 .dialog-head button{display:grid;place-items:center;width:29px;height:29px;border-radius:7px;background:transparent;color:var(--muted-2)}
 .dialog-head button:hover{background:var(--surface-alt);color:var(--ink)}
-.dialog-card form{display:grid;gap:14px}
-.dialog-card label{display:grid;gap:7px;color:var(--ink);font-size:var(--fs-xs);font-weight:700}
-.dialog-card input,.dialog-card select,.dialog-card textarea{border:1px solid var(--border);background:var(--surface-alt);color:var(--ink);border-radius:7px;padding:10px 11px;font-size:var(--fs-sm)}
+/* minmax(0,1fr), not 1fr: a grid child defaults to min-width:auto, so one long
+   <option> - a repository name - would widen the whole form past the card and
+   push the buttons out of reach. */
+.dialog-card form{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+.dialog-card form>*{min-width:0}
+.dialog-card label{display:grid;gap:7px;min-width:0;color:var(--ink);font-size:var(--fs-xs);font-weight:700}
+/* Fields fill the row and stop there. A select in particular is otherwise as
+   wide as its longest option, whatever that happens to be.
+
+   Checkboxes and radios are excluded: they are not text fields, and stretching
+   one to the full row leaves its tick floating in the middle of the dialog. */
+.dialog-card input:not([type=checkbox]):not([type=radio]),
+.dialog-card select,
+.dialog-card textarea{width:100%;min-width:0;max-width:100%;border:1px solid var(--border);background:var(--surface-alt);color:var(--ink);border-radius:7px;padding:10px 11px;font-size:var(--fs-sm)}
+/* Long values are cut with an ellipsis rather than stretching the field. */
+.dialog-card select{text-overflow:ellipsis}
 .dialog-card textarea{resize:vertical;font-family:inherit;line-height:1.5}
 .dialog-optional{font-weight:500;color:var(--muted-2);text-transform:none}
 /* The label is a grid, so every child of it takes a row of its own. A caption
@@ -427,7 +465,7 @@ a.analysis-row:hover{background:var(--surface-alt)}
    line and reads as if the field were missing. */
 .dialog-card label>.field-name{display:flex;align-items:baseline;gap:7px}
 /* Re-running with changed settings needs room for both sides side by side. */
-.dialog-card.wide{width:min(100%,620px)}
+.dialog-card.wide{width:min(100%,720px)}
 .checkbox-row{display:flex!important;align-items:flex-start;gap:10px}
 .checkbox-row input{width:16px;height:16px;flex-shrink:0;margin-top:2px;padding:0}
 .checkbox-row span{display:grid;gap:3px}
@@ -436,7 +474,8 @@ a.analysis-row:hover{background:var(--surface-alt)}
 .rerun-side{display:grid;gap:12px}
 .rerun-side h4{margin:0;font-size:var(--fs-xs);font-weight:800;color:var(--muted-2);text-transform:uppercase;letter-spacing:.5px}
 .rerun-side input,.rerun-side select{background:var(--surface)}
-.dialog-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:5px}
+/* Wraps rather than pushing a button off the edge on a narrow screen. */
+.dialog-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:9px;margin-top:5px}
 
 /* -- Stored artifacts of a reopened analysis -- */
 .artifact-strip{margin-top:19px;padding:16px 18px;border:1px solid var(--border);border-radius:11px;background:var(--surface)}
@@ -452,6 +491,178 @@ a.analysis-row:hover{background:var(--surface-alt)}
 .artifact-items button{display:flex;align-items:center;gap:5px;font-size:var(--fs-2xs);font-weight:800;color:var(--accent);background:transparent;padding:6px 9px;border-radius:7px;flex:none}
 .artifact-items button:hover:not(:disabled){background:var(--accent-soft)}
 .artifact-items button:disabled{color:var(--muted-2);cursor:default}
+
+/* ---- Syncing: what moved, what to run, how far it got, what it did ---- */
+.strip-actions{display:flex;align-items:center;gap:14px}
+.sync-list{display:flex;flex-direction:column;gap:7px;margin:11px 0 15px}
+/* Scoped to beat `.dialog-card label`, which lays every label out as a grid -
+   correct for a field with its caption above it, wrong for a row that reads
+   left to right. Without this the tick, the name and the state stack up. */
+.sync-row,
+.dialog-card .sync-row{
+  /* Wraps so a full-width explanation can drop below the row it belongs to,
+     rather than competing with the name for the same line. */
+  display:flex;align-items:center;flex-wrap:wrap;gap:11px;padding:10px 13px;
+  border:1px solid var(--border);border-radius:9px;background:var(--surface-alt);
+}
+.sync-error{
+  flex:0 0 100%;margin:0;padding-top:9px;border-top:1px solid var(--border);
+  font-size:var(--fs-2xs);line-height:1.5;color:#b4462f;
+}
+/* Inside a row these are actions, not links. Bare coloured words sit in a line
+   of text that is already coloured and worded, so they read as part of it -
+   an outline is what says this one can be pressed. */
+.sync-row .row-open{
+  display:inline-flex;align-items:center;gap:5px;flex:none;
+  padding:5px 10px;border:1px solid var(--accent);border-radius:7px;
+  background:var(--accent-soft);color:var(--accent);
+  font-size:var(--fs-2xs);font-weight:800;transition:.15s;
+}
+.sync-row .row-open:hover:not(:disabled){
+  background:var(--accent);color:#fff;
+}
+.sync-row>div{flex:1;min-width:0}
+.sync-row b{display:block;font-size:var(--fs-xs);color:var(--ink)}
+.sync-row small{display:block;font-size:var(--fs-2xs);color:var(--muted-2);margin-top:3px}
+.sync-row.muted{opacity:.62}
+.sync-row.pickable{width:100%;text-align:left;cursor:pointer;background:var(--surface-alt)}
+.sync-row.pickable:hover{border-color:var(--accent);background:var(--accent-soft)}
+/* The second way to supply a side, beside dragging files in. */
+.source-option{margin-top:13px;width:100%;justify-content:center}
+.sync-row input[type=checkbox]{accent-color:var(--accent);flex:none}
+.sync-state{
+  display:flex;align-items:center;gap:6px;flex:none;
+  font-size:var(--fs-2xs);color:var(--muted-2);font-variant-numeric:tabular-nums;
+}
+.sync-state b{display:inline;color:var(--ink)}
+.sync-state em{display:flex;align-items:center;gap:3px;font-style:normal;font-weight:800}
+.sync-added{color:var(--accent)}
+.sync-removed{color:var(--muted)}
+.sync-problem{color:#b4462f}
+.sync-progress{
+  height:6px;border-radius:3px;background:var(--surface-alt);
+  border:1px solid var(--border);overflow:hidden;margin:4px 0 13px;
+}
+.sync-progress span{
+  display:block;height:100%;background:var(--accent);
+  transition:width .3s ease;
+}
+
+/* ---- The live graph: what holds, what stopped, what broke ---- */
+.section-heading{font-size:var(--fs-lg);color:var(--ink);margin:34px 0 6px}
+.graph-config{display:flex;align-items:center;gap:11px;margin-bottom:15px;font-size:var(--fs-xs);color:var(--muted)}
+.graph-config select{
+  background:var(--surface);color:var(--ink);border:1px solid var(--border);
+  border-radius:8px;padding:8px 11px;font-size:var(--fs-xs);min-width:280px;
+}
+.stat-problem{color:#b4462f}
+
+/* ---- The links drawn, rather than listed ---- */
+.trace-graph{
+  margin:0 0 18px;padding:16px 18px 12px;
+  border:1px solid var(--border);border-radius:12px;background:var(--surface);
+}
+/* Capped, then centred: the viewBox is 800 wide, and letting it stretch across
+   a large monitor would scale the labels up with it. */
+.trace-graph svg{display:block;width:100%;max-width:900px;height:auto;margin:0 auto}
+.trace-graph figcaption{
+  margin-top:10px;padding-top:10px;border-top:1px solid var(--border);
+  font-size:var(--fs-2xs);color:var(--muted-2);
+  /* The count reads left, the way out of the cap sits opposite it. */
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+
+.graph-edge{fill:none;stroke-width:1.6;transition:opacity .15s}
+.graph-edge.active{stroke:var(--accent);opacity:.55}
+.graph-edge.stale{stroke:var(--muted-2);opacity:.4;stroke-dasharray:2 4}
+/* Broken is the one worth seeing across the room. */
+.graph-edge.broken{stroke:#b4462f;opacity:.85;stroke-width:2;stroke-dasharray:5 3}
+.graph-edge.dim{opacity:.07}
+
+.graph-node{cursor:pointer}
+.graph-node circle{fill:var(--accent)}
+.graph-node text{font-size:11px;fill:var(--ink);font-weight:600}
+.graph-node:hover text{fill:var(--accent)}
+/* The element is gone; the link that pointed at it is the broken one. */
+.graph-node.gone circle{fill:#b4462f}
+.graph-node.gone text{fill:var(--muted-2);text-decoration:line-through}
+.graph-node.dim{opacity:.3}
+
+@media(prefers-reduced-motion:reduce){.graph-edge{transition:none}}
+
+.link-row{
+  display:flex;align-items:center;gap:14px;padding:13px 17px;
+  border-bottom:1px solid var(--border);
+}
+.link-row:last-child{border-bottom:none}
+.link-status{
+  display:flex;align-items:center;gap:4px;flex:none;width:86px;
+  font-size:var(--fs-2xs);font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+}
+.link-status.broken{color:#b4462f}
+.link-status.stale{color:var(--muted-2)}
+.link-status.active{color:var(--accent)}
+.link-ends{display:flex;align-items:center;gap:12px;flex:1;min-width:0;color:var(--muted-2)}
+.link-ends>span{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.link-ends small{font-size:var(--fs-2xs);color:var(--muted-2);text-transform:capitalize}
+.link-ends b{
+  font-size:var(--fs-xs);color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.link-ends .gone b{text-decoration:line-through;color:var(--muted-2)}
+.link-ends em{font-size:var(--fs-2xs);font-style:normal;font-weight:700;color:#b4462f}
+.link-why{color:var(--muted-2);flex:none;cursor:help}
+
+.version-list{display:flex;flex-direction:column;gap:9px;margin-top:13px}
+.version-row{
+  display:flex;align-items:flex-start;gap:16px;padding:14px 17px;
+  border:1px solid var(--border);border-radius:11px;background:var(--surface);
+}
+.version-mark{flex:none;width:84px}
+.version-mark b{display:block;font-size:var(--fs-md);color:var(--ink)}
+.version-mark small{display:block;font-size:var(--fs-2xs);color:var(--muted-2);margin-top:2px}
+.version-body{flex:1;min-width:0}
+.version-sources{display:flex;flex-wrap:wrap;gap:8px}
+.version-source{
+  display:flex;align-items:center;gap:7px;padding:5px 10px;
+  border:1px solid var(--border);border-radius:7px;background:var(--surface-alt);
+  font-size:var(--fs-2xs);
+}
+.version-source b{color:var(--ink)}
+.version-source code{color:var(--muted-2);font-variant-numeric:tabular-nums}
+.version-source em{font-style:normal;font-weight:800;color:var(--accent)}
+.version-source.changed{border-color:var(--accent);background:var(--accent-soft)}
+.version-source.muted{color:var(--muted-2)}
+.version-runs{flex:none;font-size:var(--fs-2xs);color:var(--muted-2)}
+
+/* ---- A field with a lookup beside it (repository -> its branches) ---- */
+.field-with-action{display:flex;gap:8px;align-items:stretch}
+.field-with-action input{flex:1;min-width:0}
+.field-with-action button{
+  display:flex;align-items:center;gap:5px;white-space:nowrap;flex:none;
+  font-size:var(--fs-2xs);font-weight:800;color:var(--accent);
+  background:var(--accent-soft);border:1px solid var(--border);
+  border-radius:8px;padding:0 11px;
+}
+.field-with-action button:hover:not(:disabled){border-color:var(--accent)}
+.field-with-action button:disabled{color:var(--muted-2);background:var(--surface-alt);cursor:default}
+
+/* ---- Settings a result was produced with ---- */
+.run-config{margin-top:19px;border:1px solid var(--border);border-radius:11px;background:var(--surface);overflow:hidden}
+.run-config-head{display:flex;align-items:center;gap:11px;width:100%;padding:14px 18px;background:transparent;text-align:left}
+.run-config-head:hover{background:var(--surface-alt)}
+.run-config-head>div{flex:1;min-width:0}
+.run-config-head b{display:block;font-size:var(--fs-sm);color:var(--ink)}
+.run-config-head small{display:block;font-size:var(--fs-2xs);color:var(--muted-2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.run-config-icon{display:grid;place-items:center;width:29px;height:29px;border-radius:7px;background:var(--accent-soft);color:var(--accent);flex:none}
+.run-config-chevron{color:var(--muted-2);flex:none;transition:transform .15s}
+.run-config-chevron.open{transform:rotate(180deg)}
+.run-config-body{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:11px;padding:0 18px 16px}
+.run-config-body article{padding:12px 14px;border:1px solid var(--border);border-radius:9px;background:var(--surface-alt)}
+.run-config-body h4{margin:0 0 9px;font-size:var(--fs-2xs);font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.05em}
+.run-config-body dl{display:grid;grid-template-columns:1fr auto;gap:6px 12px;margin:0}
+.run-config-body dt{font-size:var(--fs-2xs);color:var(--muted-2)}
+.run-config-body dd{margin:0;font-size:var(--fs-2xs);font-weight:700;color:var(--ink);text-align:right}
 .profile-card{padding:22px;display:flex;align-items:center;gap:14px;max-width:700px}
 .profile-card>span{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--frame-2),var(--frame-3));color:#fff;font-size:var(--fs-lg);font-weight:800}
 .profile-card h2{font-size:var(--fs-xl);margin:0;color:var(--ink)}
@@ -489,7 +700,11 @@ a.analysis-row:hover{background:var(--surface-alt)}
 .workflow-exit-btn:hover{background:rgba(255,255,255,.18);color:#fff}
 .workflow-content,.results-content{max-width:860px;margin:auto;padding:48px 24px 32px}
 .workflow-target{margin:0 0 19px;padding:10px 15px;border-radius:9px;background:var(--accent-soft);color:var(--accent-strong);font-size:var(--fs-xs)}
-.page-actions{display:flex;gap:10px;flex-wrap:wrap}
+/* Centred, not stretched: a filled button is taller than a plain text link, so
+   without this each one's label sits at a different height. */
+.page-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* The icon sits on the text's centre line rather than its baseline. */
+.page-actions .row-open{display:inline-flex;align-items:center;gap:6px}
 .button:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
 
 /* -- Stepper -- */
@@ -699,9 +914,16 @@ a.analysis-row:hover{background:var(--surface-alt)}
   background:linear-gradient(90deg,var(--accent),var(--accent-strong));
   animation:indeterminate 1.4s ease-in-out infinite;
 }
+/* Once the server can count what is left, the bar stops sweeping and fills. */
+.run-progress.measured span{animation:none;left:0;transition:width .4s ease}
+.run-stage{
+  margin:16px 0 0;text-align:center;
+  font-size:var(--fs-xs);color:var(--muted);font-variant-numeric:tabular-nums;
+}
 @media(prefers-reduced-motion:reduce){
   .spinner{animation-duration:2.4s}
   .run-progress span{animation:none;left:0;width:100%;opacity:.6}
+  .run-progress.measured span{transition:none}
 }
 
 /* ============ Results ============ */

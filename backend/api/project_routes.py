@@ -30,15 +30,22 @@ from api.schemas import (
     ArtifactResponse,
     ComparisonResponse,
     ElementResponse,
+    GraphEdgeResponse,
+    GraphResponse,
+    GraphSummary,
+    ProjectConfigResponse,
     ProjectDetailResponse,
     ProjectRequest,
     ProjectResponse,
+    ProjectVersionResponse,
     RerunRequest,
     SaveAnalysisRequest,
     TraceLinkResponse,
+    VersionSourceRef,
 )
 from core.auth import get_current_user
 from core.db import Analysis, Artifact, Project, User, get_db
+from core.db.models import ProjectConfig
 from core.projects import artifact_store, service
 
 router = APIRouter(tags=["projects"])
@@ -83,6 +90,7 @@ def to_analysis_summary(
     artifact_count: int,
     project_name: str,
     files_available: bool = False,
+    version_number: int | None = None,
 ):
     return AnalysisSummaryResponse(
         analysis_id=analysis.analysis_id,
@@ -97,6 +105,7 @@ def to_analysis_summary(
         link_count=link_count,
         artifact_count=artifact_count,
         project_name=project_name,
+        version_number=version_number,
     )
 
 
@@ -154,10 +163,76 @@ def summaries_for(db: Session, rows: list[tuple]) -> list[AnalysisSummaryRespons
     """A page of analyses, each saying whether its files are still there."""
     # One query and one filesystem pass for the whole page, rather than per row.
     available = service.analyses_with_files(db, [row[0].analysis_id for row in rows])
+    # One lookup for the page, in keeping with the two above it.
+    numbers = service.version_numbers(db, [row[0].version_id for row in rows])
     return [
-        to_analysis_summary(*row, files_available=row[0].analysis_id in available)
+        to_analysis_summary(
+            *row,
+            files_available=row[0].analysis_id in available,
+            version_number=numbers.get(row[0].version_id),
+        )
         for row in rows
     ]
+
+
+def update_graph(
+    db: Session, analysis: Analysis, result, renames: dict[str, str] | None = None
+) -> None:
+    """Fold a saved run into its configuration's graph.
+
+    Which kind sat on each side is read back off the stored artifacts, because
+    that is where a run records what it was actually pointed at. An analysis
+    whose files were never claimed has nothing to read, and is skipped.
+
+    `renames` is what a sync learned about files that moved. An upload knows
+    nothing of the sort and leaves it out.
+    """
+    kinds = {artifact.role: artifact.artifact_type for artifact in analysis.artifacts}
+    service.update_graph(
+        db,
+        analysis,
+        result,
+        source_kind=kinds.get(ROLE_SOURCE),
+        target_kind=kinds.get(ROLE_TARGET),
+        renames=renames,
+    )
+
+
+def resolve_config(db: Session, project: Project, config_id: int | None) -> ProjectConfig:
+    """Which configuration a request is asking about.
+
+    Left out when there is only one, because naming it would be ceremony. With
+    several it has to be said: guessing would answer a different question from
+    the one asked, and the answer would look perfectly reasonable.
+    """
+    configs = service.list_configs(db, project)
+    if not configs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This project has no saved configuration yet.",
+        )
+
+    if config_id is None:
+        if len(configs) == 1:
+            return configs[0]
+        default = next((config for config in configs if config.is_default), None)
+        if default is not None:
+            return default
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"This project has {len(configs)} configurations and no default. "
+                f"Name the one to read with config_id."
+            ),
+        )
+
+    chosen = next((config for config in configs if config.config_id == config_id), None)
+    if chosen is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Configuration not found in this project.",
+        )
+    return chosen
 
 
 def require_project(db: Session, user: User, project_id: int) -> Project:
@@ -241,12 +316,115 @@ def save_analysis(
         config=request.config,
         result=request.result,
         execution_duration=request.execution_duration,
+        # These artifacts were just uploaded, so they are a state of the
+        # project nothing has been run against before: a new version.
+        version_id=service.next_version(db, project).version_id,
     )
     artifact_count = service.claim_artifacts(db, analysis, request.upload_id)
+    update_graph(db, analysis, request.result)
     return to_analysis_summary(
         analysis, len(analysis.trace_links), artifact_count, project.project_name,
         # Just written, so anything it claimed is on disk by definition.
         files_available=artifact_count > 0,
+    )
+
+
+@router.get("/projects/{project_id}/configs", response_model=list[ProjectConfigResponse])
+def list_configs(
+    project_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every way this project has been read, with how much each has been used."""
+    project = require_project(db, user, project_id)
+    counts = service.count_analyses_by_config(db, project)
+    return [
+        ProjectConfigResponse(
+            config_id=config.config_id,
+            config_key=config.config_key,
+            is_default=config.is_default,
+            config=config_of(config),
+            analysis_count=counts.get(config.config_id, 0),
+            created_at=config.created_at,
+        )
+        for config in service.list_configs(db, project)
+    ]
+
+
+@router.get("/projects/{project_id}/versions", response_model=list[ProjectVersionResponse])
+def list_versions(
+    project_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every state this project's artifacts have been in, newest first."""
+    project = require_project(db, user, project_id)
+    return [
+        ProjectVersionResponse(
+            version_id=version.version_id,
+            version_number=version.version_number,
+            note=version.note,
+            created_at=version.created_at,
+            analysis_count=runs,
+            sources=[
+                VersionSourceRef(
+                    source_id=entry.source_id,
+                    # Read off the source itself, so a renamed source reads by
+                    # the name it has now rather than the one it had then.
+                    name=entry.source.name,
+                    kind=entry.source.kind,
+                    origin=entry.source.origin,
+                    ref=entry.ref,
+                )
+                for entry in version.sources
+                if entry.source is not None
+            ],
+        )
+        for version, runs in service.list_versions(db, project)
+    ]
+
+
+@router.get("/projects/{project_id}/graph", response_model=GraphResponse)
+def get_graph(
+    project_id: int,
+    config_id: int | None = Query(default=None, description="Omit when the project has one."),
+    link_status: str | None = Query(default=None, description="active, stale or broken."),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """A configuration's graph as it currently stands.
+
+    One graph per configuration, so which one has to be named unless the
+    project only has the one - two configurations read the same artifacts into
+    different elements, and their graphs are not comparable.
+    """
+    project = require_project(db, user, project_id)
+    config = resolve_config(db, project, config_id)
+
+    rows, total = service.list_graph_edges(db, config.config_id, link_status, limit, offset)
+    return GraphResponse(
+        config_id=config.config_id,
+        config_key=config.config_key,
+        summary=GraphSummary(**service.graph_summary(db, config.config_id)),
+        links=[
+            GraphEdgeResponse(
+                edge_id=edge.edge_id,
+                from_kind=edge.from_kind,
+                from_identifier=source.identifier,
+                from_present=source.is_active,
+                to_kind=edge.to_kind,
+                to_identifier=target.identifier,
+                to_present=target.is_active,
+                confidence=edge.confidence,
+                confidence_level=edge.confidence_level,
+                explanation=edge.explanation,
+                status=edge.status,
+            )
+            for edge, source, target in rows
+        ],
+        total=total,
     )
 
 
@@ -394,8 +572,15 @@ def rerun_analysis(
             config=config,
             result=result,
             execution_duration=duration,
+            # The same files the original ran against, so the same version.
+            # Trying a second configuration is not a change to the artifacts.
+            version_id=(
+                original.version_id
+                or service.next_version(db, original.project).version_id
+            ),
         )
         copied = service.copy_artifacts(db, original, analysis)
+        update_graph(db, analysis, result)
 
         logger.info(
             f"Re-ran analysis {analysis_id} as {analysis.analysis_id} "

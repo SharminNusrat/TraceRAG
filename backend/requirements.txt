@@ -26,3 +26,4 @@ groq
 python-docx
 requests
 numpy
+cryptography

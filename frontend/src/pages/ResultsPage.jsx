@@ -12,6 +12,7 @@ import { TracePanels } from '../features/analysis/components/TracePanels';
 import { ExportMenu } from '../features/analysis/components/ExportMenu';
 import { SaveAnalysisDialog } from '../features/projects/components/SaveAnalysisDialog';
 import { ArtifactStrip } from '../features/projects/components/ArtifactStrip';
+import { RunConfigStrip } from '../features/projects/components/RunConfigStrip';
 import { mockResult } from '../features/analysis/mockResult';
 
 const TABS = [
@@ -138,6 +139,12 @@ export function ResultsPage() {
             “Save Results” to try again.
           </p>
         )}
+
+        <RunConfigStrip
+          config={runMeta?.config}
+          sourceKind={runMeta?.sourceKind}
+          targetKind={runMeta?.targetKind}
+        />
 
         <ArtifactStrip artifacts={runMeta?.artifacts} savedAs={runMeta?.savedAs} />
 

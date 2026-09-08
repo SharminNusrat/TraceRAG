@@ -3,13 +3,15 @@ import logging
 import os
 import re
 import shutil
+import time
 import zipfile
 from hashlib import sha256
 from pathlib import Path
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 from api.schemas import (
-    AnalysisMode, AnalyzeRequest, AnalyzeResponse, ArtifactInput, CapabilitiesResponse,
-    ElementResponse, TraceLinkResponse, PreprocessorType, ClassifierType,
+    AnalysisMode, AnalysisStartResponse, AnalyzeRequest, AnalyzeResponse, ArtifactInput,
+    CapabilitiesResponse, ElementResponse, TraceLinkResponse, PreprocessorType, ClassifierType,
 )
 from api.capabilities import (
     ARTIFACT_KINDS_BY_KEY, KIND_CODE, MAX_TOTAL_UPLOAD_BYTES, MAX_UPLOAD_BYTES,
@@ -23,8 +25,15 @@ from core.classification import SimpleClassifier, ReasoningClassifier, OllamaCha
 from core.dependency import CodeDependencyAnalyzer
 from core.summarization import ElementSummarizer
 from core.cache import PersistentSummaryCache
+from core.content import relative_identifier
 from core.pipeline import TracePipeline
-from core.projects import artifact_store
+from core import jobs
+from core.auth import get_current_user_optional
+from core.db.models import Project, ProjectSource, User
+from core.db.session import SessionLocal, get_db
+from core.projects import artifact_store, service
+from core.projects.run_config import config_key
+from core.sync import SyncError, fetch_source
 from config import settings
 
 router = APIRouter()
@@ -94,13 +103,13 @@ def get_chat_provider():
     return GroqChatProvider(api_keys=settings.groq_api_keys_list) # Also working
 
 
-def get_classifier(classifier_type: ClassifierType):
+def get_classifier(classifier_type: ClassifierType, use_cache: bool):
     provider = get_chat_provider()
     match classifier_type:
         case ClassifierType.SIMPLE:
-            return SimpleClassifier(provider=provider)
+            return SimpleClassifier(provider=provider, use_persistent_cache=use_cache)
         case ClassifierType.REASONING:
-            return ReasoningClassifier(provider=provider)
+            return ReasoningClassifier(provider=provider, use_persistent_cache=use_cache)
 
 
 def get_summarizer(kind_key: str, enabled: bool, use_cache: bool) -> ElementSummarizer | None:
@@ -158,12 +167,38 @@ def build_pipeline_response(
     use_persistent_cache: bool,
     reset_vector_stores: bool,
     summarize_elements: bool = request_default("summarize_elements"),
+    # Last run's links for this configuration, so the classifier is asked about
+    # them again rather than losing them to a shifted top-k. Only a sync has
+    # any: a first run has no previous links, and a re-run reads the very same
+    # files, so its retrieval cannot have shifted.
+    pinned_links: dict[str, set[str]] | None = None,
+    # The directories the providers read from, so pinned identifiers and this
+    # run's elements can be compared in the same form.
+    workspace_roots: list[Path] | None = None,
+    on_progress=None,
 ) -> AnalyzeResponse:
+    # Computed here rather than by each caller: every setting that goes into it
+    # is already a parameter of this function, so there is one spelling of the
+    # configuration and no way for two entry points to disagree about it.
+    key = config_key(
+        source_preprocessor=source_preprocessor,
+        target_preprocessor=target_preprocessor,
+        source_output_level=source_output_level,
+        target_output_level=target_output_level,
+        classifier=classifier,
+        n_results=n_results,
+        dependency_expansion_depth=dependency_expansion_depth,
+        summarize_elements=summarize_elements,
+    )
+
     pipeline = TracePipeline(
         source_provider=source_provider,
         target_provider=target_provider,
         source_preprocessor=get_preprocessor(source_preprocessor),
         target_preprocessor=get_preprocessor(target_preprocessor),
+        source_kind=source_kind,
+        target_kind=target_kind,
+        config_key=key,
         # Only the sides whose artifacts are not prose; the rest get None.
         source_summarizer=get_summarizer(
             source_kind, summarize_elements, use_persistent_cache
@@ -172,7 +207,7 @@ def build_pipeline_response(
             target_kind, summarize_elements, use_persistent_cache
         ),
         embedder=OllamaEmbeddingCreator(use_persistent_cache=use_persistent_cache),
-        classifier=get_classifier(classifier),
+        classifier=get_classifier(classifier, use_persistent_cache),
         chroma_path=chroma_path,
         n_results=n_results,
         source_output_level=source_output_level,
@@ -187,6 +222,9 @@ def build_pipeline_response(
         ),
         dependency_expansion_depth=dependency_expansion_depth,
         reset_vector_stores=reset_vector_stores,
+        pinned_links=pinned_links,
+        workspace_roots=workspace_roots,
+        on_progress=on_progress,
     )
     result = pipeline.run().to_dict()
 
@@ -196,6 +234,7 @@ def build_pipeline_response(
         target_elements=[ElementResponse(**e) for e in result["target_elements"]],
         unimplemented=result["unimplemented"],
         summary=result["summary"],
+        element_links=result["element_links"],
     )
 
 
@@ -456,17 +495,94 @@ def materialise_side(
     return side_dir
 
 
-def side_manifest(artifacts: list[dict], role: str) -> dict:
+def side_manifest(
+    artifacts: list[dict],
+    role: str,
+    source: ProjectSource | None = None,
+    ref: str | None = None,
+) -> dict:
     """Describe one side of the trace for later storage."""
     # The stored unit is the side, not the artifact: materialise_side writes a
     # whole side into one directory, which is what makes it a single corpus.
     names = [artifact.get("name") or artifact.get("id") or "artifact" for artifact in artifacts]
-    return {
+    entry = {
         "role": role,
         "artifact_type": artifacts[0]["kind"],
-        "name": ", ".join(names)[:255],
+        "name": source.name if source else ", ".join(names)[:255],
         "directory": role,
     }
+    if source is not None:
+        # Names the row these files came from, so the run updates that source
+        # rather than being filed as a new upload beside it - and records the
+        # commit, which is what the next check compares against.
+        entry["source_id"] = source.source_id
+        entry["ref"] = ref
+    return entry
+
+
+def require_owned_project(db: Session, user: User | None, project_id: str | None) -> Project:
+    """The project a connected source is being read from.
+
+    Uploading needs no account, but fetching from a source does: the source
+    belongs to a project, and reading it is reading whatever that project's
+    stored credentials can reach.
+    """
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Sign in to run an analysis from a connected source.",
+        )
+
+    numeric = str(project_id or "").strip()
+    if not numeric.isdigit():
+        raise HTTPException(
+            status_code=400,
+            detail="Running from a connected source needs the project it belongs to.",
+        )
+
+    project = service.get_project(db, user.user_id, int(numeric))
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return project
+
+
+def side_source(
+    db: Session, project: Project, artifacts: list[dict], role: str
+) -> ProjectSource | None:
+    """The connected source a side is taken from, if it is not uploaded.
+
+    A side is one or the other. Half a codebase fetched and half uploaded is
+    not a thing anyone means, and allowing it would leave the source recording
+    a commit it does not actually hold.
+    """
+    named = [artifact for artifact in artifacts if artifact.get("source_id")]
+    if not named:
+        return None
+
+    if len(named) != len(artifacts) or len({a["source_id"] for a in named}) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"The {role} side must be either uploaded or taken from a single "
+                f"connected source, not a mixture."
+            ),
+        )
+
+    source = service.get_source(db, project, int(named[0]["source_id"]))
+    if source is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No connected source matches the one chosen for the {role} side.",
+        )
+    if source.kind != artifacts[0]["kind"]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"'{source.name}' supplies {source.kind}, which is not what the "
+                f"{role} side is set to."
+            ),
+        )
+    return source
 
 
 def build_provider(kind_key: str, path):
@@ -487,11 +603,10 @@ def build_provider(kind_key: str, path):
 
 def relativize(identifier: str, roots: list[Path]) -> str:
     """Strip the temp workspace prefix so identifiers read as project paths."""
-    for root in roots:
-        prefix = f"{root}{os.sep}"
-        if identifier.startswith(prefix):
-            return identifier[len(prefix):].replace(os.sep, "/")
-    return identifier
+    # The pipeline reduces identifiers the same way when matching pinned links,
+    # so both go through one implementation - two that drifted apart is what
+    # made pinning silently match nothing.
+    return relative_identifier(identifier, roots)
 
 
 def relativize_text(text: str, roots: list[Path]) -> str:
@@ -519,6 +634,13 @@ def relativize_response(response: AnalyzeResponse, roots: list[Path]) -> Analyze
     for item in response.unimplemented:
         if "identifier" in item:
             item["identifier"] = relativize(item["identifier"], roots)
+    # Stored to be matched against a later run's elements, and every run works
+    # in a differently named temp directory - so an absolute path here would
+    # never match again, and pinning would quietly do nothing forever.
+    response.element_links = [
+        (relativize(source, roots), relativize(target, roots))
+        for source, target in response.element_links
+    ]
     return response
 
 
@@ -566,8 +688,9 @@ def parse_id_list(raw: str, field: str) -> list[str]:
     raise HTTPException(status_code=400, detail=f"'{field}' must be a JSON array of artifact ids.")
 
 
-@router.post("/analyze/upload", response_model=AnalyzeResponse)
+@router.post("/analyze/upload", response_model=AnalysisStartResponse)
 async def analyze_upload(
+    background: BackgroundTasks,
     artifacts: str = Form(...),
     source_artifact_ids: str = Form(...),
     target_artifact_ids: str = Form(...),
@@ -583,21 +706,33 @@ async def analyze_upload(
     summarize_elements: bool = Form(request_default("summarize_elements")),
     analysis_mode: AnalysisMode = Form(request_default("analysis_mode")),
     project_id: str | None = Form(None),
+    user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
 ):
-    """Run the pipeline over browser-uploaded artifacts.
+    """Start a run over browser-uploaded artifacts, and return a job to watch.
 
-    `artifacts` is a JSON array describing each uploaded artifact:
-        [{"id","name","kind","file_indexes":[...]}, {"id","name","kind","text"}]
-    where `file_indexes` point into `files`, and `file_paths` carries each
-    file's relative path so folder uploads keep their structure.
+    The uploaded bytes are read here - an upload is a stream belonging to this
+    request - and everything after that happens in the background, because a
+    real run takes minutes and no browser waits that long.
+
+
+    `artifacts` is a JSON array describing each side's material:
+        [{"id","name","kind","file_indexes":[...]},   uploaded files
+         {"id","name","kind","text"},                 pasted text
+         {"id","name","kind","source_id": 4}]         a connected source
+
+    `file_indexes` point into `files`, and `file_paths` carries each file's
+    relative path so folder uploads keep their structure. An artifact naming a
+    `source_id` is fetched from that source instead - which is how a codebase
+    already on GitHub never has to be uploaded by hand.
 
     Each side takes a list of artifact ids. Several artifacts on one side are
     analysed together as a single corpus - that is how a set of loose code
     files becomes one codebase. Only the referenced artifacts are written to
     disk.
 
-    Defaults (including analysis_mode) come from AnalyzeRequest, so both
-    endpoints stay in step until auth lands and the mode becomes per-user.
+    Anonymous callers may upload; fetching from a connected source needs the
+    signed-in owner of the project it belongs to.
     """
     artifact_list = parse_json_field(artifacts, "artifacts", [])
     if not isinstance(artifact_list, list) or not artifact_list:
@@ -619,6 +754,17 @@ async def analyze_upload(
     source_artifacts = resolve_side(artifact_list, source_ids, ROLE_SOURCE)
     target_artifacts = resolve_side(artifact_list, target_ids, ROLE_TARGET)
 
+    # A side may be taken from something the project is already connected to
+    # rather than uploaded. That belongs to a project, so it needs the project
+    # and its owner - neither of which an anonymous run has.
+    project = None
+    if any(a.get("source_id") for a in source_artifacts + target_artifacts):
+        project = require_owned_project(db, user, project_id)
+    side_sources = {
+        ROLE_SOURCE: side_source(db, project, source_artifacts, ROLE_SOURCE) if project else None,
+        ROLE_TARGET: side_source(db, project, target_artifacts, ROLE_TARGET) if project else None,
+    }
+
     chroma_path = "./chroma_data/session"
     use_persistent_cache = False
     reset_vector_stores = True
@@ -636,48 +782,147 @@ async def analyze_upload(
     else:
         logger.info("Using session mode")
 
-    # The workspace outlives the request now: saving the run is a separate call
-    # that may not come for minutes, and the files have to still be there when
-    # it does. Anything nobody saves is reaped on the retention window.
+    # The workspace outlives the request: the run happens after it, and saving
+    # is a separate call that may not come for minutes. Anything nobody saves
+    # is reaped on the retention window.
     artifact_store.purge_expired_uploads()
     upload_id, workspace = artifact_store.create_upload_dir()
 
+    # Session runs used to share one directory, so two of them at once wiped
+    # each other's vectors. Each gets its own now that runs outlive requests.
+    if analysis_mode != AnalysisMode.PROJECT:
+        chroma_path = get_chroma_path(f"session-{upload_id}")
+
     budget = UploadBudget()
     try:
-        source_dir = materialise_side(source_artifacts, files, paths, workspace / "source", budget)
-        target_dir = materialise_side(target_artifacts, files, paths, workspace / "target", budget)
-        artifact_store.write_manifest(workspace, [
-            side_manifest(source_artifacts, ROLE_SOURCE),
-            side_manifest(target_artifacts, ROLE_TARGET),
-        ])
-
-        response = build_pipeline_response(
-            source_provider=build_provider(source_artifacts[0]["kind"], source_dir),
-            target_provider=build_provider(target_artifacts[0]["kind"], target_dir),
-            source_kind=source_artifacts[0]["kind"],
-            target_kind=target_artifacts[0]["kind"],
-            source_preprocessor=source_preprocessor,
-            target_preprocessor=target_preprocessor,
-            classifier=classifier,
-            n_results=n_results,
-            source_output_level=source_output_level,
-            target_output_level=target_output_level,
-            dependency_expansion_depth=dependency_expansion_depth,
-            summarize_elements=summarize_elements,
-            chroma_path=chroma_path,
-            use_persistent_cache=use_persistent_cache,
-            reset_vector_stores=reset_vector_stores,
-        )
-        response.upload_id = upload_id
-        return relativize_response(response, [source_dir, target_dir])
+        # Uploaded bytes are read here and nowhere else: an UploadFile is a
+        # stream from this request and is gone once the response is sent.
+        for role, side in ((ROLE_SOURCE, source_artifacts), (ROLE_TARGET, target_artifacts)):
+            if side_sources[role] is None:
+                materialise_side(side, files, paths, workspace / role, budget)
     except HTTPException:
-        # A rejected upload produced no result, so there is nothing to save and
-        # nothing worth keeping on disk.
         artifact_store.discard_upload(upload_id)
         raise
-    except Exception as e:
-        import traceback
-        artifact_store.discard_upload(upload_id)
-        logger.error(f"Pipeline failed: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=str(e))
+
+    plan = {
+        "source_artifacts": source_artifacts,
+        "target_artifacts": target_artifacts,
+        # Ids, not rows: the background half opens its own session.
+        "source_ids": {role: (s.source_id if s else None) for role, s in side_sources.items()},
+        "source_preprocessor": source_preprocessor,
+        "target_preprocessor": target_preprocessor,
+        "source_output_level": source_output_level,
+        "target_output_level": target_output_level,
+        "classifier": classifier,
+        "n_results": n_results,
+        "dependency_expansion_depth": dependency_expansion_depth,
+        "summarize_elements": summarize_elements,
+        "chroma_path": chroma_path,
+        "use_persistent_cache": use_persistent_cache,
+        "reset_vector_stores": reset_vector_stores,
+    }
+
+    job = jobs.create_job(
+        db,
+        user.user_id if user else None,
+        int(project_id) if str(project_id or "").isdigit() else None,
+        jobs.KIND_ANALYSIS,
+    )
+    background.add_task(run_analysis_job, job.job_id, upload_id, plan)
+    logger.info(f"Analysis job {job.job_id} filed, workspace {upload_id}")
+    return AnalysisStartResponse(job_id=job.job_id, token=job.token, upload_id=upload_id)
+
+
+def progress_writer(db: Session, job_id: int):
+    """A progress callback that does not write to the database on every element.
+
+    One row update per element would be a hundred commits for a run nobody is
+    reading that fast. A second apart is more than enough to watch, and the
+    final step of each stage always lands so the bar does not stop short.
+    """
+    last_written = 0.0
+
+    def report(stage: str, current: int = 0, total: int = 0) -> None:
+        nonlocal last_written
+        now = time.monotonic()
+        if current and current != total and now - last_written < 1.0:
+            return
+        last_written = now
+        jobs.set_stage(db, job_id, stage, current, total)
+
+    return report
+
+
+def perform_analysis(db: Session, upload_id: str, plan: dict, job_id: int) -> AnalyzeResponse:
+    """Fetch whatever was not uploaded, then run the pipeline over the lot."""
+    workspace = artifact_store.upload_dir(upload_id)
+    if workspace is None or not workspace.is_dir():
+        raise SyncError("The uploaded files are no longer available.")
+
+    refs = {}
+    for role in (ROLE_SOURCE, ROLE_TARGET):
+        source_id = plan["source_ids"][role]
+        if source_id is None:
+            continue
+        source = db.get(ProjectSource, source_id)
+        if source is None:
+            raise SyncError("A connected source was removed before the run started.")
+        jobs.set_stage(db, job_id, f"Fetching {source.name}")
+        # The commit comes back so the saved run records what it analysed.
+        refs[role] = fetch_source(source, workspace / role)
+
+    source_artifacts = plan["source_artifacts"]
+    target_artifacts = plan["target_artifacts"]
+    artifact_store.write_manifest(workspace, [
+        side_manifest(source_artifacts, ROLE_SOURCE,
+                      db.get(ProjectSource, plan["source_ids"][ROLE_SOURCE])
+                      if plan["source_ids"][ROLE_SOURCE] else None, refs.get(ROLE_SOURCE)),
+        side_manifest(target_artifacts, ROLE_TARGET,
+                      db.get(ProjectSource, plan["source_ids"][ROLE_TARGET])
+                      if plan["source_ids"][ROLE_TARGET] else None, refs.get(ROLE_TARGET)),
+    ])
+
+    source_dir, target_dir = workspace / ROLE_SOURCE, workspace / ROLE_TARGET
+    response = build_pipeline_response(
+        source_provider=build_provider(source_artifacts[0]["kind"], source_dir),
+        target_provider=build_provider(target_artifacts[0]["kind"], target_dir),
+        source_kind=source_artifacts[0]["kind"],
+        target_kind=target_artifacts[0]["kind"],
+        source_preprocessor=plan["source_preprocessor"],
+        target_preprocessor=plan["target_preprocessor"],
+        classifier=plan["classifier"],
+        n_results=plan["n_results"],
+        source_output_level=plan["source_output_level"],
+        target_output_level=plan["target_output_level"],
+        dependency_expansion_depth=plan["dependency_expansion_depth"],
+        summarize_elements=plan["summarize_elements"],
+        chroma_path=plan["chroma_path"],
+        use_persistent_cache=plan["use_persistent_cache"],
+        reset_vector_stores=plan["reset_vector_stores"],
+        on_progress=progress_writer(db, job_id),
+    )
+    response.upload_id = upload_id
+    return relativize_response(response, [source_dir, target_dir])
+
+
+def run_analysis_job(job_id: int, upload_id: str, plan: dict) -> None:
+    """The background half of a run. Owns its own session.
+
+    The request's session is closed by the time this runs - the response has
+    already gone out - so nothing from it can be carried in here.
+    """
+    with SessionLocal() as db:
+        jobs.start(db, job_id)
+        try:
+            response = perform_analysis(db, upload_id, plan, job_id)
+            jobs.succeed(db, job_id, response.model_dump(mode="json"))
+            logger.info(
+                f"Analysis job {job_id} finished: {len(response.trace_links)} trace links"
+            )
+        except Exception as error:
+            # The files go with it: nothing produced a result, so there is
+            # nothing to save and nothing worth keeping on disk.
+            artifact_store.discard_upload(upload_id)
+            logger.error(f"Analysis job {job_id} failed: {error}", exc_info=True)
+            detail = error.detail if isinstance(error, HTTPException) else str(error)
+            jobs.fail(db, job_id, str(detail))

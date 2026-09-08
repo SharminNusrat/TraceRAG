@@ -8,7 +8,7 @@ import { AnalysisSettings } from '../features/analysis/components/AnalysisSettin
 import { ArtifactUploader } from '../features/analysis/components/ArtifactUploader';
 import { ReviewStep } from '../features/analysis/components/ReviewStep';
 import { runAnalysisUpload } from '../features/analysis/api/analyzeApi';
-import { getProject, saveAnalysis } from '../features/projects/api/projectsApi';
+import { getProject, saveAnalysis, toAnalysisConfig } from '../features/projects/api/projectsApi';
 import {
   findKind,
   findPreprocessor,
@@ -26,11 +26,14 @@ export function AnalysisPage() {
   const [artifacts, setArtifacts] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [running, setRunning] = useState(false);
+  // The job as it last reported itself, so the wait has something to show.
+  const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
 
-  // Started from a project, so the run already knows where it belongs and is
-  // filed there on completion instead of asking again afterwards.
-  const projectId = params.get('project');
+  // Where this run belongs. Usually settled by starting from a project, but a
+  // run started anywhere else can still settle it - choosing a connected
+  // source means choosing the project that source belongs to.
+  const [projectId, setProjectId] = useState(params.get('project'));
   const [project, setProject] = useState(null);
 
   useEffect(() => {
@@ -119,14 +122,23 @@ export function AnalysisPage() {
 
   const run = async () => {
     setRunning(true);
+    setProgress(null);
     setError(null);
     try {
       const startedAt = performance.now();
-      const response = await runAnalysisUpload(draft, artifacts, sides);
+      const response = await runAnalysisUpload(draft, artifacts, sides, projectId, setProgress);
       const duration = (performance.now() - startedAt) / 1000;
       setResult(response);
 
-      const meta = { classifier: draft.classifier, duration };
+      const meta = {
+        classifier: draft.classifier,
+        duration,
+        // The same shape a saved run reports, so the results view reads one
+        // config regardless of whether the run is live or reopened.
+        config: toAnalysisConfig(draft),
+        sourceKind: sides.sourceKinds[0] ?? null,
+        targetKind: sides.targetKinds[0] ?? null,
+      };
 
       if (projectId) {
         try {
@@ -175,15 +187,17 @@ export function AnalysisPage() {
               <div className="step-content-header">
                 <h1>Upload Your Artifacts</h1>
                 <p>
-                  Add the two artifacts you want to trace between, then set which one
-                  each side of the trace reads from. An upload can be individual files,
-                  a whole folder, or a .zip archive.
+                  Add the two artifacts you want to trace between, 
+                  then specify which artifact each side of the trace should use as its source. 
+                  You can upload individual files, an entire folder, or a .zip archive.
                 </p>
               </div>
               <ArtifactUploader
                 artifacts={artifacts}
                 onArtifactsChange={setArtifacts}
                 capabilities={capabilities}
+                projectId={projectId}
+                onProjectChange={setProjectId}
               />
             </>
           )}
@@ -216,6 +230,7 @@ export function AnalysisPage() {
               onRun={run}
               canRun={canRun}
               running={running}
+              progress={progress}
               error={error}
             />
           )}

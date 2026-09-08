@@ -37,7 +37,7 @@ export const runAnalysis = (draft, paths, projectId) => httpClient('/analyze', {
  * records the indexes it owns. `file_paths` carries each file's relative path
  * so folder uploads keep their directory structure on the server.
  */
-export function toUploadFormData(draft, artifacts, sides) {
+export function toUploadFormData(draft, artifacts, sides, projectId) {
   const body = new FormData();
   const manifest = [];
   const paths = [];
@@ -54,7 +54,11 @@ export function toUploadFormData(draft, artifacts, sides) {
       kind: artifact.kind,
     };
 
-    if (artifact.text !== undefined) {
+    if (artifact.sourceId !== undefined) {
+      // Nothing to upload: the server fetches this side from the source the
+      // project is connected to, and records the commit it came from.
+      entry.source_id = artifact.sourceId;
+    } else if (artifact.text !== undefined) {
       entry.text = artifact.text;
     } else {
       entry.file_indexes = artifact.entries.map(() => index++);
@@ -80,14 +84,61 @@ export function toUploadFormData(draft, artifacts, sides) {
   body.append('dependency_expansion_depth', String(Number(draft.dependencyExpansionDepth)));
   body.append('summarize_elements', String(Boolean(draft.summarizeElements)));
   if (draft.analysisMode) body.append('analysis_mode', draft.analysisMode);
+  // The project a connected source belongs to, and what makes the embedding
+  // cache persist between runs of the same project.
+  if (projectId) body.append('project_id', String(projectId));
 
   return body;
 }
 
-export const runAnalysisUpload = (draft, artifacts, sides) => httpClient('/analyze/upload', {
-  method: 'POST',
-  body: toUploadFormData(draft, artifacts, sides),
-});
+/**
+ * Starts a run and returns the job to watch, not the result.
+ *
+ * A real analysis takes minutes; waiting on the request meant the browser gave
+ * up before the server did and the answer was lost even though the work
+ * succeeded.
+ */
+export const startAnalysisUpload = (draft, artifacts, sides, projectId) => httpClient(
+  '/analyze/upload',
+  { method: 'POST', body: toUploadFormData(draft, artifacts, sides, projectId) },
+);
+
+// Often enough to feel live, rarely enough not to hammer the server.
+const POLL_MS = 1500;
+
+/**
+ * Watches a job to the end, reporting progress as it goes.
+ *
+ * The token is what lets a run started without an account be followed: job ids
+ * run in sequence, so holding one proves nothing on its own.
+ */
+export function watchJob(jobId, token, onProgress) {
+  return new Promise((resolve, reject) => {
+    const poll = async () => {
+      try {
+        const query = token ? `?token=${encodeURIComponent(token)}` : '';
+        const job = await httpClient(`/jobs/${jobId}${query}`);
+        onProgress?.(job);
+
+        if (job.state === 'succeeded') { resolve(job.result); return; }
+        if (job.state === 'failed') { reject(new Error(job.error ?? 'The run failed.')); return; }
+        setTimeout(poll, POLL_MS);
+      } catch (requestError) {
+        reject(requestError);
+      }
+    };
+    poll();
+  });
+}
+
+/** Start a run and wait for it, reporting progress while it works. */
+export async function runAnalysisUpload(draft, artifacts, sides, projectId, onProgress) {
+  const started = await startAnalysisUpload(draft, artifacts, sides, projectId);
+  const result = await watchJob(started.job_id, started.token, onProgress);
+  // The job stores the pipeline's own response, which already carries the
+  // upload id - but a failed save should still know where the files are.
+  return { ...result, upload_id: result.upload_id ?? started.upload_id };
+}
 
 /** First non-empty line of an element's content, used as a display label. */
 export function toLabel(content, fallback, maxLength = 120) {

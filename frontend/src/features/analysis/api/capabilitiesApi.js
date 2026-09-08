@@ -29,6 +29,24 @@ export const findKind = (capabilities, key) =>
 export const findPreprocessor = (kind, key) =>
   kind?.preprocessors.find((preprocessor) => preprocessor.key === key) ?? null;
 
+/**
+ * A preprocessor's label without knowing which kind it belongs to.
+ *
+ * A stored configuration names its preprocessors but not the artifact kinds
+ * they were applied to, so the label has to be looked for across all of them.
+ * Falls back to the stored key, which still reads.
+ */
+export function preprocessorLabel(capabilities, key) {
+  for (const kind of capabilities?.artifact_kinds ?? []) {
+    const found = findPreprocessor(kind, key);
+    if (found) return found.label;
+  }
+  return key;
+}
+
+export const classifierLabel = (capabilities, key) =>
+  capabilities?.classifiers.find((option) => option.key === key)?.label ?? key;
+
 export const SIDE_SOURCE = 'source';
 export const SIDE_TARGET = 'target';
 export const SIDE_UNUSED = 'unused';

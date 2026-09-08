@@ -17,8 +17,14 @@ class TraceMatrix:
         trace_links: list[TraceLink],
         source_level: ElementLevel | None = None,
         target_level: ElementLevel | None = None,
+        element_links: list[tuple[str, str]] | None = None,
     ):
         self.trace_links = trace_links
+        # The pairs the classifier actually judged, before aggregation rolled
+        # them up. Not for display - a caller keeps them so the next run can
+        # put the same pairs in front of the classifier again, rather than
+        # letting a shifting top-k quietly drop a link nobody rejected.
+        self.element_links = element_links or []
         self._link_map = {(link.source_id, link.target_id): link for link in trace_links}
         # Unfiltered lookups: aggregation may roll a link up to a coarser element
         # (a class or file) that itself has compare=False.
@@ -89,6 +95,7 @@ class TraceMatrix:
             ],
             "source_elements": [self._element_dict(e) for e in self.source_elements],
             "target_elements": [self._element_dict(e) for e in self.target_elements],
+            "element_links": self.element_links,
             "unimplemented": [
                 {
                     "identifier": e.identifier,
