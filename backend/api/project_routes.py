@@ -16,12 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.capabilities import ROLE_SOURCE, ROLE_TARGET
-from api.routes import (
-    build_pipeline_response,
-    build_provider,
-    get_chroma_path,
-    relativize_response,
-)
+from api.pipeline_factory import build_pipeline_response, build_provider
+from api.workspace import get_chroma_path, relativize_response
 from api.schemas import (
     AnalysisConfig,
     AnalysisDetailResponse,

@@ -2,38 +2,31 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api import auth_router, integration_router, job_router, project_router, router
+from api import (
+    auth_router, github_router, job_router, project_router, router, source_router, sync_router,
+)
+from api.uploads import upload_error_response
 from core import jobs
 from core.db import init_db
 from core.db.session import SessionLocal
 from core.projects.artifact_store import purge_expired_uploads, purge_trash
+from core.projects.uploads import UploadError
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)-5s %(name)s | %(message)s",
     datefmt="%H:%M:%S",
-    # Uvicorn configures logging before importing this module, so basicConfig
-    # would otherwise find a handler already in place and do nothing.
     force=True,
 )
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    # Uploads whose run was never saved are dead weight; clear the backlog at
-    # startup as well as on each new upload.
     purge_expired_uploads()
-    # Retired blobs nobody came back for. Done here rather than during a sweep,
-    # so the window to notice a wrong sweep is real time, not the next delete.
     purge_trash()
-    # Background work does not survive a restart, so anything still claiming to
-    # run is describing a process that is gone - and would block its project's
-    # next sync for ever if it were left saying so.
     with SessionLocal() as db:
         jobs.sweep_unfinished(db)
     yield
-
 
 app = FastAPI(
     title="TraceRAG API",
@@ -54,9 +47,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Upload refusals are raised without knowing about HTTP; this is where they
+# become the 400 or 413 the client reads.
+app.add_exception_handler(UploadError, upload_error_response)
+
 app.include_router(auth_router)
 app.include_router(project_router)
-app.include_router(integration_router)
+app.include_router(github_router)
+app.include_router(source_router)
+app.include_router(sync_router)
 app.include_router(job_router)
 app.include_router(router)
 

@@ -924,7 +924,15 @@ def _source_for_entry(
     )
 
 
-def claim_artifacts(db: Session, analysis: Analysis, upload_id: str | None) -> int:
+def claim_artifacts(
+    db: Session,
+    analysis: Analysis,
+    upload_id: str | None,
+    # Leave the upload's files where they are once claimed. A sync runs several
+    # configurations over the same files, so only it knows when the last one
+    # has finished with them.
+    keep_files: bool = False,
+) -> int:
     """Take an upload's files into the blob store; returns artifacts attached."""
     # Zero is normal - no upload, aged out, or already claimed - so this never
     # raises and the analysis is kept either way.
@@ -990,7 +998,8 @@ def claim_artifacts(db: Session, analysis: Analysis, upload_id: str | None) -> i
     db.commit()
     # Only once every blob is referenced; dropping the upload before the commit
     # would risk losing the files.
-    artifact_store.discard_upload(upload_id)
+    if not keep_files:
+        artifact_store.discard_upload(upload_id)
     return attached
 
 
