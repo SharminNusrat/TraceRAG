@@ -17,6 +17,20 @@ from hashlib import sha256
 KEY_LENGTH = 16
 
 
+def expansion_depth(target_kind: str | None, depth: int) -> int:
+    """The dependency expansion a run actually performs.
+
+    Expansion walks a call graph, so only a code target has anything to walk.
+    For any other kind the setting does nothing, and is recorded as 0 so that
+    a run does not claim an expansion it never made - and so that two runs
+    differing only in an ignored setting are not filed as two configurations.
+    """
+    # Unknown kind: a run saved without its files. Left as it was given.
+    if target_kind is None or target_kind == "code":
+        return depth
+    return 0
+
+
 def _text(value) -> str:
     """A setting as it is stored, not as its type prints it."""
     # PreprocessorType.SECTION formats as "PreprocessorType.SECTION" but is
@@ -29,6 +43,8 @@ def _text(value) -> str:
 
 def config_key(
     *,
+    source_kind: str | None,
+    target_kind: str | None,
     source_preprocessor: str,
     target_preprocessor: str,
     source_output_level: str | None,
@@ -40,9 +56,10 @@ def config_key(
 ) -> str:
     """A stable short name for this configuration.
 
-    Every setting that changes what a run finds, and nothing else: the
-    preprocessors decide what the elements are, the output levels decide what
-    the links are reported on, and the rest decide which of them survive.
+    Every setting that changes what a run finds, and nothing else: the kinds
+    decide which two artifact types are being linked, the preprocessors decide
+    what the elements are, the output levels decide what the links are reported
+    on, and the rest decide which of them survive.
     Anything not named here may differ between two runs without making them
     incomparable.
 
@@ -53,6 +70,11 @@ def config_key(
     # Written as text, so None and False have one spelling each and the key
     # does not depend on which type the caller happened to pass.
     parts = (
+        # Two kinds can share a preprocessor - requirements and architecture
+        # documents are both split into sections - so the settings alone would
+        # file two different relations under one configuration.
+        f"source_kind={_text(source_kind)}",
+        f"target_kind={_text(target_kind)}",
         f"source_preprocessor={_text(source_preprocessor)}",
         f"target_preprocessor={_text(target_preprocessor)}",
         f"source_output_level={_text(source_output_level)}",

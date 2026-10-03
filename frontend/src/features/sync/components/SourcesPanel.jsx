@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { FileText, FolderCode, GitBranch, Network, Plug, RefreshCw, Unplug } from 'lucide-react';
+import {
+  AlertTriangle, FileText, FolderCode, GitBranch, Network, Plug, RefreshCw, Unplug,
+} from 'lucide-react';
+import { findKind, useCapabilities } from '../../analysis/api/capabilitiesApi';
 import { ConnectRepositoryDialog } from './ConnectRepositoryDialog';
 import { SyncDialog } from './SyncDialog';
-import { disconnectSource, listSources, shortRef, sourceLocation } from '../api/syncApi';
+import {
+  disconnectSource, listPairs, listSources, reconnectSource, shortRef, sourceLocation,
+} from '../api/syncApi';
 
 const ICONS = { requirements: FileText, code: FolderCode, architecture: Network };
 
@@ -13,18 +18,29 @@ const ICONS = { requirements: FileText, code: FolderCode, architecture: Network 
  * Distinct from the artifacts on a saved run: those record what one analysis
  * was performed against and never change. These are the project's standing
  * entries - the thing a sync refreshes.
+ *
+ * Grouped by pair, because a pair is what gets synced: the two kinds a trace
+ * runs between. A kind used by two pairs is listed under both.
  */
 export function SourcesPanel({ projectId, onChanged }) {
   const [params, setParams] = useSearchParams();
+  const { capabilities } = useCapabilities();
   const [sources, setSources] = useState(null);
+  const [pairs, setPairs] = useState([]);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [connecting, setConnecting] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  // The pair being synced, while its dialog is open.
+  const [syncing, setSyncing] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
-  const load = () => listSources(projectId)
-    .then(setSources)
+  // Disconnected sources included: one that is not shown cannot be brought
+  // back.
+  const load = () => Promise.all([listSources(projectId, true), listPairs(projectId)])
+    .then(([projectSources, projectPairs]) => {
+      setSources(projectSources);
+      setPairs(projectPairs);
+    })
     .catch((requestError) => { setSources([]); setError(requestError.message); });
 
   useEffect(() => { load(); }, [projectId]);
@@ -71,6 +87,78 @@ export function SourcesPanel({ projectId, onChanged }) {
     }
   };
 
+  const reconnect = async (source) => {
+    setError(null);
+    setNotice(null);
+    setBusyId(source.source_id);
+    try {
+      await reconnectSource(projectId, source.source_id);
+      await load();
+      onChanged?.();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const connected = (sources ?? []).filter((source) => source.is_active);
+
+  const kindLabel = (key) => findKind(capabilities, key)?.label ?? key;
+  const sidesOf = (pair) => [pair.source, pair.target].filter(Boolean);
+  // Whatever no pair is showing: disconnected sources, and connected ones
+  // nothing has been run against yet.
+  const paired = new Set(pairs.flatMap(sidesOf).map((source) => source.source_id));
+  const unpaired = (sources ?? []).filter((source) => !paired.has(source.source_id));
+
+  const card = (source) => {
+    const Icon = source.origin === 'github'
+      ? GitBranch
+      : (ICONS[source.kind] ?? FileText);
+    return (
+      <article
+        key={source.source_id}
+        className={source.is_active ? undefined : 'disconnected'}
+      >
+        <span className="artifact-icon"><Icon size={15} strokeWidth={2} /></span>
+        <div>
+          <b>{source.name}</b>
+          <small>
+            {kindLabel(source.kind)} · {sourceLocation(source)}
+            {/* Null until the first sync: connected, nothing fetched. */}
+            {source.last_sync_ref
+              ? ` · at ${shortRef(source.last_sync_ref)}`
+              : ' · never synced'}
+            {!source.is_active && ' · disconnected'}
+          </small>
+        </div>
+        {source.is_active ? (
+          <button
+            type="button"
+            onClick={() => disconnect(source)}
+            disabled={busyId === source.source_id}
+            title="Stop syncing this source"
+            aria-label={`Disconnect ${source.name}`}
+          >
+            <Unplug size={14} strokeWidth={2} />
+            {busyId === source.source_id ? 'Working…' : 'Disconnect'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => reconnect(source)}
+            disabled={busyId === source.source_id}
+            title="Sync this source again"
+            aria-label={`Reconnect ${source.name}`}
+          >
+            <Plug size={14} strokeWidth={2} />
+            {busyId === source.source_id ? 'Working…' : 'Reconnect'}
+          </button>
+        )}
+      </article>
+    );
+  };
+
   return (
     <section className="artifact-strip">
       <header>
@@ -79,12 +167,6 @@ export function SourcesPanel({ projectId, onChanged }) {
           <button type="button" className="row-open" onClick={() => setConnecting(true)}>
             <Plug size={13} strokeWidth={2} /> Connect repository
           </button>
-          {/* Nothing to bring up to date until the project holds something. */}
-          {Boolean(sources?.length) && (
-            <button type="button" className="row-rerun" onClick={() => setSyncing(true)}>
-              <RefreshCw size={13} strokeWidth={2} /> Sync now
-            </button>
-          )}
         </span>
       </header>
 
@@ -97,39 +179,28 @@ export function SourcesPanel({ projectId, onChanged }) {
         </p>
       )}
 
-      {Boolean(sources?.length) && (
-        <div className="artifact-items">
-          {sources.map((source) => {
-            const Icon = source.origin === 'github'
-              ? GitBranch
-              : (ICONS[source.kind] ?? FileText);
-            return (
-              <article key={source.source_id}>
-                <span className="artifact-icon"><Icon size={15} strokeWidth={2} /></span>
-                <div>
-                  <b>{source.name}</b>
-                  <small>
-                    {source.kind} · {sourceLocation(source)}
-                    {/* Null until the first sync: connected, nothing fetched. */}
-                    {source.last_sync_ref
-                      ? ` · at ${shortRef(source.last_sync_ref)}`
-                      : ' · never synced'}
-                  </small>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => disconnect(source)}
-                  disabled={busyId === source.source_id}
-                  title="Stop syncing this source"
-                  aria-label={`Disconnect ${source.name}`}
-                >
-                  <Unplug size={14} strokeWidth={2} />
-                  {busyId === source.source_id ? 'Working…' : 'Disconnect'}
-                </button>
-              </article>
-            );
-          })}
+      {pairs.map((pair) => (
+        <div className="source-pair" key={`${pair.source_kind}>${pair.target_kind}`}>
+          <header>
+            <b>{kindLabel(pair.source_kind)} → {kindLabel(pair.target_kind)}</b>
+            {pair.out_of_date && (
+              <em className="sync-problem">
+                <AlertTriangle size={12} strokeWidth={2.2} /> Out of date
+              </em>
+            )}
+            {/* Nothing to bring up to date once both sides are disconnected. */}
+            {Boolean(sidesOf(pair).length) && (
+              <button type="button" className="row-rerun" onClick={() => setSyncing(pair)}>
+                <RefreshCw size={13} strokeWidth={2} /> Sync
+              </button>
+            )}
+          </header>
+          <div className="artifact-items">{sidesOf(pair).map(card)}</div>
         </div>
+      ))}
+
+      {Boolean(unpaired.length) && (
+        <div className="artifact-items">{unpaired.map(card)}</div>
       )}
 
       {notice && <p className="dialog-note">{notice}</p>}
@@ -138,7 +209,7 @@ export function SourcesPanel({ projectId, onChanged }) {
       {connecting && (
         <ConnectRepositoryDialog
           projectId={projectId}
-          currentKinds={(sources ?? []).map((source) => source.kind)}
+          currentKinds={connected.map((source) => source.kind)}
           onClose={() => setConnecting(false)}
           onConnected={() => { setConnecting(false); setNotice(null); load(); onChanged?.(); }}
         />
@@ -147,7 +218,8 @@ export function SourcesPanel({ projectId, onChanged }) {
       {syncing && (
         <SyncDialog
           projectId={projectId}
-          onClose={() => { setSyncing(false); load(); }}
+          pair={syncing}
+          onClose={() => { setSyncing(null); load(); }}
           // A finished sync moved the refs and filed new analyses, so what is
           // on screen behind the dialog is already out of date.
           onFinished={() => { load(); onChanged?.(); }}

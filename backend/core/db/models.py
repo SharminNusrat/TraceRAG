@@ -403,6 +403,11 @@ class ProjectConfig(Base):
     # Which config the dashboard shows when the user has not picked one.
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Which two artifact kinds this lens links - keys from the capabilities
+    # registry. Null only for a run saved without its files, where nothing
+    # recorded what it was pointed at.
+    source_kind: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    target_kind: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_preprocessor: Mapped[str] = mapped_column(String(50), nullable=False)
     target_preprocessor: Mapped[str] = mapped_column(String(50), nullable=False)
     source_output_level: Mapped[str | None] = mapped_column(String(50), nullable=True)

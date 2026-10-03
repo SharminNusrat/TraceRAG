@@ -451,6 +451,21 @@ class SourceStatusResponse(BaseModel):
     # offer the one button that mends it, instead of describing the problem and
     # leaving the user to find the page.
     needs_reconnect: bool = False
+    # Whether the project already holds newer files for this source than the
+    # pair's last run read - another pair's sync, or a new upload, moved it on.
+    behind: bool = False
+
+
+class PairResponse(BaseModel):
+    """Two artifact kinds this project traces between, and where they stand."""
+
+    source_kind: str
+    target_kind: str
+    # Where each side comes from now. None when its source was disconnected.
+    source: SourceResponse | None
+    target: SourceResponse | None
+    # Whether either side has moved on since this pair was last run.
+    out_of_date: bool
 
 
 class StagedUploadResponse(BaseModel):
@@ -468,11 +483,16 @@ class StagedUploadResponse(BaseModel):
 
 
 class SyncRequest(BaseModel):
-    """Which parts of a project to bring up to date."""
+    """Which pair of a project to bring up to date, and how much of it."""
 
-    # Omit to take every source that has moved. Naming some limits it to those.
+    # The pair being synced: the two artifact kinds a trace runs between. A
+    # project can hold several, and each is brought up to date on its own.
+    source_kind: str
+    target_kind: str
+    # Omit to take every source of the pair that has moved. Naming some limits
+    # it to those.
     source_ids: list[int] | None = None
-    # Omit to re-run every configuration the project has.
+    # Omit to re-run every configuration the pair has.
     config_ids: list[int] | None = None
     # Files supplied by hand for a source that cannot be fetched, as
     # source_id -> the id of a staged upload. This is how the requirements side
@@ -581,6 +601,9 @@ class ProjectConfigResponse(BaseModel):
     config_id: int
     config_key: str
     is_default: bool
+    # The two kinds this configuration links. None for one saved without files.
+    source_kind: str | None = None
+    target_kind: str | None = None
     config: AnalysisConfig
     analysis_count: int
     created_at: UtcDatetime

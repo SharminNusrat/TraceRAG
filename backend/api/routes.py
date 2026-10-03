@@ -14,7 +14,7 @@ from api.schemas import (
     CapabilitiesResponse, ElementResponse, TraceLinkResponse, PreprocessorType, ClassifierType,
 )
 from api.capabilities import (
-    ARTIFACT_KINDS_BY_KEY, KIND_CODE, MAX_TOTAL_UPLOAD_BYTES, MAX_UPLOAD_BYTES,
+    ARTIFACT_KINDS_BY_KEY, MAX_TOTAL_UPLOAD_BYTES, MAX_UPLOAD_BYTES,
     ROLE_SOURCE, ROLE_TARGET, get_capabilities,
 )
 from core.schemas import ElementLevel
@@ -32,7 +32,7 @@ from core.auth import get_current_user_optional
 from core.db.models import Project, ProjectSource, User
 from core.db.session import SessionLocal, get_db
 from core.projects import artifact_store, service
-from core.projects.run_config import config_key
+from core.projects.run_config import config_key, expansion_depth
 from core.sync import SyncError, fetch_source
 from config import settings
 
@@ -177,10 +177,14 @@ def build_pipeline_response(
     workspace_roots: list[Path] | None = None,
     on_progress=None,
 ) -> AnalyzeResponse:
+    dependency_expansion_depth = expansion_depth(target_kind, dependency_expansion_depth)
+
     # Computed here rather than by each caller: every setting that goes into it
     # is already a parameter of this function, so there is one spelling of the
     # configuration and no way for two entry points to disagree about it.
     key = config_key(
+        source_kind=source_kind,
+        target_kind=target_kind,
         source_preprocessor=source_preprocessor,
         target_preprocessor=target_preprocessor,
         source_output_level=source_output_level,
@@ -212,13 +216,10 @@ def build_pipeline_response(
         n_results=n_results,
         source_output_level=source_output_level,
         target_output_level=target_output_level,
-        # Expansion walks a call graph, so it only means anything when the
-        # target really is source code. Any other kind ignores the setting
-        # rather than running an analyzer that would find nothing.
+        # Already 0 for anything but a code target, which has no call graph
+        # for an analyzer to walk.
         dependency_analyzer=(
-            CodeDependencyAnalyzer()
-            if target_kind == KIND_CODE and dependency_expansion_depth > 0
-            else None
+            CodeDependencyAnalyzer() if dependency_expansion_depth > 0 else None
         ),
         dependency_expansion_depth=dependency_expansion_depth,
         reset_vector_stores=reset_vector_stores,
@@ -591,7 +592,7 @@ def build_provider(kind_key: str, path):
     Extend this alongside the ARTIFACT_KINDS registry when adding a new type.
     """
     match kind_key:
-        case "requirements":
+        case "requirements" | "architecture_document":
             return DocumentProvider(str(path))
         case "code":
             return CodeProvider(str(path))

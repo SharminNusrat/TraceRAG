@@ -198,6 +198,22 @@ def update_graph(
     )
 
 
+def upload_kinds(upload_id: str | None) -> dict[str, str]:
+    """The artifact kind on each side of a pending upload, by role.
+
+    Read off the upload's manifest, which is the only place a fresh run records
+    what it was pointed at. Empty when there is no upload to read - the run is
+    then saved without its files, and without a kind to file it under.
+    """
+    directory = artifact_store.upload_dir(upload_id) if upload_id else None
+    if directory is None or not directory.is_dir():
+        return {}
+    return {
+        entry.get("role"): entry.get("artifact_type")
+        for entry in artifact_store.read_manifest(directory)
+    }
+
+
 def resolve_config(db: Session, project: Project, config_id: int | None) -> ProjectConfig:
     """Which configuration a request is asking about.
 
@@ -309,6 +325,7 @@ def save_analysis(
     db: Session = Depends(get_db),
 ):
     project = require_project(db, user, project_id)
+    kinds = upload_kinds(request.upload_id)
     analysis = service.save_analysis(
         db,
         project,
@@ -319,6 +336,8 @@ def save_analysis(
         # These artifacts were just uploaded, so they are a state of the
         # project nothing has been run against before: a new version.
         version_id=service.next_version(db, project).version_id,
+        source_kind=kinds.get(ROLE_SOURCE),
+        target_kind=kinds.get(ROLE_TARGET),
     )
     artifact_count = service.claim_artifacts(db, analysis, request.upload_id)
     update_graph(db, analysis, request.result)
@@ -343,6 +362,8 @@ def list_configs(
             config_id=config.config_id,
             config_key=config.config_key,
             is_default=config.is_default,
+            source_kind=config.source_kind,
+            target_kind=config.target_kind,
             config=config_of(config),
             analysis_count=counts.get(config.config_id, 0),
             created_at=config.created_at,
@@ -578,6 +599,8 @@ def rerun_analysis(
                 original.version_id
                 or service.next_version(db, original.project).version_id
             ),
+            source_kind=sides[ROLE_SOURCE].artifact_type,
+            target_kind=sides[ROLE_TARGET].artifact_type,
         )
         copied = service.copy_artifacts(db, original, analysis)
         update_graph(db, analysis, result)

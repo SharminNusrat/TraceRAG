@@ -276,6 +276,7 @@ export function ResultsPage() {
           draft={draft}
           result={result}
           duration={runMeta?.duration}
+          kinds={[runMeta?.sourceKind, runMeta?.targetKind].filter(Boolean)}
           onSaved={(analysis) => { setSaved(analysis); setSaving(false); }}
           onClose={() => setSaving(false)}
         />

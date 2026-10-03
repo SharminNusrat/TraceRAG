@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { WorkflowNav } from '../components/common/WorkflowNav';
@@ -9,12 +9,16 @@ import { ArtifactUploader } from '../features/analysis/components/ArtifactUpload
 import { ReviewStep } from '../features/analysis/components/ReviewStep';
 import { runAnalysisUpload } from '../features/analysis/api/analyzeApi';
 import { getProject, saveAnalysis, toAnalysisConfig } from '../features/projects/api/projectsApi';
+import { sourcesReplacedBy } from '../features/sync/api/syncApi';
+import { ReplaceSourcesDialog } from '../features/sync/components/ReplaceSourcesDialog';
 import {
   findKind,
   findPreprocessor,
   resolveSides,
   useCapabilities,
 } from '../features/analysis/api/capabilitiesApi';
+
+const KIND_CODE = 'code';
 
 const STEPS = ['Upload Artifacts', 'Analysis Settings', 'Review & Run'];
 
@@ -29,6 +33,9 @@ export function AnalysisPage() {
   // The job as it last reported itself, so the wait has something to show.
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
+  // The project's sources this run's uploads would replace, while the user is
+  // being asked whether that is what they want.
+  const [replacing, setReplacing] = useState(null);
 
   // Where this run belongs. Usually settled by starting from a project, but a
   // run started anywhere else can still settle it - choosing a connected
@@ -101,6 +108,24 @@ export function AnalysisPage() {
     });
   }, [capabilities, artifacts, draft.sourcePreprocessor, draft.targetPreprocessor]);
 
+  // Dependency expansion walks a call graph, so it only applies to a code
+  // target. For any other kind it is set to 0 rather than left showing a value
+  // the run will ignore - and put back if the target becomes code again.
+  const targetKind = sides.selectedTargets[0]?.kind;
+  const depthForCode = useRef(null);
+  useEffect(() => {
+    if (!targetKind) return;
+    if (targetKind !== KIND_CODE) {
+      if (Number(draft.dependencyExpansionDepth) !== 0) {
+        depthForCode.current = draft.dependencyExpansionDepth;
+        update('dependencyExpansionDepth', 0);
+      }
+    } else if (depthForCode.current !== null) {
+      update('dependencyExpansionDepth', depthForCode.current);
+      depthForCode.current = null;
+    }
+  }, [targetKind, draft.dependencyExpansionDepth]);
+
   const untyped = artifacts.some((artifact) => !artifact.kind);
   const withinBudget = !capabilities || artifacts.reduce(
     (sum, artifact) => sum + artifact.entries.reduce((n, entry) => n + entry.file.size, 0),
@@ -120,10 +145,32 @@ export function AnalysisPage() {
   const back = () => { if (currentStep > 0) setCurrentStep(currentStep - 1); };
   const goToStep = (step) => { if (step <= currentStep) setCurrentStep(step); };
 
-  const run = async () => {
+  // Files uploaded for this run, as opposed to a side taken from a source the
+  // project is already connected to.
+  const uploadedKinds = [...sides.selectedSources, ...sides.selectedTargets]
+    .filter((artifact) => artifact.sourceId === undefined)
+    .map((artifact) => artifact.kind);
+
+  const run = async (confirmed = false) => {
+    setError(null);
+
+    // Saving this run would put the uploaded files in place of a source the
+    // project already has, so that is asked about before anything starts.
+    if (projectId && uploadedKinds.length && !confirmed) {
+      try {
+        const replaced = await sourcesReplacedBy(projectId, uploadedKinds);
+        if (replaced.length) {
+          setReplacing(replaced);
+          return;
+        }
+      } catch (requestError) {
+        setError(requestError.message);
+        return;
+      }
+    }
+
     setRunning(true);
     setProgress(null);
-    setError(null);
     try {
       const startedAt = performance.now();
       const response = await runAnalysisUpload(draft, artifacts, sides, projectId, setProgress);
@@ -227,7 +274,7 @@ export function AnalysisPage() {
               draft={draft}
               capabilities={capabilities}
               onGoToStep={goToStep}
-              onRun={run}
+              onRun={() => run()}
               canRun={canRun}
               running={running}
               progress={progress}
@@ -259,6 +306,14 @@ export function AnalysisPage() {
           </div>
         </footer>
       </div>
+
+      {replacing && (
+        <ReplaceSourcesDialog
+          sources={replacing}
+          onConfirm={() => { setReplacing(null); run(true); }}
+          onCancel={() => setReplacing(null)}
+        />
+      )}
     </main>
   );
 }
