@@ -5,6 +5,7 @@ entry here and the frontend picks up the new kind, its accepted file types, its
 preprocessors and its output levels with no frontend change.
 """
 
+from core.projects.uploads import MAX_TOTAL_UPLOAD_BYTES, MAX_UPLOAD_BYTES
 from core.schemas import ElementLevel
 from api.schemas import (
     AnalysisDefaults,
@@ -18,8 +19,6 @@ from api.schemas import (
     PreprocessorType,
 )
 
-MAX_UPLOAD_BYTES = 30 * 1024 * 1024
-MAX_TOTAL_UPLOAD_BYTES = 30 * 1024 * 1024
 
 ROLE_SOURCE = "source"
 ROLE_TARGET = "target"
