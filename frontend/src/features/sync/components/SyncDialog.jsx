@@ -38,7 +38,7 @@ const describe = (capabilities, config) => [
  * changed, what to re-run over it, how far it has got, and what it did to the
  * links. Splitting them would mean losing the answer between screens.
  */
-export function SyncDialog({ projectId, onClose, onFinished }) {
+export function SyncDialog({ projectId, pair, onClose, onFinished }) {
   const { capabilities } = useCapabilities();
   const [statuses, setStatuses] = useState(null);
   const [configs, setConfigs] = useState([]);
@@ -62,9 +62,13 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
 
   useEffect(() => {
     let active = true;
-    Promise.all([getSyncStatus(projectId), listConfigs(projectId)])
-      .then(([sources, projectConfigs]) => {
+    Promise.all([getSyncStatus(projectId, pair), listConfigs(projectId)])
+      .then(([sources, allConfigs]) => {
         if (!active) return;
+        // Only this pair's: another pair's configuration reads other kinds.
+        const projectConfigs = allConfigs.filter((config) => (
+          config.source_kind === pair.source_kind && config.target_kind === pair.target_kind
+        ));
         setStatuses(sources);
         setConfigs(projectConfigs);
         // Everything that moved, and every way of reading it: a sync that left
@@ -74,7 +78,7 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
       })
       .catch((requestError) => { if (active) { setStatuses([]); setError(requestError.message); } });
     return () => { active = false; };
-  }, [projectId, reloadKey]);
+  }, [projectId, pair.source_kind, pair.target_kind, reloadKey]);
 
   // Stop polling when the dialog goes away mid-run; the job carries on server
   // side either way.
@@ -171,7 +175,7 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
       chosenSources.forEach((id) => {
         if (staged[id]) replacements[id] = staged[id].upload_id;
       });
-      const started = await startSync(projectId, {
+      const started = await startSync(projectId, pair, {
         sourceIds: chosenSources,
         configIds: chosenConfigs,
         replacements,
@@ -194,6 +198,10 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
 
   const changed = (statuses ?? []).filter((s) => s.changed);
   const unreachable = (statuses ?? []).filter((s) => s.error);
+  // Sources the project already holds newer files for than this pair last
+  // read. Nothing to fetch, but the pair still has catching up to do.
+  const behind = (statuses ?? []).filter((s) => s.behind && !s.changed);
+  const kindLabel = (key) => findKind(capabilities, key)?.label ?? key;
   const running = job && (job.state === 'queued' || job.state === 'running');
   const finished = job && (job.state === 'succeeded' || job.state === 'failed');
   const nothingToDo = job?.state === 'nothing';
@@ -205,7 +213,7 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
     <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Sync project">
       <section className="dialog-card wide">
         <header className="dialog-head">
-          <h2>Sync Project</h2>
+          <h2>Sync {kindLabel(pair.source_kind)} → {kindLabel(pair.target_kind)}</h2>
           <button type="button" onClick={onClose} aria-label="Close">
             <X size={16} strokeWidth={2.2} />
           </button>
@@ -223,7 +231,9 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
                   // "Nothing has moved" would be a claim about something we
                   // never managed to ask.
                   ? `${unreachable.length} source${unreachable.length === 1 ? '' : 's'} could not be checked, so what has moved is unknown.`
-                  : 'Nothing has moved since the last sync.'}
+                  : behind.length
+                    ? `${behind.length} source${behind.length === 1 ? ' has' : 's have'} changed since this pair was last run.`
+                    : 'Nothing has moved since the last sync.'}
             </p>
 
             <div className="sync-list">
@@ -243,7 +253,7 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
                     />
                     <div>
                       <b>{source.name}</b>
-                      <small>{source.kind} · {sourceLocation(source)}</small>
+                      <small>{kindLabel(source.kind)} · {sourceLocation(source)}</small>
                     </div>
                     <span className="sync-state">
                       {source.error ? (
@@ -271,7 +281,7 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
                           <b>{shortRef(source.latest_ref)}</b>
                         </>
                       ) : source.checkable ? (
-                        <>Up to date</>
+                        <>{source.behind ? 'Out of date' : 'Up to date'}</>
                       ) : held ? (
                         <>
                           <b>{held.file_count} file{held.file_count === 1 ? '' : 's'}</b>
@@ -291,7 +301,7 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
                         // so rather than only saying so, offer both ways out:
                         // supply them once more, or stop having to.
                         <>
-                          carried over
+                          {source.behind ? 'out of date' : 'carried over'}
                           <button
                             type="button"
                             className="row-open"
@@ -396,11 +406,11 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
                   configuration makes of the same files - and refusing to offer
                   it leaves no way in at all. */}
               <Button
-                onClick={() => run(!chosenSources.length)}
+                onClick={() => run(!chosenSources.length && !behind.length)}
                 disabled={pending || !chosenConfigs.length || !statuses.length}
               >
                 {pending ? 'Starting…'
-                  : !chosenSources.length ? 'Re-run anyway'
+                  : !chosenSources.length ? (behind.length ? 'Bring up to date' : 'Re-run anyway')
                   : `Sync ${chosenSources.length} source${chosenSources.length === 1 ? '' : 's'}`}
               </Button>
             </div>
@@ -463,7 +473,7 @@ export function SyncDialog({ projectId, onClose, onFinished }) {
                     <div className="sync-row" key={source.source_id}>
                       <div>
                         <b>{source.name}</b>
-                        <small>{source.kind}</small>
+                        <small>{kindLabel(source.kind)}</small>
                       </div>
                       <span className="sync-state">
                         {source.refreshed

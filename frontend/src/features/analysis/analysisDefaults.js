@@ -9,7 +9,7 @@ export const defaultAnalysisDraft = {
   // Which artifact sits on which side is carried on the artifact itself, set
   // in the upload step - any kind can be either side, so the file type cannot
   // decide it.
-  sourcePreprocessor: 'section',
+  sourcePreprocessor: 'single',
   targetPreprocessor: 'method',
   sourceOutputLevel: null,
   targetOutputLevel: null,

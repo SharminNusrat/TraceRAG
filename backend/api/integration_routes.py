@@ -35,6 +35,7 @@ from api.schemas import (
     GitHubConnectionResponse,
     GitHubSourceRequest,
     OAuthStartResponse,
+    PairResponse,
     RepositoryLookupRequest,
     RepositoryOption,
     SourceRemovalResponse,
@@ -291,22 +292,86 @@ def list_sources(
     ]
 
 
+def require_pair_run(
+    db: Session, project: Project, source_kind: str, target_kind: str
+) -> Analysis:
+    """The last run between two kinds, which is what a sync of them starts from.
+
+    It says which kind sat on which side and holds the files a side nobody
+    touched is restored from, so a pair that was never run cannot be synced.
+    """
+    latest = service.latest_pair_analysis(db, project, source_kind, target_kind)
+    if latest is None or not latest.artifacts:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"This project has no saved run from {source_kind} to {target_kind} "
+                f"with stored artifacts, so there is nothing to sync against. Run "
+                f"and save an analysis first."
+            ),
+        )
+    return latest
+
+
+def behind_kinds(db: Session, project: Project, latest: Analysis) -> set[str]:
+    """The kinds whose source has moved on since this pair's last run."""
+    return {
+        artifact.artifact_type
+        for artifact in latest.artifacts
+        if service.side_is_behind(db, project, artifact)
+    }
+
+
+@router.get("/projects/{project_id}/pairs", response_model=list[PairResponse])
+def list_pairs(
+    project_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every two kinds this project traces between - what a sync is offered for.
+
+    Nothing is asked of GitHub here, so it is cheap enough to draw a page with.
+    """
+    project = require_project(db, user, project_id)
+
+    pairs = []
+    for source_kind, target_kind in service.list_pairs(db, project):
+        latest = service.latest_pair_analysis(db, project, source_kind, target_kind)
+        sides = [
+            service.active_source_for_kind(db, project, kind)
+            for kind in (source_kind, target_kind)
+        ]
+        pairs.append(PairResponse(
+            source_kind=source_kind,
+            target_kind=target_kind,
+            source=to_source_response(sides[0]) if sides[0] else None,
+            target=to_source_response(sides[1]) if sides[1] else None,
+            out_of_date=bool(latest and behind_kinds(db, project, latest)),
+        ))
+    return pairs
+
+
 @router.get(
     "/projects/{project_id}/sync/status",
     response_model=list[SourceStatusResponse],
 )
 def sync_status(
     project_id: int,
+    source_kind: str = Query(description="The kind on the source side of the pair."),
+    target_kind: str = Query(description="The kind on the target side of the pair."),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """What a sync would pick up, without fetching anything.
+    """What a sync of one pair would pick up, without fetching anything.
 
     One small request per connected source, so this is cheap enough to open a
     dialog with. A source that cannot be reached is reported with its reason
     rather than failing the whole answer.
     """
     project = require_project(db, user, project_id)
+    behind = behind_kinds(
+        db, project, require_pair_run(db, project, source_kind, target_kind)
+    )
     return [
         SourceStatusResponse(
             source_id=status.source.source_id,
@@ -321,8 +386,10 @@ def sync_status(
             checkable=status.source.origin == ORIGIN_GITHUB,
             error=status.error,
             needs_reconnect=status.needs_reconnect,
+            behind=status.source.kind in behind,
         )
         for status in check_project(db, project)
+        if status.source.kind in (source_kind, target_kind)
     ]
 
 
@@ -434,15 +501,10 @@ def stored_paths(db: Session, project: Project, source) -> set[str]:
     different ones are not the same requirements coming back - they are a new
     set, and every link into the old ones goes with them.
     """
-    latest = service.latest_analysis(db, project)
-    if latest is None:
+    held = service.latest_artifact(db, source)
+    if held is None:
         return set()
-    return {
-        file.relative_path
-        for artifact in latest.artifacts
-        if artifact.artifact_type == source.kind
-        for file in artifact.files
-    }
+    return {file.relative_path for file in held.files}
 
 
 def staged_dir(upload_id: str) -> Path:
@@ -473,9 +535,10 @@ def prepare_workspace(
 ) -> tuple[str, Path, list[dict], list[SyncSourceResult], dict[str, str]]:
     """Assemble the artifacts this sync will analyse.
 
-    Every side is filled, not only the ones that moved: the pipeline compares
-    two complete corpora, so a side nobody touched is restored from the blobs
-    the last run stored rather than fetched again.
+    `latest` is the pair's last run. Both of its sides are filled, not only the
+    one that moved: the pipeline compares two complete corpora, so a side
+    nobody touched is restored from the blobs already stored rather than
+    fetched again.
 
     Built as an ordinary pending upload, so saving it afterwards goes through
     exactly the path a hand-made upload does - blobs, artifact rows, source
@@ -510,7 +573,11 @@ def prepare_workspace(
                 renames.update(renames_since(source, head))
             ref = fetch_source(source, directory)
         else:
-            entries = [(f.relative_path, f.sha256) for f in artifact.files]
+            # What the source holds now, which is not always what this pair
+            # last read: a kind shared with another pair may have moved on
+            # since, and this run is what catches this pair up with it.
+            held = service.latest_artifact(db, source) if source else None
+            entries = [(f.relative_path, f.sha256) for f in (held or artifact).files]
             if not artifact_store.materialise(entries, directory):
                 raise HTTPException(
                     status_code=status.HTTP_410_GONE,
@@ -594,6 +661,8 @@ def run_config(
     analysis = service.save_analysis(
         db, project, note=note, config=settings, result=result,
         execution_duration=duration, version_id=version_id,
+        source_kind=sides[ROLE_SOURCE]["artifact_type"],
+        target_kind=sides[ROLE_TARGET]["artifact_type"],
     )
     return analysis, result
 
@@ -628,6 +697,19 @@ def summarise_config(
     return summary
 
 
+def pair_configs(db: Session, project: Project, request: SyncRequest) -> list[ProjectConfig]:
+    """The configurations a sync re-runs: the pair's own, narrowed if asked."""
+    configs = [
+        config for config in service.list_configs(db, project)
+        if (config.source_kind, config.target_kind)
+        == (request.source_kind, request.target_kind)
+    ]
+    if request.config_ids is not None:
+        wanted = set(request.config_ids)
+        configs = [config for config in configs if config.config_id in wanted]
+    return configs
+
+
 def perform_sync(
     db: Session,
     project: Project,
@@ -636,7 +718,7 @@ def perform_sync(
     heads: dict[int, str],
     job_id: int | None = None,
 ) -> SyncResponse:
-    """Do the work: fetch, re-run every configuration, update every graph.
+    """Do the work for one pair: fetch, re-run its configurations, update their graphs.
 
     Minutes long, so it is called from a background job rather than from the
     request. `job_id` is only for saying where it has got to.
@@ -645,11 +727,10 @@ def perform_sync(
         if job_id is not None:
             jobs.set_stage(db, job_id, text, current, total)
 
-    latest = service.latest_analysis(db, project)
-    configs = service.list_configs(db, project)
-    if request.config_ids is not None:
-        wanted = set(request.config_ids)
-        configs = [config for config in configs if config.config_id in wanted]
+    latest = service.latest_pair_analysis(
+        db, project, request.source_kind, request.target_kind
+    )
+    configs = pair_configs(db, project, request)
 
     stage("Fetching sources")
     upload_id, workspace, manifest, sources, renames = prepare_workspace(
@@ -745,7 +826,7 @@ def sync_project(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Ask for a project to be brought up to date.
+    """Ask for one pair of a project to be brought up to date.
 
     Everything cheap happens here, so an answer that can be given now is given
     now: nothing to fetch, nothing saved to sync against, a sync already
@@ -760,30 +841,22 @@ def sync_project(
             detail=f"This project is already being synced by job {running.job_id}.",
         )
 
-    latest = service.latest_analysis(db, project)
-    if latest is None or not latest.artifacts:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "This project has no saved run with stored artifacts, so there "
-                "is nothing to sync against. Run and save an analysis first."
-            ),
-        )
+    latest = require_pair_run(db, project, request.source_kind, request.target_kind)
 
-    configs = service.list_configs(db, project)
-    if request.config_ids is not None:
-        wanted = set(request.config_ids)
-        configs = [config for config in configs if config.config_id in wanted]
+    configs = pair_configs(db, project, request)
     if not configs:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This project has no saved configuration to re-run.",
+            detail="This pair has no saved configuration to re-run.",
         )
 
     # Checked here rather than in the job: it is a handful of small requests,
     # and "nothing has changed" is an answer worth giving immediately instead
     # of through a job that does nothing.
-    statuses = check_project(db, project)
+    statuses = [
+        s for s in check_project(db, project)
+        if s.source.kind in (request.source_kind, request.target_kind)
+    ]
     if request.source_ids is not None:
         wanted = set(request.source_ids)
         statuses = [s for s in statuses if s.source.source_id in wanted]
@@ -805,7 +878,11 @@ def sync_project(
         staged_dir(staged)
         refreshed_ids.add(replaced_id)
 
-    if not refreshed_ids and not request.force:
+    # Nothing to fetch can still leave work: a kind this pair shares with
+    # another may have moved on, and re-running is what catches it up.
+    behind = behind_kinds(db, project, latest)
+
+    if not refreshed_ids and not behind and not request.force:
         return SyncStartResponse(
             started=False,
             detail="Everything is already up to date. Nothing was fetched.",
@@ -864,6 +941,27 @@ def disconnect_source(
             f"record{'s' if versions == 1 else ''} what it was at the time."
         ),
     )
+
+
+@router.post(
+    "/projects/{project_id}/sources/{source_id}/reconnect",
+    response_model=SourceResponse,
+)
+def reconnect_source(
+    project_id: int,
+    source_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sync a disconnected source again, in place of whatever replaced it."""
+    project = require_project(db, user, project_id)
+    source = service.get_source(db, project, source_id)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
+
+    service.reconnect_source(db, project, source)
+    logger.info(f"Project {project_id} reconnected '{source.name}'")
+    return to_source_response(source)
 
 
 @router.post(

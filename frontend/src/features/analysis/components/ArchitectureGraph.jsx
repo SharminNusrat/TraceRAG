@@ -41,7 +41,14 @@ const BREATHING_ROOM = 1.5;
 // Seeds the components on a spiral that spreads them evenly with no randomness.
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
-const ZOOM_STEPS = [0.6, 0.8, 1, 1.4, 2, 3];
+// Small steps: the difference between a drawing that fits and one that is
+// readable is often a few percent, and a coarse step jumps straight past it.
+const ZOOM_MIN = 0.6;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.05;
+// How far a press may travel and still be a click. Anything further is a drag,
+// so picking a component does not nudge it.
+const CLICK_SLOP = 3;
 // Until the panel has been measured. Replaced on the first layout pass.
 const ASSUMED_VIEWPORT = { width: 900, height: 520 };
 
@@ -53,6 +60,10 @@ const ASSUMED_VIEWPORT = { width: 900, height: 520 };
  * stem, and a component that requires it reaches round that ball with a
  * socket. An interface nobody consumes still gets its ball, so it is visible
  * rather than implied.
+ *
+ * The layout is only a starting point. A component can be dragged to wherever
+ * makes its relations easiest to read, and its interfaces and the lines to
+ * them follow it.
  */
 export function ArchitectureGraph({
   elements, activeIds, linkedIds, selectedId, onSelect,
@@ -82,7 +93,25 @@ export function ArchitectureGraph({
     return () => observer.disconnect();
   }, [panelSize]);
 
-  const model = useMemo(() => layout(elements, viewport), [elements, viewport]);
+  // Where the user has dragged components to, by id. Kept apart from the
+  // layout so moving one component redraws its lines without settling the
+  // whole drawing again.
+  const [moved, setMoved] = useState({});
+  useEffect(() => { setMoved({}); }, [elements]);
+
+  // The panel changes size when a component is picked - its details take the
+  // legend's place - and a new size means a new layout. Once something has
+  // been dragged the layout is held at the size it was made for, so the rest
+  // of the drawing does not shift under an arrangement made by hand.
+  const laidOutFor = useRef(viewport);
+  if (!Object.keys(moved).length) laidOutFor.current = viewport;
+  const layoutSize = laidOutFor.current;
+
+  const placed = useMemo(() => layout(elements, layoutSize), [elements, layoutSize]);
+  const model = useMemo(() => {
+    const nodes = placed.nodes.map((node) => ({ ...node, ...moved[node.id] }));
+    return { ...placed, nodes, interfaces: route(nodes, placed.width, placed.height) };
+  }, [placed, moved]);
 
   if (!model.nodes.length) {
     return <p className="panel-empty">No components to draw.</p>;
@@ -103,9 +132,10 @@ export function ArchitectureGraph({
   };
 
   const stepZoom = (direction) => {
-    const index = ZOOM_STEPS.indexOf(zoom);
-    const next = ZOOM_STEPS[Math.min(Math.max(index + direction, 0), ZOOM_STEPS.length - 1)];
-    if (next !== undefined && next !== zoom) zoomTo(next);
+    // Rounded to whole percent, so repeated steps do not drift off the grid.
+    const stepped = Math.round((zoom + direction * ZOOM_STEP) * 100) / 100;
+    const next = Math.min(Math.max(stepped, ZOOM_MIN), ZOOM_MAX);
+    if (next !== zoom) zoomTo(next);
   };
 
   const fit = () => {
@@ -113,36 +143,57 @@ export function ArchitectureGraph({
     setPan({ x: 0, y: 0 });
   };
 
-  const startPan = (event) => {
-    // Only the background drags; a press on a component is a selection.
-    if (event.target.closest('.arch-node')) return;
+  const startDrag = (event) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     // The viewBox is scaled to fit the panel, so a pixel of pointer travel is
     // not a unit of drawing - convert before moving anything.
     const box = frameRef.current?.getBoundingClientRect();
-    drag.current = {
-      x: event.clientX,
-      y: event.clientY,
-      pan,
-      scale: box?.width ? width / box.width : 1,
-    };
+    const scale = box?.width ? width / box.width : 1;
+    const start = { x: event.clientX, y: event.clientY };
+
+    // A press on a component moves that component; anywhere else moves the
+    // whole drawing.
+    const pressed = event.target.closest('.arch-node');
+    const node = pressed && nodes.find((item) => item.id === pressed.dataset.id);
+    if (node) {
+      // Inside the zoomed group, so the zoom is undone as well.
+      drag.current = { ...start, node, scale: scale / zoom, travelled: false };
+      return;
+    }
+    drag.current = { ...start, pan, scale };
     setPanning(true);
   };
 
-  const movePan = (event) => {
+  const moveDrag = (event) => {
     const state = drag.current;
     if (!state) return;
-    setPan({
-      x: state.pan.x + (event.clientX - state.x) * state.scale,
-      y: state.pan.y + (event.clientY - state.y) * state.scale,
-    });
+    const dx = event.clientX - state.x;
+    const dy = event.clientY - state.y;
+
+    if (!state.node) {
+      setPan({ x: state.pan.x + dx * state.scale, y: state.pan.y + dy * state.scale });
+      return;
+    }
+    if (!state.travelled && Math.hypot(dx, dy) < CLICK_SLOP) return;
+    state.travelled = true;
+    setMoved((current) => ({
+      ...current,
+      [state.node.id]: {
+        cx: state.node.cx + dx * state.scale,
+        cy: state.node.cy + dy * state.scale,
+      },
+    }));
   };
 
-  const endPan = (event) => {
-    if (!drag.current) return;
+  const endDrag = (event) => {
+    const state = drag.current;
+    if (!state) return;
     event.currentTarget.releasePointerCapture(event.pointerId);
     drag.current = null;
     setPanning(false);
+    // The canvas holds the pointer for the whole press, so a component never
+    // sees a click of its own. A press that went nowhere is one.
+    if (state.node && !state.travelled && event.type === 'pointerup') onSelect(state.node.id);
   };
 
   const lit = (interfaceNode) => (
@@ -154,19 +205,19 @@ export function ArchitectureGraph({
     <div className="architecture-graph">
       <div className="arch-controls">
         <button type="button" onClick={() => stepZoom(-1)}
-                disabled={zoom === ZOOM_STEPS[0]} aria-label="Zoom out">
+                disabled={zoom <= ZOOM_MIN} aria-label="Zoom out">
           <Minus size={12} strokeWidth={2.6} />
         </button>
         <span>{Math.round(zoom * 100)}%</span>
         <button type="button" onClick={() => stepZoom(1)}
-                disabled={zoom === ZOOM_STEPS.at(-1)} aria-label="Zoom in">
+                disabled={zoom >= ZOOM_MAX} aria-label="Zoom in">
           <Plus size={12} strokeWidth={2.6} />
         </button>
         <button type="button" onClick={fit}
                 disabled={zoom === 1 && !pan.x && !pan.y} aria-label="Reset view">
           <Maximize2 size={11} strokeWidth={2.4} /> Fit
         </button>
-        <small>Drag to pan</small>
+        <small>Drag to pan · drag a component to move it</small>
       </div>
 
       {/* The frame is the div, not the svg. An svg carries an intrinsic aspect
@@ -179,10 +230,10 @@ export function ArchitectureGraph({
           preserveAspectRatio="xMidYMid meet"
           role="img"
           aria-label="Architecture component diagram"
-          onPointerDown={startPan}
-          onPointerMove={movePan}
-          onPointerUp={endPan}
-          onPointerCancel={endPan}
+          onPointerDown={startDrag}
+          onPointerMove={moveDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
         >
         <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
           {interfaces.map((item) => (
@@ -222,8 +273,8 @@ export function ArchitectureGraph({
               <g
                 key={node.id}
                 className={classes.join(' ')}
+                data-id={node.id}
                 transform={`translate(${node.x}, ${node.y})`}
-                onClick={() => onSelect(node.id)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(event) => {
@@ -505,10 +556,7 @@ function separate(nodes, frame) {
   }
 }
 
-/**
- * Components settled by force, each interface on the edge of the component
- * that owns it.
- */
+/** Components settled by force: where each one starts out. */
 function layout(elements, viewport) {
   // Only elements the model preprocessor described. A run reported at document
   // level lists the whole model as one element, which is not a component and
@@ -522,7 +570,7 @@ function layout(elements, viewport) {
       requires: element.model_units.requires ?? [],
     }));
 
-  if (!nodes.length) return { nodes, interfaces: [], width: 0, height: 0 };
+  if (!nodes.length) return { nodes, width: 0, height: 0 };
 
   const { width, height } = contentFrame(nodes.length, viewport);
   const frame = { width, height };
@@ -539,6 +587,17 @@ function layout(elements, viewport) {
     ].filter(Boolean).join('\n');
   }
 
+  return { nodes, width, height };
+}
+
+/**
+ * The interfaces between components, drawn from wherever the components are.
+ *
+ * Separate from the layout because it has to be redone whenever a component is
+ * dragged: each interface sits on the edge of the component that owns it, and
+ * the lines reaching it stretch to follow.
+ */
+function route(nodes, width, height) {
   // Every interface named anywhere in the model, with who offers it and who
   // wants it. One name is one shape, however many components reach for it.
   const named = new Map();
@@ -629,5 +688,5 @@ function layout(elements, viewport) {
     };
   });
 
-  return { nodes, interfaces, width, height };
+  return interfaces;
 }

@@ -13,6 +13,15 @@ export const listSources = (projectId, includeDisconnected = false) => httpClien
 );
 
 /**
+ * The connected sources that saving an upload of these kinds would replace.
+ *
+ * A project takes each kind from one source, so an upload of a kind it
+ * already has takes that source's place.
+ */
+export const sourcesReplacedBy = async (projectId, kinds) =>
+  (await listSources(projectId)).filter((source) => kinds.includes(source.kind));
+
+/**
  * The providers a source can be connected from.
  *
  * A list rather than a single button, because the next one is coming: adding
@@ -75,8 +84,24 @@ export const disconnectSource = (projectId, sourceId) => httpClient(
   { method: 'DELETE' },
 );
 
-/** What a sync would pick up, without fetching anything. */
-export const getSyncStatus = (projectId) => httpClient(`/projects/${projectId}/sync/status`);
+/** Bring a disconnected source back, in place of whatever replaced it. */
+export const reconnectSource = (projectId, sourceId) => httpClient(
+  `/projects/${projectId}/sources/${sourceId}/reconnect`,
+  { method: 'POST' },
+);
+
+/**
+ * The pairs of artifact kinds a project traces between.
+ *
+ * A pair is what a sync brings up to date: its two sources are refreshed and
+ * its own configurations re-run, leaving the project's other pairs alone.
+ */
+export const listPairs = (projectId) => httpClient(`/projects/${projectId}/pairs`);
+
+/** What a sync of one pair would pick up, without fetching anything. */
+export const getSyncStatus = (projectId, pair) => httpClient(
+  `/projects/${projectId}/sync/status?source_kind=${pair.source_kind}&target_kind=${pair.target_kind}`,
+);
 
 /**
  * Hand over new files for a source nothing can fetch.
@@ -99,17 +124,20 @@ export function stageSourceFiles(projectId, sourceId, files) {
 }
 
 /**
- * Ask for a sync. Returns immediately with a job to watch, or with
+ * Ask for one pair to be synced. Returns immediately with a job to watch, or with
  * `started: false` when there was nothing to do.
  */
 export const startSync = (
   projectId,
+  pair,
   { sourceIds, configIds, replacements, force, note } = {},
 ) => httpClient(
   `/projects/${projectId}/sync`,
   {
     method: 'POST',
     body: JSON.stringify({
+      source_kind: pair.source_kind,
+      target_kind: pair.target_kind,
       source_ids: sourceIds ?? null,
       config_ids: configIds ?? null,
       // source_id -> staged upload id, for the sources whose files were

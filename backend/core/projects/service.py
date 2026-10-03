@@ -14,7 +14,7 @@ from core.db.models import (
     ProjectConfig, ProjectSource, ProjectVersion, TraceLink, VersionSource, utcnow,
 )
 from core.projects import artifact_store
-from core.projects.run_config import config_key
+from core.projects.run_config import config_key, expansion_depth
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +182,11 @@ def connect_github_source(
 
 
 def _take_over_kind(
-    db: Session, project: Project, kind: str, connected: ProjectSource
+    db: Session,
+    project: Project,
+    kind: str,
+    connected: ProjectSource,
+    beside: set[int] = frozenset(),
 ) -> None:
     """Make this the only place the project takes `kind` from.
 
@@ -192,6 +196,9 @@ def _take_over_kind(
 
     Stood down, not deleted: the versions that recorded it still need it to say
     what the artifacts were at the time.
+
+    `beside` names sources that arrived together with this one and stay. Only
+    one upload can do that: a trace with the same kind on both sides.
     """
     superseded = db.execute(
         select(ProjectSource).where(
@@ -203,6 +210,8 @@ def _take_over_kind(
     ).scalars().all()
 
     for source in superseded:
+        if source.source_id in beside:
+            continue
         source.is_active = False
         logger.info(
             f"'{source.name}' no longer supplies {kind} for project "
@@ -276,6 +285,17 @@ def disconnect_source(db: Session, source: ProjectSource) -> bool:
     return False
 
 
+def reconnect_source(db: Session, project: Project, source: ProjectSource) -> None:
+    """Bring a disconnected source back as where its kind comes from.
+
+    Whatever took its place in the meantime is stood down, the same as when a
+    repository is connected: a kind has one source at a time.
+    """
+    source.is_active = True
+    _take_over_kind(db, project, source.kind, source)
+    db.commit()
+
+
 def versions_using(db: Session, source: ProjectSource) -> int:
     """How many versions recorded this source. What disconnecting would cost."""
     return db.execute(
@@ -296,22 +316,34 @@ def get_source(db: Session, project: Project, source_id: int) -> ProjectSource |
 
 # ----- Configurations -----
 
-def get_or_create_config(db: Session, project: Project, config) -> ProjectConfig:
+def get_or_create_config(
+    db: Session,
+    project: Project,
+    config,
+    source_kind: str | None,
+    target_kind: str | None,
+) -> ProjectConfig:
     """The project's row for this way of reading its artifacts.
 
     A configuration is not a property of one run: several runs share it, and
     the ones that do are the only ones that can be compared with each other.
     Recognised by its key, so repeating a configuration re-uses its row rather
     than filing a second copy of the same settings.
+
+    The kinds are given beside the settings rather than inside them: they are
+    a fact about the artifacts a run was pointed at, not something it chose.
     """
+    depth = expansion_depth(target_kind, config.dependency_expansion_depth)
     key = config_key(
+        source_kind=source_kind,
+        target_kind=target_kind,
         source_preprocessor=config.source_preprocessor,
         target_preprocessor=config.target_preprocessor,
         source_output_level=config.source_output_level,
         target_output_level=config.target_output_level,
         classifier=config.classifier,
         n_results=config.n_results,
-        dependency_expansion_depth=config.dependency_expansion_depth,
+        dependency_expansion_depth=depth,
         summarize_elements=config.summarize_elements,
     )
 
@@ -330,6 +362,8 @@ def get_or_create_config(db: Session, project: Project, config) -> ProjectConfig
         # Never chosen here: which configuration a project opens on is the
         # user's call, not an accident of which one they happened to run first.
         is_default=False,
+        source_kind=source_kind,
+        target_kind=target_kind,
         source_preprocessor=config.source_preprocessor.value,
         target_preprocessor=config.target_preprocessor.value,
         source_output_level=(
@@ -339,7 +373,7 @@ def get_or_create_config(db: Session, project: Project, config) -> ProjectConfig
             config.target_output_level.value if config.target_output_level else None
         ),
         top_k=config.n_results,
-        dependency_expansion_depth=config.dependency_expansion_depth,
+        dependency_expansion_depth=depth,
         classifier_type=config.classifier.value,
         summarize_elements=config.summarize_elements,
     )
@@ -729,10 +763,16 @@ def save_analysis(
     result,
     execution_duration: float | None,
     version_id: int | None = None,
+    # The artifact kind on each side, which decides the configuration this run
+    # is filed under. None when the run is saved without its files.
+    source_kind: str | None = None,
+    target_kind: str | None = None,
 ) -> Analysis:
     analysis = Analysis(
         project_id=project.project_id,
-        config_id=get_or_create_config(db, project, config).config_id,
+        config_id=get_or_create_config(
+            db, project, config, source_kind, target_kind
+        ).config_id,
         # Given by the caller, because only it knows whether these are new
         # artifacts or the stored ones a re-run reaches for.
         version_id=version_id,
@@ -742,7 +782,9 @@ def save_analysis(
         source_output_level=config.source_output_level.value if config.source_output_level else None,
         target_output_level=config.target_output_level.value if config.target_output_level else None,
         top_k=config.n_results,
-        dependency_expansion_depth=config.dependency_expansion_depth,
+        dependency_expansion_depth=expansion_depth(
+            target_kind, config.dependency_expansion_depth
+        ),
         classifier_type=config.classifier.value,
         summarize_elements=config.summarize_elements,
         execution_duration=execution_duration,
@@ -800,6 +842,68 @@ def list_configs(db: Session, project: Project) -> list[ProjectConfig]:
     ).scalars())
 
 
+# ----- Pairs -----
+#
+# A project can hold several kinds of artifact, and a trace always runs between
+# two of them. Those two kinds are a pair: the unit a sync brings up to date.
+# Nothing stores a pair - it is whatever the project's configurations link.
+
+def list_pairs(db: Session, project: Project) -> list[tuple[str, str]]:
+    """Every (source kind, target kind) this project traces, oldest first."""
+    pairs: list[tuple[str, str]] = []
+    for config in list_configs(db, project):
+        pair = (config.source_kind, config.target_kind)
+        # A configuration saved without its files names no kinds, and so no pair.
+        if all(pair) and pair not in pairs:
+            pairs.append(pair)
+    return pairs
+
+
+def latest_pair_analysis(
+    db: Session, project: Project, source_kind: str, target_kind: str
+) -> Analysis | None:
+    """The most recent run between these two kinds, under any configuration."""
+    return db.execute(
+        select(Analysis)
+        .join(ProjectConfig, Analysis.config_id == ProjectConfig.config_id)
+        .where(
+            Analysis.project_id == project.project_id,
+            ProjectConfig.source_kind == source_kind,
+            ProjectConfig.target_kind == target_kind,
+        )
+        .order_by(Analysis.created_at.desc(), Analysis.analysis_id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def latest_artifact(db: Session, source: ProjectSource) -> Artifact | None:
+    """The files a source holds now: the last ones any run took in for it."""
+    return db.execute(
+        select(Artifact)
+        .join(Analysis, Artifact.analysis_id == Analysis.analysis_id)
+        .where(Artifact.source_id == source.source_id)
+        .order_by(Analysis.created_at.desc(), Artifact.artifact_id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def side_is_behind(db: Session, project: Project, artifact: Artifact) -> bool:
+    """Whether the project now holds different files than this run read.
+
+    A kind can be shared by two pairs. Syncing one of them moves the source on,
+    and the other pair's last run is then about files the project no longer
+    holds - which is said rather than silently re-run.
+    """
+    source = active_source_for_kind(db, project, artifact.artifact_type)
+    if source is None:
+        return False
+    current = latest_artifact(db, source)
+    # Connected but never fetched: there is nothing here to be behind.
+    if current is None:
+        return False
+    return source_fingerprint(current.files) != source_fingerprint(artifact.files)
+
+
 def _source_for_entry(
     db: Session, project: Project, entry: dict, artifact: Artifact
 ) -> ProjectSource:
@@ -832,6 +936,7 @@ def claim_artifacts(db: Session, analysis: Analysis, upload_id: str | None) -> i
         return 0
 
     attached = 0
+    claimed: list[ProjectSource] = []
     for entry in artifact_store.read_manifest(pending):
         files = artifact_store.collect_files(pending / entry.get("directory", ""))
         if not files:
@@ -865,9 +970,17 @@ def claim_artifacts(db: Session, analysis: Analysis, upload_id: str | None) -> i
         source.last_sync_ref = entry.get("ref") or source_fingerprint(artifact.files)
         source.last_synced_at = utcnow()
         artifact.source_id = source.source_id
+        claimed.append(source)
 
         db.add(artifact)
         attached += 1
+
+    # A kind has one source at a time, so files uploaded under a new name
+    # replace whatever supplied that kind before. Done before sealing, so the
+    # version records the sources as this upload left them.
+    together = {source.source_id for source in claimed}
+    for source in claimed:
+        _take_over_kind(db, analysis.project, source.kind, source, beside=together)
 
     # After the loop, so every source already carries the state this upload put
     # it in and the version is sealed against the finished picture.
