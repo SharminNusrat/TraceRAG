@@ -104,10 +104,14 @@ class AnalyzeResponse(BaseModel):
     # run. Absent on the path-based endpoint, which analyses files it does not
     # own and therefore has nothing to keep.
     upload_id: str | None = None
-    # The pairs the classifier judged, before they were rolled up to the output
-    # level. Excluded from what goes over the wire: nobody viewing a run needs
-    # them, they only exist so the next run can offer the same pairs again.
-    element_links: list[tuple[str, str]] = Field(default_factory=list, exclude=True)
+    # The pairs the classifier confirmed, before they were rolled up to the
+    # output level. Nobody viewing a run needs them, but they travel with the
+    # result all the same: a new analysis is saved by the client posting this
+    # back, and the save is what keeps them for the next sync to offer again.
+    # None rather than empty when a result does not carry them - an older
+    # result, or another client - so that saving it leaves the stored pairs
+    # alone instead of reading "nothing was said" as "nothing was linked".
+    element_links: list[tuple[str, str]] | None = None
 
 
 # ----- Capabilities (drives the frontend's option lists) -----

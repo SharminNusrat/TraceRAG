@@ -670,10 +670,19 @@ def record_element_links(
     on the word of something that was never asked the question.
     """
     if links is None:
+        logger.info(f"Pinned links for config {config_id}: none given, stored ones left as they are")
         return 0
 
-    db.execute(delete(ElementLink).where(ElementLink.config_id == config_id))
+    removed = db.execute(
+        delete(ElementLink).where(ElementLink.config_id == config_id)
+    ).rowcount
     if not links:
+        # Said out loud, because storing nothing is what makes the next sync
+        # unable to carry a link over - and it looks like nothing happened.
+        logger.info(
+            f"Pinned links for config {config_id}: stored 0, the run handed over "
+            f"no element-level links ({removed} stored before were cleared)"
+        )
         return 0
     # Deduplicated because dependency expansion and aggregation can both hand
     # back the same pair, and the table holds one row per pair.
@@ -683,7 +692,10 @@ def record_element_links(
         for source, target in unique
     ])
 
-    logger.info(f"Kept {len(unique)} element-level link(s) for config {config_id}")
+    logger.info(
+        f"Pinned links for config {config_id}: stored {len(unique)} "
+        f"({removed} stored before were replaced)"
+    )
     return len(unique)
 
 

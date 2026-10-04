@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<uml:Model xmlns:xmi="http://www.omg.org/spec/XMI/20131001" xmlns:uml="http://www.eclipse.org/uml2/5.0.0/UML" xmi:id="_model" name="library">
+  <packagedElement xmi:type="uml:Interface" xmi:id="_iauth" name="IAuth">
+    <ownedOperation xmi:id="_op1" name="login"/>
+    <ownedOperation xmi:id="_op2" name="logout"/>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Interface" xmi:id="_ilend" name="ILending">
+    <ownedOperation xmi:id="_op3" name="borrow"/>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Component" xmi:id="_auth" name="Authentication">
+    <interfaceRealization xmi:type="uml:InterfaceRealization" xmi:id="_r1" contract="_iauth"/>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Component" xmi:id="_lend" name="Lending">
+    <interfaceRealization xmi:type="uml:InterfaceRealization" xmi:id="_r2" contract="_ilend"/>
+  </packagedElement>
+  <packagedElement xmi:type="uml:Usage" xmi:id="_u1" client="_lend" supplier="_iauth"/>
+</uml:Model>
