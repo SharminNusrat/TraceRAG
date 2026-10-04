@@ -46,8 +46,15 @@ export function TraceGraph({ links }) {
     for (const link of shown) if (!seen.includes(pick(link))) seen.push(pick(link));
     return seen;
   };
-  const sources = column((link) => link.from_identifier);
-  const targets = column((link) => link.to_identifier);
+  const sources = column((link) => link.source_id);
+  const targets = column((link) => link.target_id);
+  // A UML component is drawn by the name the server sent for it.
+  const names = new Map();
+  for (const link of shown) {
+    if (link.source_name) names.set(link.source_id, link.source_name);
+    if (link.target_name) names.set(link.target_id, link.target_name);
+  }
+  const label = (identifier) => names.get(identifier) ?? shortName(identifier);
 
   const rows = Math.max(sources.length, targets.length);
   const height = rows * ROW + PADDING * 2;
@@ -55,12 +62,12 @@ export function TraceGraph({ links }) {
 
   const present = new Map();
   for (const link of shown) {
-    present.set(`from:${link.from_identifier}`, link.from_present);
-    present.set(`to:${link.to_identifier}`, link.to_present);
+    present.set(`from:${link.source_id}`, link.source_present);
+    present.set(`to:${link.target_id}`, link.target_present);
   }
 
   const dimmed = (link) =>
-    focus && focus !== link.from_identifier && focus !== link.to_identifier;
+    focus && focus !== link.source_id && focus !== link.target_id;
 
   // Following a name means following what it reaches, so the other end of each
   // of its links stays lit with it - otherwise the lines lead into the dark.
@@ -68,8 +75,8 @@ export function TraceGraph({ links }) {
   if (focus) {
     lit.add(focus);
     for (const link of shown) {
-      if (link.from_identifier === focus) lit.add(link.to_identifier);
-      if (link.to_identifier === focus) lit.add(link.from_identifier);
+      if (link.source_id === focus) lit.add(link.target_id);
+      if (link.target_id === focus) lit.add(link.source_id);
     }
   }
 
@@ -92,17 +99,17 @@ export function TraceGraph({ links }) {
         {/* Lines first, so the labels sit on top of them. */}
         <g>
           {shown.map((link) => {
-            const y1 = y(sources, link.from_identifier);
-            const y2 = y(targets, link.to_identifier);
+            const y1 = y(sources, link.source_id);
+            const y2 = y(targets, link.target_id);
             return (
               <path
-                key={link.edge_id}
-                className={`graph-edge ${link.status}${dimmed(link) ? ' dim' : ''}`}
+                key={`${link.state}:${link.source_id}>${link.target_id}`}
+                className={`graph-edge ${link.state}${dimmed(link) ? ' dim' : ''}`}
                 d={`M ${LEFT_DOT} ${y1} C ${LEFT_DOT + 95} ${y1}, ${RIGHT_DOT - 95} ${y2}, ${RIGHT_DOT} ${y2}`}
               >
                 <title>
-                  {`${shortName(link.from_identifier)} → ${shortName(link.to_identifier)}`}
-                  {` · ${link.status} · ${link.confidence.toFixed(2)}`}
+                  {`${label(link.source_id)} → ${label(link.target_id)}`}
+                  {` · ${link.state.replaceAll('_', ' ')} · ${link.confidence.toFixed(2)}`}
                 </title>
               </path>
             );
@@ -123,7 +130,7 @@ export function TraceGraph({ links }) {
                 <title>{identifier}</title>
                 <circle cx={dotX} cy={y(list, identifier)} r="4.5" />
                 <text x={textX} y={y(list, identifier)} textAnchor={anchor} dominantBaseline="middle">
-                  {truncate(shortName(identifier))}
+                  {truncate(label(identifier))}
                 </text>
               </g>
             ))}

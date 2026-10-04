@@ -1,4 +1,4 @@
-"""Upload refusals, the sources a project holds, and getting files back out."""
+"""Upload refusals, the sides of an analysis, and getting files back out."""
 
 import io
 import json
@@ -8,11 +8,10 @@ import zipfile
 
 from sqlalchemy import select
 
-from core.db.models import Artifact, ArtifactFile
+from core.db.models import Analysis, Artifact, ArtifactFile
 from core.projects import artifact_store, uploads
 from tests.helpers import (
-    CODE, REQUIREMENTS, analyse_and_save, get, new_project, pending_uploads, sign_up, source_ids,
-    stage, sync,
+    CODE, analyse_and_save, analysis_path, get, new_project, pending_uploads, side_ids, sign_up,
 )
 from tests.recorder import case
 
@@ -40,8 +39,8 @@ def upload(client, artifacts, files, source=("s",), target=("t",), paths=None, r
     priority="High",
     why="Bad input must be refused with a message the user can act on, before a job is started, and must not leave half-written files on the server.",
     preconditions="Per-file limit lowered to 1,000 bytes for the oversized-file case (30 MB in production)",
-    input="12 malformed uploads: no artifacts, invalid JSON, one artifact on both sides, unknown kind, two kinds on one side, wrong extension, a zip for a kind that takes none, a file that is not a zip, a file index out of range, an oversized file, pasted text for code, and a connected source without a login",
-    expected="400 for each, except 413 for the oversized file and 401 for the connected source without a login. No working folder is left behind by any of them",
+    input="11 malformed uploads: no artifacts, invalid JSON, one artifact on both sides, unknown kind, two kinds on one side, wrong extension, a zip for a kind that takes none, a file that is not a zip, a file index out of range, an oversized file, and pasted text for code",
+    expected="400 for each, except 413 for the oversized file. No working folder is left behind by any of them",
 )
 def test_malformed_uploads_are_refused_and_leave_nothing_behind(client, monkeypatch, record):
     """Each kind of bad upload is refused with its own message and cleaned up."""
@@ -64,45 +63,15 @@ def test_malformed_uploads_are_refused_and_leave_nothing_behind(client, monkeypa
         "index out of range": upload(client, [{**REQUIREMENT, "file_indexes": [7]}, CODE_FILE], [TEXT, JAVA]),
         "oversized file": upload(client, both, [big, JAVA]),
         "pasted text for code": upload(client, [REQUIREMENT, {"id": "t", "name": "c", "kind": "code", "text": "class A"}], [TEXT]),
-        "connected source, no login": upload(client, [{"id": "s", "name": "r", "kind": "requirements", "source_id": 1}, CODE_FILE], [TEXT, JAVA]),
     }
     for name, (status, detail) in answers.items():
         record(f"{name}: {status} - {detail}")
     record(f"working folders left behind: {sorted(pending_uploads() - before)}")
 
-    expected = {name: 400 for name in answers} | {"oversized file": 413, "connected source, no login": 401}
+    expected = {name: 400 for name in answers} | {"oversized file": 413}
     assert {name: status for name, (status, _) in answers.items()} == expected
     assert all(detail for _, detail in answers.values())
     assert pending_uploads() == before
-
-
-@case(
-    id="I-18",
-    feature="Sources / uploading a kind the project already has",
-    level="integration",
-    priority="High",
-    why="This is what the re-upload confirmation in the UI warns about: saving puts the new files in place of the project's source for that kind.",
-    preconditions="A project whose requirements source is 'reqs' and code source is 'code'",
-    input="A second New Analysis whose requirements are uploaded under the name 'second draft', with the same code",
-    expected="The project lists 2 active sources: requirements 'second draft' and code 'code'. 'reqs' is still listed when disconnected ones are included, as inactive",
-)
-def test_second_upload_of_a_kind_replaces_the_source(client, record):
-    """After a second upload of requirements under a new name, that upload is the project's requirements source."""
-    headers = sign_up(client)
-    project = new_project(client, headers)
-    analyse_and_save(client, headers, project)
-    analyse_and_save(client, headers, project, source=("requirements", "second draft", REQUIREMENTS[2]))
-
-    active = [(s["kind"], s["name"]) for s in get(client, headers, f"/projects/{project}/sources")]
-    everything = {(s["kind"], s["name"]): s["is_active"]
-                  for s in get(client, headers, f"/projects/{project}/sources", include_disconnected="true")}
-    record(f"active sources: {active}")
-    record(f"all sources: {everything}")
-
-    assert sorted(active) == [("code", "code"), ("requirements", "second draft")]
-    assert everything == {
-        ("requirements", "reqs"): False, ("code", "code"): True, ("requirements", "second draft"): True,
-    }
 
 
 @case(
@@ -110,8 +79,8 @@ def test_second_upload_of_a_kind_replaces_the_source(client, record):
     feature="Deleting an analysis / shared files through the API",
     level="integration",
     priority="High",
-    why="Deleting an old run is routine clean-up. It must not make a re-run of it impossible to download or run again.",
-    preconditions="An analysis and a re-run of it that share stored files older than the collector's grace period",
+    why="Deleting an old run is routine clean-up. It must not make the version's files - which a re-run reads too - impossible to download or run again.",
+    preconditions="An analysis with a run and a re-run of it in version 1, whose stored files are older than the collector's grace period",
     input="DELETE the original analysis; then download the re-run's artifact and re-run it again",
     expected="204; the original is gone (404); the re-run's files are still available, its artifact downloads (200), and running it again succeeds (201)",
 )
@@ -123,7 +92,9 @@ def test_deleting_a_run_leaves_its_reruns_usable(client, db, record):
     rerun = client.post(f"/analyses/{original['analysis_id']}/rerun", headers=headers, json={}).json()
 
     digests = db.scalars(
-        select(ArtifactFile.sha256).join(Artifact).where(Artifact.analysis_id == rerun["analysis_id"])
+        select(ArtifactFile.sha256).join(Artifact)
+        .join(Analysis, Analysis.version_id == Artifact.version_id)
+        .where(Analysis.analysis_id == rerun["analysis_id"])
     ).all()
     old = time.time() - 2 * 3600
     for digest in digests:
@@ -148,109 +119,36 @@ def test_deleting_a_run_leaves_its_reruns_usable(client, db, record):
 
 @case(
     id="I-19",
-    feature="Sources / listing, disconnecting and reconnecting",
+    feature="Sides / listing and refusals",
     level="integration",
     priority="Medium",
-    why="A disconnected source must stay visible so it can be brought back, and requests about sources that do not exist must fail cleanly.",
-    preconditions="A project with a requirements source and a code source, both recorded by version 1",
-    input="Disconnect requirements; list sources with and without disconnected ones; read the pair; reconnect. Then disconnect, reconnect and stage files for a source id that does not exist, stage with no files, and connect a repository for an unknown kind",
-    expected="Disconnect is kept (removed=false) and explained. The default list hides it, the full list shows it inactive, and the pair has no source side. Reconnect makes it active again. The five bad requests give 404, 404, 404, 400, 400",
+    why="Requests about sides that do not exist, or that cannot work, must fail cleanly before anything is stored.",
+    preconditions="An analysis with a requirements side and a code side",
+    input="List the sides. Then stage files for a side id that does not exist, stage with no files, take the requirements side from GitHub, and list the sides of an analysis id that does not exist",
+    expected="2 sides listed, source first. The four bad requests give 404, 400, 400 and 404",
 )
-def test_sources_can_be_disconnected_seen_and_reconnected(client, record):
-    """A disconnected source is hidden from syncing but still listed, and can be reconnected."""
+def test_sides_are_listed_and_bad_requests_refused(client, record):
+    """An analysis lists its two sides, and requests that make no sense are refused."""
     headers = sign_up(client)
     project = new_project(client, headers)
-    analyse_and_save(client, headers, project)
-    requirements = source_ids(client, headers, project)["requirements"]
-    base = f"/projects/{project}/sources"
-
-    removal = client.delete(f"{base}/{requirements}", headers=headers).json()
-    listed = len(get(client, headers, base))
-    full = {s["kind"]: s["is_active"] for s in get(client, headers, base, include_disconnected="true")}
-    pair = get(client, headers, f"/projects/{project}/pairs")[0]
-    reconnected = client.post(f"{base}/{requirements}/reconnect", headers=headers).json()
-    record(f"disconnect: removed={removal['removed']} - {removal['detail']}")
-    record(f"default list: {listed} source; full list: {full}; pair's source side: {pair['source']}")
-    record(f"reconnect: is_active={reconnected['is_active']}")
+    config = analyse_and_save(client, headers, project)["config_id"]
+    base = f"{analysis_path(project, config)}/sources"
+    sides = get(client, headers, base)
+    requirements = side_ids(client, headers, project, config)["source"]
+    record(f"sides: {[(s['role'], s['kind'], s['name']) for s in sides]}")
 
     file = [("files", ("UC1.txt", b"text", "text/plain"))]
     bad = {
-        "disconnect unknown": client.delete(f"{base}/999999", headers=headers).status_code,
-        "reconnect unknown": client.post(f"{base}/999999/reconnect", headers=headers).status_code,
         "stage for unknown": client.post(f"{base}/999999/files", headers=headers, files=file).status_code,
         "stage no files": client.post(f"{base}/{requirements}/files", headers=headers).status_code,
-        "connect unknown kind": client.post(f"{base}/github", headers=headers,
-                                            json={"kind": "nope", "repository": "owner/repo"}).status_code,
+        "GitHub for requirements": client.post(f"{base}/{requirements}/github", headers=headers,
+                                               json={"repository": "owner/repo"}).status_code,
+        "unknown analysis": client.get(f"{analysis_path(project, 999999)}/sources", headers=headers).status_code,
     }
     record(f"bad requests: {bad}")
 
-    assert removal["removed"] is False and "1 saved version" in removal["detail"]
-    assert listed == 1 and full == {"requirements": False, "code": True}
-    assert pair["source"] is None and pair["target"]["kind"] == "code"
-    assert reconnected["is_active"] is True
-    assert list(bad.values()) == [404, 404, 404, 400, 400]
-
-
-@case(
-    id="I-23",
-    feature="Comparison / compare endpoint",
-    level="integration",
-    priority="Medium",
-    why="The Compare page shows what a change did to the links. It must diff the right two runs and refuse comparisons that mean nothing.",
-    preconditions="Run 1 over UC1-UC4. Run 2 is a sync after UC5 (about the passphrase) was added",
-    input="GET /analyses/{run1}/compare/{run2}; then compare a run with itself, and with a run from another project",
-    expected="added 1 (UC5->login), removed 0, unchanged 3, comparable. Same run: 400. Other project: 409",
-)
-def test_compare_reports_what_changed_between_two_runs(client, record):
-    """Two runs of one project are diffed link by link; anything else is refused."""
-    headers = sign_up(client)
-    project = new_project(client, headers)
-    first = analyse_and_save(client, headers, project)
-    requirements = source_ids(client, headers, project)["requirements"]
-    staged = stage(client, headers, project, requirements,
-                   {**REQUIREMENTS[2], "UC5.txt": "A passphrase is required.\n"}).json()
-    second = sync(client, headers, project, replacements={requirements: staged["upload_id"]})
-    head = second["job"]["result"]["configs"][0]["analysis_id"]
-    elsewhere = analyse_and_save(client, headers, new_project(client, headers))
-
-    diff = get(client, headers, f"/analyses/{first['analysis_id']}/compare/{head}")
-    same = client.get(f"/analyses/{head}/compare/{head}", headers=headers).status_code
-    other = client.get(f"/analyses/{head}/compare/{elsewhere['analysis_id']}", headers=headers).status_code
-    record(f"summary: {diff['summary']}; comparable: {diff['comparable']}")
-    record(f"added: {[(l['source_id'], l['target_id'].split('::')[-1]) for l in diff['added']]}")
-    record(f"same run: {same}; run from another project: {other}")
-
-    assert diff["summary"]["added"] == 1 and diff["summary"]["removed"] == 0
-    assert diff["summary"]["unchanged"] == 3 and diff["comparable"]
-    assert diff["added"][0]["source_id"] == "UC5.txt" and "login" in diff["added"][0]["target_id"]
-    assert (same, other) == (400, 409)
-
-
-@case(
-    id="I-32",
-    feature="Comparison / removed requirements",
-    level="integration",
-    priority="Medium",
-    why="'Newly implemented' is read as progress. A requirement that was deleted has not been implemented, and listing it there misreports coverage.",
-    preconditions="Run 1 has UC4 with no link (unimplemented)",
-    input="Sync with requirements that no longer include UC4, then compare run 1 with the new run",
-    expected="UC4.txt is not listed under newly_implemented",
-)
-def test_a_deleted_requirement_is_not_reported_as_newly_implemented(client, record):
-    """A requirement that disappeared between two runs did not become implemented."""
-    headers = sign_up(client)
-    project = new_project(client, headers)
-    first = analyse_and_save(client, headers, project)
-    requirements = source_ids(client, headers, project)["requirements"]
-    files = {name: text for name, text in REQUIREMENTS[2].items() if name != "UC4.txt"}
-    staged = stage(client, headers, project, requirements, files).json()
-    second = sync(client, headers, project, replacements={requirements: staged["upload_id"]})
-    head = second["job"]["result"]["configs"][0]["analysis_id"]
-
-    diff = get(client, headers, f"/analyses/{first['analysis_id']}/compare/{head}")
-    record(f"newly_implemented: {diff['newly_implemented']}; newly_unimplemented: {diff['newly_unimplemented']}")
-
-    assert "UC4.txt" not in diff["newly_implemented"]
+    assert [(s["role"], s["kind"]) for s in sides] == [("source", "requirements"), ("target", "code")]
+    assert list(bad.values()) == [404, 400, 400, 404]
 
 
 @case(

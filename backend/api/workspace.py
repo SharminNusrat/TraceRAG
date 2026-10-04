@@ -7,7 +7,6 @@ from pathlib import Path
 
 from api.schemas import AnalyzeRequest, AnalyzeResponse
 from core.content import relative_identifier
-from core.projects.uploads import safe_relative_path
 
 PROJECT_DATA_ROOT = Path("./chroma_data/projects")
 
@@ -30,30 +29,6 @@ def sanitize_project_id(project_id: str) -> str:
 def get_chroma_path(project_id: str) -> str:
     """Where this project's vectors are indexed."""
     return str(PROJECT_DATA_ROOT / sanitize_project_id(project_id) / "chroma")
-
-
-def upload_project_id(artifacts: list[dict], paths: list[str], explicit: str | None) -> str:
-    """A project id that is stable across runs of the same upload.
-
-    Uploads land in a fresh temp directory every time, so hashing the codebase
-    path (as the path-based endpoint does) would mint a new project - and a new
-    empty embedding cache - on every run. Hash the artifact manifest instead.
-    """
-    if explicit:
-        return sanitize_project_id(explicit)
-
-    parts = []
-    for artifact in artifacts:
-        members = sorted(
-            safe_relative_path(paths[index]).as_posix()
-            for index in (artifact.get("file_indexes") or [])
-            if isinstance(index, int) and index < len(paths)
-        )
-        parts.append(f"{artifact.get('kind')}|{artifact.get('name')}|{','.join(members)}")
-
-    digest = sha256("\n".join(sorted(parts)).encode("utf-8")).hexdigest()[:10]
-    label = sanitize_project_id(artifacts[0].get("name") or "project") if artifacts else "project"
-    return sanitize_project_id(f"{label}-{digest}")
 
 
 def relativize(identifier: str, roots: list[Path]) -> str:

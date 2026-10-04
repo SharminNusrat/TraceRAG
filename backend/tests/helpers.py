@@ -70,14 +70,13 @@ def build_pipeline(source: Path, target: Path, chroma: Path, **settings) -> Trac
         embedder=FakeEmbedder(),
         source_kind="requirements",
         target_kind="code",
-        config_key="unit-test",
         chroma_path=str(chroma),
         workspace_roots=[source, target],
         **settings,
     )
 
 
-# ----- The service layer, for the graph tests -----
+# ----- The service layer, for the tests below the API -----
 
 # Whole documents against methods: the configuration most tests run under.
 CONFIG = AnalysisConfig(
@@ -125,25 +124,24 @@ def result_of(sources, targets, links, unimplemented=()) -> AnalyzeResponse:
     )
 
 
-def save_run(db, project, result, version=None, config=CONFIG, kinds=("requirements", "code"),
-             renames=None, upload_id=None, keep_files=False):
-    """Save a run as the application does: its analysis, its files, then its graph."""
-    version = version or service.next_version(db, project)
+def save_run(db, project, result, config=None, version=None, settings=CONFIG,
+             kinds=("requirements", "code"), upload_id=None):
+    """Save a run as the application does: its run, its files, then its pins.
+
+    Without `config` the run starts a new analysis, as a New Analysis does.
+    Pass an earlier run's `config` to add to that analysis instead, and its
+    `version` as well for a re-run of the same files.
+    """
+    config = config or service.create_config(db, project, settings, kinds[0], kinds[1])
+    version = version or service.next_version(db, config)
     analysis = service.save_analysis(
-        db, project, note=None, config=config, result=result, execution_duration=1.0,
-        version_id=version.version_id, source_kind=kinds[0], target_kind=kinds[1],
+        db, config, version.version_id, note=None, result=result, execution_duration=1.0,
     )
     if upload_id:
-        service.claim_artifacts(db, analysis, upload_id, keep_files=keep_files)
-    service.update_graph(db, analysis, result, source_kind=kinds[0], target_kind=kinds[1], renames=renames)
+        service.claim_artifacts(db, version, upload_id)
+    service.keep_pins(db, analysis, result)
     db.refresh(analysis)
     return analysis
-
-
-def graph_edges(db, config_id: int) -> dict[tuple[str, str], object]:
-    """A configuration's links, keyed by the two identifiers each one joins."""
-    rows, _ = service.list_graph_edges(db, config_id, limit=1000)
-    return {(source.identifier, target.identifier): edge for edge, source, target in rows}
 
 
 def make_upload(sides: dict) -> str:
@@ -178,7 +176,7 @@ REQUIREMENTS = ("requirements", "reqs", files_in("req"))
 CODE = ("code", "code", files_in("code"))
 ARCHITECTURE_DOCUMENT = ("architecture_document", "architecture notes", {"arch.txt": files_in(".")["arch.txt"]})
 
-# The same run the graph tests use, as the form fields the upload endpoint takes.
+# The same run the tests below the API use, as the form fields the upload endpoint takes.
 SETTINGS = {
     "source_preprocessor": "single",
     "target_preprocessor": "method",
@@ -270,29 +268,63 @@ def get(client, headers, path: str, **params):
     return response.json()
 
 
-def source_ids(client, headers, project_id) -> dict[str, int]:
-    """The project's connected sources, as {kind: source id}."""
-    return {s["kind"]: s["source_id"] for s in get(client, headers, f"/projects/{project_id}/sources")}
+def analysis_path(project_id, config_id) -> str:
+    """Where one analysis's endpoints live."""
+    return f"/projects/{project_id}/configs/{config_id}"
 
 
-def stage(client, headers, project_id, source_id, files: dict[str, str]):
-    """Hand over new files for an uploaded source, ready for the next sync."""
+def side_ids(client, headers, project_id, config_id) -> dict[str, int]:
+    """An analysis's two sides, as {role: source id}."""
+    return {
+        side["role"]: side["source_id"]
+        for side in get(client, headers, f"{analysis_path(project_id, config_id)}/sources")
+    }
+
+
+def stage(client, headers, project_id, config_id, source_id, files: dict[str, str]):
+    """Hand over the complete current file set of one side, ready for an update."""
     return client.post(
-        f"/projects/{project_id}/sources/{source_id}/files", headers=headers,
+        f"{analysis_path(project_id, config_id)}/sources/{source_id}/files", headers=headers,
         data={"file_paths": json.dumps(list(files))},
         files=[("files", (Path(path).name, text.encode("utf-8"), "text/plain")) for path, text in files.items()],
     )
 
 
-def sync(client, headers, project_id, source_kind="requirements", target_kind="code", **body) -> dict:
-    """Ask for a sync. Returns the answer, with the finished job under 'job' if one was started."""
-    response = client.post(f"/projects/{project_id}/sync", headers=headers, json={
-        "source_kind": source_kind, "target_kind": target_kind, **body,
-    })
+def sync(client, headers, project_id, config_id, **body) -> dict:
+    """Ask for an update. Returns the answer, with the finished job under 'job' if one was started."""
+    response = client.post(f"{analysis_path(project_id, config_id)}/sync", headers=headers, json=body)
     answer = {"status": response.status_code, **response.json()}
     if answer.get("job_id"):
         answer["job"] = get(client, headers, f"/jobs/{answer['job_id']}")
     return answer
+
+
+def update_side(client, headers, project_id, config_id, role, files: dict[str, str], **body) -> dict:
+    """Upload a side's new files and update the analysis with them, as the Update dialog does."""
+    side = side_ids(client, headers, project_id, config_id)[role]
+    staged = stage(client, headers, project_id, config_id, side, files)
+    assert staged.status_code == 200, staged.text
+    answer = sync(client, headers, project_id, config_id,
+                  source_id=side, upload_id=staged.json()["upload_id"], **body)
+    return {**answer, "staged": staged.json()}
+
+
+def report(client, headers, project_id, config_id, **versions) -> dict:
+    """An analysis's change report: by default its newest version against the one before."""
+    return get(client, headers, f"{analysis_path(project_id, config_id)}/report", **versions)
+
+
+def states(answer: dict) -> dict[tuple[str, str], str]:
+    """A change report's links as {(source, target) names: state}."""
+    return {(short(link["source_id"]), short(link["target_id"])): link["state"] for link in answer["links"]}
+
+
+def versions_of(client, headers, project_id, config_id) -> list[tuple[int, int]]:
+    """An analysis's versions, newest first, as (number, runs in it)."""
+    return [
+        (v["version_number"], v["analysis_count"])
+        for v in get(client, headers, f"{analysis_path(project_id, config_id)}/versions")
+    ]
 
 
 def pending_uploads() -> set[str]:

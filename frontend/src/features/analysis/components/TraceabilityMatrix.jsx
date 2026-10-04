@@ -133,12 +133,12 @@ export function TraceabilityMatrix({ rows, summary, labels }) {
           <tbody>
             {visibleRows.map((row) => (
               <tr key={row.id}>
-                <td><code className="matrix-id">{row.requirement}</code></td>
+                <td><code className="matrix-id" title={row.requirementId}>{row.requirement}</code></td>
                 <td className="matrix-desc" title={row.requirementText}>{row.requirementText}</td>
                 <td>
                   {row.status === STATUS_MISSING
                     ? <span className="matrix-empty">—</span>
-                    : <code className="matrix-code" title={row.code}>{row.code}</code>}
+                    : <code className="matrix-code" title={row.codeId}>{row.code}</code>}
                 </td>
                 <td className="align-right">
                   {row.similarity === null ? (

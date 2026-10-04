@@ -39,12 +39,10 @@ class TracePipeline:
         target_preprocessor: Preprocessor,
         embedder: EmbeddingCreator,
         classifier: Classifier,
-        # What each side holds, and how this run reads it. Together they name
-        # the collections the elements are indexed in, so a project can hold
-        # several configurations at once without them overwriting each other.
+        # What each side holds. They name the collections the elements are
+        # indexed in.
         source_kind: str,
         target_kind: str,
-        config_key: str,
         chroma_path: str = "./chroma_data",
         n_results: int = 10,
         source_output_level: ElementLevel | None = None,
@@ -86,9 +84,7 @@ class TracePipeline:
         self.workspace_roots = workspace_roots or []
         self.on_progress = on_progress
         self.aggregator = ResultAggregator(source_output_level, target_output_level)
-        source_collection, target_collection = collection_names(
-            source_kind, target_kind, config_key
-        )
+        source_collection, target_collection = collection_names(source_kind, target_kind)
         logger.info(f"Indexing into {source_collection} and {target_collection}")
         self.source_store = ChromaStore(source_collection, chroma_path)
         self.target_store = ChromaStore(target_collection, chroma_path)

@@ -5,7 +5,7 @@ import time
 
 from sqlalchemy import func, select
 
-from core.db.models import Analysis, ElementLink, GraphEdge, GraphNode, ProjectConfig, ProjectSource
+from core.db.models import Analysis, Artifact, ElementLink, ProjectConfig, ProjectSource, ProjectVersion
 from core.projects import artifact_store, service
 from tests.helpers import make_project, make_upload, result_of, save_run, unique
 from tests.recorder import case
@@ -25,6 +25,14 @@ def digests_of(analysis) -> list[str]:
     return [file.sha256 for artifact in analysis.artifacts for file in artifact.files]
 
 
+def gone_or_retired(digests) -> tuple[list[bool], list[bool]]:
+    """Whether each blob is still stored, and whether it was retired to the trash."""
+    return (
+        [artifact_store.blob_path(d).exists() for d in digests],
+        [(artifact_store.TRASH_ROOT / d).exists() for d in digests],
+    )
+
+
 def upload_with(files: int = 2) -> str:
     return make_upload({
         "source": ("requirements", "reqs", {f"UC{n}.txt": unique("requirement") for n in range(files)}),
@@ -39,35 +47,37 @@ def keep_store_busy(db) -> None:
 
 @case(
     id="G-18",
-    feature="Garbage collection / shared blobs",
+    feature="Garbage collection / files belong to the version",
     level="graph",
     priority="Critical",
-    why="A re-run shares its original's files. Deleting the original must not delete files the re-run still needs, or it can never be re-run or downloaded again.",
-    preconditions="An analysis and a re-run of it that share the same 3 stored files, all older than the collector's grace period",
-    input="Delete the original analysis; then delete the re-run as well",
-    expected="After the first delete all 3 files remain. After the second, nothing references them and they are retired to the trash folder",
+    why="A version's files are what its runs read and what an update restores from. Deleting a run must never take them; deleting the analysis must let them go.",
+    preconditions="An analysis whose version 1 holds 3 stored files, with two runs, all older than the collector's grace period",
+    input="Delete both runs; then delete the analysis",
+    expected="After deleting both runs all 3 files remain and the version still lists them. After deleting the analysis nothing references them and they are retired to the trash folder",
 )
-def test_shared_files_survive_until_the_last_analysis_is_deleted(db, record):
-    """Stored files are only collected once no analysis references them."""
+def test_version_files_survive_their_runs_and_go_with_the_analysis(db, record):
+    """Stored files outlive the runs that read them, and are collected once their analysis is gone."""
     keep_store_busy(db)
     project = make_project(db)
     original = save_run(db, project, RESULT, upload_id=upload_with())
-    rerun = save_run(db, project, RESULT)
-    service.copy_artifacts(db, original, rerun)
+    rerun = save_run(db, project, RESULT, config=original.config, version=original.version)
     digests = digests_of(original)
     age(digests)
+    config = original.config
 
     service.delete_analysis(db, original)
-    after_first = [artifact_store.blob_path(d).exists() for d in digests]
-    record(f"after deleting the original: {sum(after_first)} of {len(digests)} files still stored")
-
     service.delete_analysis(db, db.get(Analysis, rerun.analysis_id))
-    after_second = [artifact_store.blob_path(d).exists() for d in digests]
-    in_trash = [(artifact_store.TRASH_ROOT / d).exists() for d in digests]
-    record(f"after deleting the re-run: {sum(after_second)} still stored, {sum(in_trash)} retired to trash")
+    service.collect_garbage(db)
+    after_runs, _ = gone_or_retired(digests)
+    listed = sum(a.file_count for a in service.latest_version(db, config).artifacts)
+    record(f"after deleting both runs: {sum(after_runs)} of {len(digests)} files still stored, version lists {listed}")
 
-    assert all(after_first)
-    assert not any(after_second) and all(in_trash)
+    service.delete_config(db, config)
+    stored, in_trash = gone_or_retired(digests)
+    record(f"after deleting the analysis: {sum(stored)} still stored, {sum(in_trash)} retired to trash")
+
+    assert all(after_runs) and listed == len(digests)
+    assert not any(stored) and all(in_trash)
 
 
 @case(
@@ -116,9 +126,9 @@ def test_collector_refuses_a_sweep_that_cannot_be_right(tmp_path, monkeypatch, r
     level="graph",
     priority="High",
     why="Deleting a project must remove everything it owned and nothing anyone else owns: no orphan rows, and no other project's files.",
-    preconditions="Two projects that uploaded byte-identical files (so they share blobs), each with a graph and stored pins",
+    preconditions="Two projects that uploaded byte-identical files (so they share blobs), each with stored pins",
     input="Delete the first project",
-    expected="Its analyses, sources, configurations, graph nodes, edges and pins are all gone; the second project's rows and its files are untouched",
+    expected="Its runs, sides, analyses, versions, file sets and pins are all gone; the second project's analysis, pins and files are untouched",
 )
 def test_deleting_a_project_removes_its_rows_but_not_shared_files(db, record):
     """A project's rows cascade away with it; files another project also holds stay."""
@@ -141,18 +151,18 @@ def test_deleting_a_project_removes_its_rows_but_not_shared_files(db, record):
         return db.scalar(select(func.count()).select_from(model).where(column == value))
 
     left = {
-        "analyses": count(Analysis, Analysis.project_id, project_id),
-        "sources": count(ProjectSource, ProjectSource.project_id, project_id),
-        "configurations": count(ProjectConfig, ProjectConfig.project_id, project_id),
-        "graph nodes": count(GraphNode, GraphNode.config_id, config),
-        "graph edges": count(GraphEdge, GraphEdge.config_id, config),
+        "runs": count(Analysis, Analysis.project_id, project_id),
+        "sides": count(ProjectSource, ProjectSource.config_id, config),
+        "analyses": count(ProjectConfig, ProjectConfig.project_id, project_id),
+        "versions": count(ProjectVersion, ProjectVersion.config_id, config),
+        "file sets": count(Artifact, Artifact.version_id, gone.version_id),
         "pins": count(ElementLink, ElementLink.config_id, config),
     }
     record(f"rows left for the deleted project: {left}")
     record(f"survivor: {len(service.list_analyses(db, survivor.user_id, survivor.project_id))} analysis, "
-           f"graph {service.graph_summary(db, kept.config_id)}, "
+           f"pins {len(service.pinned_links(db, kept.config_id))}, "
            f"files stored {sum(artifact_store.blob_exists(d) for d in digests)} of {len(digests)}")
 
     assert set(left.values()) == {0}
-    assert service.graph_summary(db, kept.config_id)["links_active"] == 1
+    assert service.pinned_links(db, kept.config_id) == {"UC1.txt": {"Auth.java::login()"}}
     assert all(artifact_store.blob_exists(d) for d in digests)

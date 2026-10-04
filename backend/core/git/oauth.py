@@ -24,8 +24,9 @@ logger = logging.getLogger(__name__)
 AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 TOKEN_URL = "https://github.com/login/oauth/access_token"
 
-# Read-only, and only what is needed: contents to fetch files, metadata to list
-# repositories and branches. Not write, not delete, not workflows.
+# `repo` is what lets private repositories be read - but it is not read-only:
+# it grants write access to them as well. GitHub OAuth apps have no read-only
+# repository scope; TraceRAG itself only ever reads.
 SCOPES = "repo:status read:org repo"
 
 # Long enough to sign in to GitHub and click Authorize, short enough that a

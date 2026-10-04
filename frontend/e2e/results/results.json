@@ -1,0 +1,1013 @@
+{
+  "config": {
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "D:\\Downloads\\TraceRAG\\frontend\\node_modules\\@playwright\\test\\cli.js",
+      "test"
+    ],
+    "configFile": "D:\\Downloads\\TraceRAG\\frontend\\playwright.config.js",
+    "rootDir": "D:/Downloads/TraceRAG/frontend/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": "D:\\Downloads\\TraceRAG\\frontend\\e2e\\global-teardown.js",
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/Downloads/TraceRAG/frontend/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "D:/Downloads/TraceRAG/frontend/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "e2e/results/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "analysis-page.spec.js",
+      "file": "analysis-page.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "UI-02 Analysis page: both sides, their files, and how each is updated",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "case",
+                  "description": "{\"id\":\"UI-02\",\"feature\":\"Analysis page / sides and update options\",\"priority\":\"High\",\"why\":\"Each side is updated on its own, and only code can come from GitHub. The page must show what each side holds and offer the right ways to update it.\",\"preconditions\":\"A saved requirements -> code analysis over UC1-UC4 and Auth.java, Loans.java (seeded through the API)\",\"input\":\"Open the analysis page; open Update on the code side, then on the requirements side\",\"expected\":\"Two side cards listing their files, each with an Update button. The code side offers Upload files and Connect (GitHub); the requirements side offers Upload files only\"}"
+                },
+                {
+                  "type": "actual",
+                  "description": "requirements side files: UC1.txt,UC2.txt,UC3.txt,UC4.txt"
+                },
+                {
+                  "type": "actual",
+                  "description": "code side files: Auth.java,Loans.java"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-02-analysis-page.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "code side offers: Upload files,Connect"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-02-update-code-side.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "requirements side offers: Upload files"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-02-update-requirements-side.png"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4944,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T18:47:59.017Z",
+                  "annotations": [
+                    {
+                      "type": "case",
+                      "description": "{\"id\":\"UI-02\",\"feature\":\"Analysis page / sides and update options\",\"priority\":\"High\",\"why\":\"Each side is updated on its own, and only code can come from GitHub. The page must show what each side holds and offer the right ways to update it.\",\"preconditions\":\"A saved requirements -> code analysis over UC1-UC4 and Auth.java, Loans.java (seeded through the API)\",\"input\":\"Open the analysis page; open Update on the code side, then on the requirements side\",\"expected\":\"Two side cards listing their files, each with an Update button. The code side offers Upload files and Connect (GitHub); the requirements side offers Upload files only\"}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "requirements side files: UC1.txt,UC2.txt,UC3.txt,UC4.txt"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "code side files: Auth.java,Loans.java"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-02-analysis-page.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "code side offers: Upload files,Connect"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-02-update-code-side.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "requirements side offers: Upload files"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-02-update-requirements-side.png"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dab16cac642c5623a2f5-33175849992637813ff0",
+          "file": "analysis-page.spec.js",
+          "line": 16,
+          "column": 1
+        },
+        {
+          "title": "UI-03 Update: identical files change nothing, a cosmetic edit makes v2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "case",
+                  "description": "{\"id\":\"UI-03\",\"feature\":\"Update dialog / no change, then a small edit\",\"priority\":\"Critical\",\"why\":\"Uploading the same files again is common and must not make an empty version; a real edit must show what changed before it is applied and then appear in the history.\",\"preconditions\":\"A saved requirements -> code analysis at v1 (seeded through the API)\",\"input\":\"Update the requirements side with exactly the same 4 files. Then update it again with UC1.txt reworded (\\\"A visitor performs a login, with a passphrase.\\\") and press Update\",\"expected\":\"Same files: \\\"No file differs from what this side holds.\\\", the Update button disabled, still only v1. Edited file: the change summary lists 1 file modified before updating; afterwards the dialog reports version 2 and the version history lists v2 above v1\"}"
+                },
+                {
+                  "type": "actual",
+                  "description": "same files: \"No file differs from what this side holds.\"; Update enabled: false"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-03-update-identical-files.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "versions after identical files: 1"
+                },
+                {
+                  "type": "actual",
+                  "description": "change summary before updating: Files modified 1,Elements modified 1"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-03-update-cosmetic-edit-summary.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "after updating: \"Version 2: source side updated, 3 trace links.\""
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-03-update-cosmetic-edit-done.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "version history: v2,v1"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-03-version-history-v2.png"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3673,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T18:48:04.077Z",
+                  "annotations": [
+                    {
+                      "type": "case",
+                      "description": "{\"id\":\"UI-03\",\"feature\":\"Update dialog / no change, then a small edit\",\"priority\":\"Critical\",\"why\":\"Uploading the same files again is common and must not make an empty version; a real edit must show what changed before it is applied and then appear in the history.\",\"preconditions\":\"A saved requirements -> code analysis at v1 (seeded through the API)\",\"input\":\"Update the requirements side with exactly the same 4 files. Then update it again with UC1.txt reworded (\\\"A visitor performs a login, with a passphrase.\\\") and press Update\",\"expected\":\"Same files: \\\"No file differs from what this side holds.\\\", the Update button disabled, still only v1. Edited file: the change summary lists 1 file modified before updating; afterwards the dialog reports version 2 and the version history lists v2 above v1\"}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "same files: \"No file differs from what this side holds.\"; Update enabled: false"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-03-update-identical-files.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "versions after identical files: 1"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "change summary before updating: Files modified 1,Elements modified 1"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-03-update-cosmetic-edit-summary.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "after updating: \"Version 2: source side updated, 3 trace links.\""
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-03-update-cosmetic-edit-done.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "version history: v2,v1"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-03-version-history-v2.png"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dab16cac642c5623a2f5-a66c331ebdcb98d2ec8b",
+          "file": "analysis-page.spec.js",
+          "line": 56,
+          "column": 1
+        },
+        {
+          "title": "UI-07 GitHub connect dialog: connected, not connected, needs reconnect, token",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "case",
+                  "description": "{\"id\":\"UI-07\",\"feature\":\"Connect dialog / the three account states\",\"priority\":\"High\",\"why\":\"Connecting the code side to GitHub is how the demo fetches new commits. The dialog must offer what fits the account: the repository list when connected, a connect button when not, a reconnect button when the token died.\",\"preconditions\":\"A saved requirements -> code analysis. /github/connection and /github/repositories are answered by route mocks in the browser\",\"input\":\"Open Update on the code side, then Connect, three times: with the account connected (repository owner/library), not connected, and needing a reconnect. In the last, click \\\"Use an access token instead\\\"\",\"expected\":\"Connected: a Repository choice listing owner/library and no Access token field. Not connected: a \\\"Connect GitHub\\\" button and no repository field. Needs reconnect: \\\"Reconnect GitHub\\\". After \\\"Use an access token instead\\\": the Repository and Access token fields appear\"}"
+                },
+                {
+                  "type": "actual",
+                  "description": "connected: repositories offered owner/library (private); access token field: 0"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-07-connect-connected.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "not connected: buttons Connect GitHub,Use an access token instead,Cancel"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-07-connect-not-connected.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "needs reconnect: buttons Reconnect GitHub,Use an access token instead,Cancel"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-07-connect-needs-reconnect.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "after \"Use an access token instead\": Repository and Access token fields shown"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-07-connect-access-token.png"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2074,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T18:48:07.762Z",
+                  "annotations": [
+                    {
+                      "type": "case",
+                      "description": "{\"id\":\"UI-07\",\"feature\":\"Connect dialog / the three account states\",\"priority\":\"High\",\"why\":\"Connecting the code side to GitHub is how the demo fetches new commits. The dialog must offer what fits the account: the repository list when connected, a connect button when not, a reconnect button when the token died.\",\"preconditions\":\"A saved requirements -> code analysis. /github/connection and /github/repositories are answered by route mocks in the browser\",\"input\":\"Open Update on the code side, then Connect, three times: with the account connected (repository owner/library), not connected, and needing a reconnect. In the last, click \\\"Use an access token instead\\\"\",\"expected\":\"Connected: a Repository choice listing owner/library and no Access token field. Not connected: a \\\"Connect GitHub\\\" button and no repository field. Needs reconnect: \\\"Reconnect GitHub\\\". After \\\"Use an access token instead\\\": the Repository and Access token fields appear\"}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "connected: repositories offered owner/library (private); access token field: 0"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-07-connect-connected.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "not connected: buttons Connect GitHub,Use an access token instead,Cancel"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-07-connect-not-connected.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "needs reconnect: buttons Reconnect GitHub,Use an access token instead,Cancel"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-07-connect-needs-reconnect.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "after \"Use an access token instead\": Repository and Access token fields shown"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-07-connect-access-token.png"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dab16cac642c5623a2f5-1ad8fd1a3ffec711911c",
+          "file": "analysis-page.spec.js",
+          "line": 100,
+          "column": 1
+        },
+        {
+          "title": "UI-09 Update: a classifier failure shows an error and makes no version",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "case",
+                  "description": "{\"id\":\"UI-09\",\"feature\":\"Update dialog / the run fails\",\"priority\":\"High\",\"why\":\"Groq can stop answering in the middle of an update. The user must be told, and the analysis must stay as it was.\",\"preconditions\":\"A saved requirements -> code analysis at v1. The test server's fake classifier fails on any requirement containing CLASSIFIER-OUTAGE\",\"input\":\"Update the requirements side with UC1.txt changed to a text containing CLASSIFIER-OUTAGE, and press Update\",\"expected\":\"The dialog shows the error \\\"The classifier stopped answering.\\\" as an alert; after closing it the version history still lists only v1\"}"
+                },
+                {
+                  "type": "actual",
+                  "description": "error shown: \"The classifier stopped answering.\""
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-09-update-classifier-failed.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "versions afterwards: 1"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-09-version-history-unchanged.png"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3266,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T18:48:09.849Z",
+                  "annotations": [
+                    {
+                      "type": "case",
+                      "description": "{\"id\":\"UI-09\",\"feature\":\"Update dialog / the run fails\",\"priority\":\"High\",\"why\":\"Groq can stop answering in the middle of an update. The user must be told, and the analysis must stay as it was.\",\"preconditions\":\"A saved requirements -> code analysis at v1. The test server's fake classifier fails on any requirement containing CLASSIFIER-OUTAGE\",\"input\":\"Update the requirements side with UC1.txt changed to a text containing CLASSIFIER-OUTAGE, and press Update\",\"expected\":\"The dialog shows the error \\\"The classifier stopped answering.\\\" as an alert; after closing it the version history still lists only v1\"}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "error shown: \"The classifier stopped answering.\""
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-09-update-classifier-failed.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "versions afterwards: 1"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-09-version-history-unchanged.png"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dab16cac642c5623a2f5-9d2eb5ef44e98a27d36f",
+          "file": "analysis-page.spec.js",
+          "line": 162,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "new-analysis.spec.js",
+      "file": "new-analysis.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "UI-01 New Analysis: upload, run with progress, save as v1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "case",
+                  "description": "{\"id\":\"UI-01\",\"feature\":\"New Analysis / upload, run, save\",\"priority\":\"Critical\",\"why\":\"The first thing shown in the demo. If choosing files, running or saving fails in the browser, nothing after it can be shown.\",\"preconditions\":\"A signed-in user with one empty project (made through the API)\",\"input\":\"On New Analysis, pick UC1-UC4.txt, Auth.java and Loans.java from backend/tests/data with \\\"Select files\\\", go through Settings to Review, Run analysis; on the results page, Save results into the project\",\"expected\":\"The files become two artifacts, one per side, and Next is enabled. While running, the progress bar is shown. The results page appears, saving says \\\"Saved to <project>\\\", and the project lists the analysis as v1\"}"
+                },
+                {
+                  "type": "actual",
+                  "description": "artifacts: Requirements,Code; sides: source,target"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-01-new-analysis-files-chosen.png"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-01-new-analysis-review.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "progress bar visible while running: true"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-01-new-analysis-running.png"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-01-results.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "after saving: \"Saved to Demo 93404\""
+                },
+                {
+                  "type": "actual",
+                  "description": "project lists: \"Demo 93404v1\" - Requirements → Code · 3 trace links · reasoning classifier · 1 run"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-01-project-lists-v1.png"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3369,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T18:48:13.144Z",
+                  "annotations": [
+                    {
+                      "type": "case",
+                      "description": "{\"id\":\"UI-01\",\"feature\":\"New Analysis / upload, run, save\",\"priority\":\"Critical\",\"why\":\"The first thing shown in the demo. If choosing files, running or saving fails in the browser, nothing after it can be shown.\",\"preconditions\":\"A signed-in user with one empty project (made through the API)\",\"input\":\"On New Analysis, pick UC1-UC4.txt, Auth.java and Loans.java from backend/tests/data with \\\"Select files\\\", go through Settings to Review, Run analysis; on the results page, Save results into the project\",\"expected\":\"The files become two artifacts, one per side, and Next is enabled. While running, the progress bar is shown. The results page appears, saving says \\\"Saved to <project>\\\", and the project lists the analysis as v1\"}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "artifacts: Requirements,Code; sides: source,target"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-01-new-analysis-files-chosen.png"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-01-new-analysis-review.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "progress bar visible while running: true"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-01-new-analysis-running.png"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-01-results.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "after saving: \"Saved to Demo 93404\""
+                    },
+                    {
+                      "type": "actual",
+                      "description": "project lists: \"Demo 93404v1\" - Requirements → Code · 3 trace links · reasoning classifier · 1 run"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-01-project-lists-v1.png"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "81b524f638f78592860b-5cdfb9f1dc478cb461f1",
+          "file": "new-analysis.spec.js",
+          "line": 6,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "trace-links.spec.js",
+      "file": "trace-links.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "UI-04 Trace Links: an inserted sentence leaves every link valid",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "case",
+                  "description": "{\"id\":\"UI-04\",\"feature\":\"Trace Links / a sentence inserted\",\"priority\":\"Critical\",\"why\":\"Sentences are named by position, so one inserted sentence renames every one after it. The page the demo ends on must still call those links valid, not broken.\",\"preconditions\":\"A saved sentence-level analysis of UC.txt (login, logout, borrow sentences) against the code, at v1\",\"input\":\"On the analysis page, update the requirements with a sentence about account locking inserted after the first; follow \\\"Trace links\\\"; read the five counts\",\"expected\":\"v1 -> v2: Valid 3, Broken 0, No longer found 0\"}"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-04-update-inserted-sentence.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "counts v1 -> v2: {\"Valid\":3,\"No longer found\":0,\"Broken\":0,\"New\":0,\"Uncovered\":1}"
+                },
+                {
+                  "type": "actual",
+                  "description": "link states: Valid,Valid,Valid"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-04-trace-links-all-valid.png"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3464,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T18:48:16.535Z",
+                  "annotations": [
+                    {
+                      "type": "case",
+                      "description": "{\"id\":\"UI-04\",\"feature\":\"Trace Links / a sentence inserted\",\"priority\":\"Critical\",\"why\":\"Sentences are named by position, so one inserted sentence renames every one after it. The page the demo ends on must still call those links valid, not broken.\",\"preconditions\":\"A saved sentence-level analysis of UC.txt (login, logout, borrow sentences) against the code, at v1\",\"input\":\"On the analysis page, update the requirements with a sentence about account locking inserted after the first; follow \\\"Trace links\\\"; read the five counts\",\"expected\":\"v1 -> v2: Valid 3, Broken 0, No longer found 0\"}"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-04-update-inserted-sentence.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "counts v1 -> v2: {\"Valid\":3,\"No longer found\":0,\"Broken\":0,\"New\":0,\"Uncovered\":1}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "link states: Valid,Valid,Valid"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-04-trace-links-all-valid.png"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7b08667ea2b4f7696a3a-35ec446e71ea1f185552",
+          "file": "trace-links.spec.js",
+          "line": 27,
+          "column": 1
+        },
+        {
+          "title": "UI-05 Trace Links page: tabs, five groups, two versions, reasons, Show more",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "case",
+                  "description": "{\"id\":\"UI-05\",\"feature\":\"Trace Links / the page itself\",\"priority\":\"High\",\"why\":\"This page is where a reader sees what an update did. Each part of it - the groups, the version choice, the reasons and the list of changes - has to be there and readable, also for a large change.\",\"preconditions\":\"An analysis over 55 one-line requirement files at v2, where v2 edited all 55 and removed nothing (seeded through the API)\",\"input\":\"Open Trace Links for the analysis; read the tabs, the five counts, the version selectors and the reasons; switch to Changes and press \\\"Show more\\\"\",\"expected\":\"Tabs Links and Changes; five groups with counts (Valid, No longer found, Broken, New, Uncovered); two version selectors at v1 -> v2; every link gives a reason (\\\"Source changed\\\"); Changes lists 50 files first and \\\"Show more\\\" shows the other 5\"}"
+                },
+                {
+                  "type": "actual",
+                  "description": "tabs: Links,Changes; counts: {\"Valid\":55,\"No longer found\":0,\"Broken\":0,\"New\":0,\"Uncovered\":0}"
+                },
+                {
+                  "type": "actual",
+                  "description": "version selectors: v1,v2"
+                },
+                {
+                  "type": "actual",
+                  "description": "reasons shown: Source changed"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-05-trace-links-links-tab.png"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-05-trace-links-changes-tab.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "changes tab: 50 files, then 55 after \"Show more\""
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4074,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T18:48:20.011Z",
+                  "annotations": [
+                    {
+                      "type": "case",
+                      "description": "{\"id\":\"UI-05\",\"feature\":\"Trace Links / the page itself\",\"priority\":\"High\",\"why\":\"This page is where a reader sees what an update did. Each part of it - the groups, the version choice, the reasons and the list of changes - has to be there and readable, also for a large change.\",\"preconditions\":\"An analysis over 55 one-line requirement files at v2, where v2 edited all 55 and removed nothing (seeded through the API)\",\"input\":\"Open Trace Links for the analysis; read the tabs, the five counts, the version selectors and the reasons; switch to Changes and press \\\"Show more\\\"\",\"expected\":\"Tabs Links and Changes; five groups with counts (Valid, No longer found, Broken, New, Uncovered); two version selectors at v1 -> v2; every link gives a reason (\\\"Source changed\\\"); Changes lists 50 files first and \\\"Show more\\\" shows the other 5\"}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "tabs: Links,Changes; counts: {\"Valid\":55,\"No longer found\":0,\"Broken\":0,\"New\":0,\"Uncovered\":0}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "version selectors: v1,v2"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "reasons shown: Source changed"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-05-trace-links-links-tab.png"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-05-trace-links-changes-tab.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "changes tab: 50 files, then 55 after \"Show more\""
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7b08667ea2b4f7696a3a-06132d98042aa55ff310",
+          "file": "trace-links.spec.js",
+          "line": 55,
+          "column": 1
+        },
+        {
+          "title": "UI-06 Trace Links: a removed requirement file shows its link as Broken",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "case",
+                  "description": "{\"id\":\"UI-06\",\"feature\":\"Trace Links / a requirement removed\",\"priority\":\"Critical\",\"why\":\"\\\"Broken\\\" is what the user is told to act on. A link whose requirement was deleted must be listed there, with the missing end marked.\",\"preconditions\":\"A saved requirements -> code analysis over UC1-UC4 at v1, where UC3 is linked to borrow()\",\"input\":\"Update the requirements with UC1, UC2 and UC4 only; open Trace links; choose the Broken group\",\"expected\":\"Broken 1, Valid 2. The Broken group lists UC3.txt -> borrow, with UC3.txt marked \\\"no longer exists\\\"\"}"
+                },
+                {
+                  "type": "actual",
+                  "description": "removed file: UC3.txt (A reader can borrow a title from the catalogue.)"
+                },
+                {
+                  "type": "actual",
+                  "description": "counts: {\"Valid\":2,\"No longer found\":0,\"Broken\":1,\"New\":0,\"Uncovered\":1}"
+                },
+                {
+                  "type": "actual",
+                  "description": "broken group: \"Requirements UC3.txt no longer exists Code borrow(String title) Source changed\""
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-06-trace-links-broken.png"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3390,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T18:48:24.096Z",
+                  "annotations": [
+                    {
+                      "type": "case",
+                      "description": "{\"id\":\"UI-06\",\"feature\":\"Trace Links / a requirement removed\",\"priority\":\"Critical\",\"why\":\"\\\"Broken\\\" is what the user is told to act on. A link whose requirement was deleted must be listed there, with the missing end marked.\",\"preconditions\":\"A saved requirements -> code analysis over UC1-UC4 at v1, where UC3 is linked to borrow()\",\"input\":\"Update the requirements with UC1, UC2 and UC4 only; open Trace links; choose the Broken group\",\"expected\":\"Broken 1, Valid 2. The Broken group lists UC3.txt -> borrow, with UC3.txt marked \\\"no longer exists\\\"\"}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "removed file: UC3.txt (A reader can borrow a title from the catalogue.)"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "counts: {\"Valid\":2,\"No longer found\":0,\"Broken\":1,\"New\":0,\"Uncovered\":1}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "broken group: \"Requirements UC3.txt no longer exists Code borrow(String title) Source changed\""
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-06-trace-links-broken.png"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7b08667ea2b4f7696a3a-939eb21c09cf458ffb1e",
+          "file": "trace-links.spec.js",
+          "line": 103,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "uml-and-export.spec.js",
+      "file": "uml-and-export.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "UI-08 UML analysis: the graph and the link list show component names",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "case",
+                  "description": "{\"id\":\"UI-08\",\"feature\":\"Display names / a UML analysis on Trace Links\",\"priority\":\"High\",\"why\":\"A UML component's identifier is a counter and an XMI id (\\\"model.uml$0$_auth\\\"). Shown raw, the graph and the list are unreadable in the demo.\",\"preconditions\":\"A saved requirements -> architecture model analysis at component level over model.uml (seeded through the API)\",\"input\":\"Open Trace Links for the analysis; read the node labels of the graph and the target names in the link list\",\"expected\":\"The graph's nodes and the link list name the components Authentication and Lending; no label shown contains a \\\"$\\\"\"}"
+                },
+                {
+                  "type": "actual",
+                  "description": "graph labels: UC1.txt,UC2.txt,UC3.txt,Authentication,Lending"
+                },
+                {
+                  "type": "actual",
+                  "description": "link list targets: Authentication,Authentication,Lending"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-08-uml-trace-links-names.png"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1871,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T18:48:27.508Z",
+                  "annotations": [
+                    {
+                      "type": "case",
+                      "description": "{\"id\":\"UI-08\",\"feature\":\"Display names / a UML analysis on Trace Links\",\"priority\":\"High\",\"why\":\"A UML component's identifier is a counter and an XMI id (\\\"model.uml$0$_auth\\\"). Shown raw, the graph and the list are unreadable in the demo.\",\"preconditions\":\"A saved requirements -> architecture model analysis at component level over model.uml (seeded through the API)\",\"input\":\"Open Trace Links for the analysis; read the node labels of the graph and the target names in the link list\",\"expected\":\"The graph's nodes and the link list name the components Authentication and Lending; no label shown contains a \\\"$\\\"\"}"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "graph labels: UC1.txt,UC2.txt,UC3.txt,Authentication,Lending"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "link list targets: Authentication,Authentication,Lending"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-08-uml-trace-links-names.png"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "1f4fcb57a95e496bb732-9436e587356f2e11fc74",
+          "file": "uml-and-export.spec.js",
+          "line": 9,
+          "column": 1
+        },
+        {
+          "title": "UI-10 Export from the results page downloads named, non-empty files",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "case",
+                  "description": "{\"id\":\"UI-10\",\"feature\":\"Export / CSV and PDF of a UML analysis\",\"priority\":\"High\",\"why\":\"Exports are what leaves the tool and goes into a report. They must arrive, and must name UML components rather than print their raw ids.\",\"preconditions\":\"The saved UML analysis of UI-08, opened from its version history into the results page\",\"input\":\"Export -> CSV, then Export -> PDF\",\"expected\":\"Both downloads arrive and are not empty. The CSV's Target column holds Authentication or Lending, never a \\\"$\\\" id, and its last column keeps the raw ids. The PDF names the components too\"}"
+                },
+                {
+                  "type": "screenshot",
+                  "description": "e2e/screenshots/ui-10-results-page.png"
+                },
+                {
+                  "type": "actual",
+                  "description": "CSV traceability-matrix-2026-10-05-00-48.csv: 479 bytes; header Document,Description,Component,Similarity,Status,Document ID,Component ID"
+                },
+                {
+                  "type": "actual",
+                  "description": "CSV first row: UC2.txt,A signed-in visitor can logout at any time.,Authentication,0.14,Linked,UC2.txt,model.uml$0$_auth"
+                },
+                {
+                  "type": "actual",
+                  "description": "PDF traceability-matrix-2026-10-05-00-48.pdf: 8699 bytes; names in it: Authentication,Lending"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2075,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T18:48:29.390Z",
+                  "annotations": [
+                    {
+                      "type": "case",
+                      "description": "{\"id\":\"UI-10\",\"feature\":\"Export / CSV and PDF of a UML analysis\",\"priority\":\"High\",\"why\":\"Exports are what leaves the tool and goes into a report. They must arrive, and must name UML components rather than print their raw ids.\",\"preconditions\":\"The saved UML analysis of UI-08, opened from its version history into the results page\",\"input\":\"Export -> CSV, then Export -> PDF\",\"expected\":\"Both downloads arrive and are not empty. The CSV's Target column holds Authentication or Lending, never a \\\"$\\\" id, and its last column keeps the raw ids. The PDF names the components too\"}"
+                    },
+                    {
+                      "type": "screenshot",
+                      "description": "e2e/screenshots/ui-10-results-page.png"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "CSV traceability-matrix-2026-10-05-00-48.csv: 479 bytes; header Document,Description,Component,Similarity,Status,Document ID,Component ID"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "CSV first row: UC2.txt,A signed-in visitor can logout at any time.,Authentication,0.14,Linked,UC2.txt,model.uml$0$_auth"
+                    },
+                    {
+                      "type": "actual",
+                      "description": "PDF traceability-matrix-2026-10-05-00-48.pdf: 8699 bytes; names in it: Authentication,Lending"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "1f4fcb57a95e496bb732-ca855dd4d5ea2cd343f2",
+          "file": "uml-and-export.spec.js",
+          "line": 36,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-04T18:47:48.469Z",
+    "duration": 44207.732,
+    "expected": 10,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

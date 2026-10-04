@@ -2,21 +2,16 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../../../components/common/Button';
 import { createProject, listProjects, saveAnalysis } from '../api/projectsApi';
-import { sourcesReplacedBy } from '../../sync/api/syncApi';
-import { ReplaceSourcesDialog } from '../../sync/components/ReplaceSourcesDialog';
 
 const NEW_PROJECT = '__new__';
 
 /**
  * Picks the project a finished run should be filed under, creating one first
- * if the account has none. Closes itself on success and reports the saved
- * analysis back to the caller.
+ * if the account has none. The run is saved there as a new analysis of its
+ * own. Closes itself on success and reports the saved run back to the caller.
  */
-export function SaveAnalysisDialog({ draft, result, duration, kinds = [], onSaved, onClose }) {
+export function SaveAnalysisDialog({ draft, result, duration, onSaved, onClose }) {
   const [projects, setProjects] = useState(null);
-  // The chosen project's sources this run's files would replace, while the
-  // user is being asked whether that is what they want.
-  const [replacing, setReplacing] = useState(null);
   const [projectId, setProjectId] = useState(NEW_PROJECT);
   const [newName, setNewName] = useState('');
   const [note, setNote] = useState('');
@@ -44,22 +39,11 @@ export function SaveAnalysisDialog({ draft, result, duration, kinds = [], onSave
 
   const isNew = projectId === NEW_PROJECT;
 
-  const save = async (confirmed = false) => {
+  const save = async () => {
     setError(null);
     setPending(true);
 
     try {
-      // Filing this run under a project that already has these kinds puts its
-      // files in place of the project's sources, so that is asked about first.
-      if (!isNew && kinds.length && !confirmed) {
-        const replaced = await sourcesReplacedBy(Number(projectId), kinds);
-        if (replaced.length) {
-          setReplacing(replaced);
-          setPending(false);
-          return;
-        }
-      }
-
       const target = isNew
         ? await createProject({ name: newName.trim() })
         : { project_id: Number(projectId) };
@@ -81,16 +65,6 @@ export function SaveAnalysisDialog({ draft, result, duration, kinds = [], onSave
     event.preventDefault();
     save();
   };
-
-  if (replacing) {
-    return (
-      <ReplaceSourcesDialog
-        sources={replacing}
-        onConfirm={() => { setReplacing(null); save(true); }}
-        onCancel={() => setReplacing(null)}
-      />
-    );
-  }
 
   return (
     <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Save analysis">

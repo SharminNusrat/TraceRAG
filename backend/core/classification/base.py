@@ -1,4 +1,5 @@
 import logging
+import re
 from abc import ABC, abstractmethod
 from pydantic import BaseModel
 from core.cache import PersistentClassificationCache, question
@@ -8,6 +9,17 @@ logger = logging.getLogger(__name__)
 
 # What the model decided: whether the pair is linked, and why, when it says.
 Verdict = tuple[bool, str | None]
+
+
+def untagged_verdict(reply: str) -> bool:
+    """Whether a reply that left out the <trace> tag still says yes.
+
+    Read as whole words: searching for the letters instead finds a yes inside
+    "eyes" and "yesterday", which turns a plain no into a link. A reply that
+    says both is not an answer, and is read as no link.
+    """
+    words = set(re.findall(r"[a-z]+", reply.lower()))
+    return "yes" in words and "no" not in words
 
 
 class ClassificationResult(BaseModel):

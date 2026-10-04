@@ -2,7 +2,7 @@ import re
 from typing import Optional
 from core.cache import namespace_for
 from core.schemas import Element
-from core.classification.base import Classifier, Verdict
+from core.classification.base import Classifier, Verdict, untagged_verdict
 from core.classification.prompts import ReasoningPromptTemplate, format_prompt
 from core.classification.chat_provider import ChatProvider
 from core.classification.ollama_chat_provider import OllamaChatProvider
@@ -46,7 +46,7 @@ class ReasoningClassifier(Classifier):
         cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
 
         trace_match = re.search(r'<trace>(yes|no)</trace>', cleaned, re.IGNORECASE)
-        linked = trace_match.group(1).lower() == "yes" if trace_match else "yes" in cleaned.lower()
+        linked = trace_match.group(1).lower() == "yes" if trace_match else untagged_verdict(cleaned)
 
         explanation = None
         explanation_match = re.search(r'<explanation>(.*?)</explanation>', cleaned, re.DOTALL)

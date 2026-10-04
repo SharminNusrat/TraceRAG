@@ -186,15 +186,15 @@ def test_expansion_respects_depth_and_minimum_confidence(record):
     level="unit",
     priority="Medium",
     why="Each side's elements live in a collection. If both sides shared one, an element would be offered as a candidate for itself.",
-    input="requirements -> code, and requirements -> requirements, with the same configuration key",
-    expected="Two different collection names in both cases, each containing the configuration key",
+    input="requirements -> code, and requirements -> requirements",
+    expected="Two different collection names in both cases, each named after its kind",
 )
 def test_each_side_gets_its_own_collection(record):
     """The two sides of a run never share a collection, even when they hold the same kind."""
-    different = collection_names("requirements", "code", "abc123")
-    same = collection_names("requirements", "requirements", "abc123")
+    different = collection_names("requirements", "code")
+    same = collection_names("requirements", "requirements")
     record(f"requirements -> code: {different}")
     record(f"requirements -> requirements: {same}")
 
-    assert different == ("requirements_abc123", "code_abc123")
-    assert same[0] != same[1] and all("abc123" in name for name in same)
+    assert different == ("requirements_elements", "code_elements")
+    assert same[0] != same[1] and all(name.startswith("requirements") for name in same)

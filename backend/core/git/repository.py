@@ -1,6 +1,6 @@
 """Read-only access to a GitHub repository.
 
-Enough to answer the two questions a sync asks: what is the branch pointing at
+Enough to answer the two questions an update asks: what is the branch pointing at
 now, and give me the files at that commit. Nothing here writes to GitHub.
 
 The archive endpoint is used rather than `git clone`, so no git binary has to

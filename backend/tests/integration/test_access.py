@@ -1,13 +1,10 @@
 """Who may see and change what: accounts, other users' data, and anonymous callers."""
 
-import json
-
 from tests.helpers import (
-    SETTINGS, analyse_and_save, get, new_project, sign_up, source_ids, start_analysis, unique,
+    SETTINGS, analyse_and_save, analysis_path, get, new_project, side_ids, sign_up,
+    start_analysis, unique,
 )
 from tests.recorder import case
-
-PAIR = {"source_kind": "requirements", "target_kind": "code"}
 
 
 @case(
@@ -15,42 +12,45 @@ PAIR = {"source_kind": "requirements", "target_kind": "code"}
     feature="Access control / a second user",
     level="integration",
     priority="Critical",
-    why="Ids count up from 1, so they are guessable. One route that forgets to check the owner lets any user read, sync or delete another user's project.",
-    preconditions="User A owns a project with two saved runs, sources, a job and stored artifacts. User B is a different signed-in user",
-    input="As B, call every project, analysis, source, sync, artifact and job endpoint with A's ids (21 requests). Then repeat 5 of them with no login",
-    expected="Every request by B is refused (404, or 401/403) and none returns A's data. Anonymous requests get 401. B's own lists are empty. A's project, runs and sources are unchanged afterwards",
+    why="Ids count up from 1, so they are guessable. One route that forgets to check the owner lets any user read, update or delete another user's project.",
+    preconditions="User A owns a project with an analysis that has two saved runs, two sides, a job and stored artifacts. User B is a different signed-in user with a project of their own",
+    input="As B, call every project, analysis, side, update, run, artifact and job endpoint with A's ids, and A's analysis under B's own project id. Then repeat 5 of them with no login",
+    expected="Every request by B is refused (404, or 401/403) and none returns A's data. Anonymous requests get 401. B's own lists are empty. A's project, runs and sides are unchanged afterwards",
 )
 def test_a_second_user_cannot_reach_the_first_users_data(client, github, record):
     """Another signed-in user is refused on every endpoint that takes an id belonging to someone else."""
     owner, intruder = sign_up(client), sign_up(client)
     project = new_project(client, owner)
+    own_project = new_project(client, intruder)
     first = analyse_and_save(client, owner, project)
     second = client.post(f"/analyses/{first['analysis_id']}/rerun", headers=owner, json={}).json()
-    source = source_ids(client, owner, project)["requirements"]
+    config = first["config_id"]
+    sides = side_ids(client, owner, project, config)
     artifact = second["artifacts"][0]["artifact_id"]
     job = start_analysis(client, owner, project).json()["job_id"]
     a, b = first["analysis_id"], second["analysis_id"]
     file = [("files", ("UC1.txt", b"changed", "text/plain"))]
     save_body = {"config": SETTINGS, "result": first["result"]}
+    mine, theirs = analysis_path(project, config), analysis_path(own_project, config)
 
     attempts = [
         ("GET", f"/projects/{project}", {}),
         ("GET", f"/projects/{project}/configs", {}),
-        ("GET", f"/projects/{project}/versions", {}),
-        ("GET", f"/projects/{project}/graph", {}),
-        ("GET", f"/projects/{project}/sources", {}),
-        ("GET", f"/projects/{project}/pairs", {}),
-        ("GET", f"/projects/{project}/sync/status", {"params": PAIR}),
-        ("POST", f"/projects/{project}/sync", {"json": {**PAIR, "force": True}}),
+        ("GET", f"{mine}/report", {}),
+        ("GET", f"{mine}/versions", {}),
+        ("GET", f"{mine}/sources", {}),
+        ("GET", f"{mine}/sync/status", {}),
+        ("POST", f"{mine}/sync", {"json": {"source_id": sides["source"], "upload_id": "A" * 22}}),
+        ("POST", f"{mine}/sources/{sides['target']}/github", {"json": {"repository": "owner/library"}}),
+        ("POST", f"{mine}/sources/{sides['source']}/files", {"files": file}),
+        ("DELETE", mine, {}),
+        # A's analysis reached through B's own project.
+        ("GET", f"{theirs}/versions", {}),
+        ("POST", f"{theirs}/sources/{sides['source']}/files", {"files": file}),
         ("POST", f"/projects/{project}/analyses", {"json": save_body}),
-        ("POST", f"/projects/{project}/sources/github", {"json": {"kind": "code", "repository": "owner/library"}}),
-        ("POST", f"/projects/{project}/sources/{source}/files", {"files": file}),
-        ("POST", f"/projects/{project}/sources/{source}/reconnect", {}),
-        ("DELETE", f"/projects/{project}/sources/{source}", {}),
         ("GET", f"/analyses/{a}", {}),
-        ("GET", f"/analyses/{a}/compare/{b}", {}),
         ("POST", f"/analyses/{a}/rerun", {"json": {}}),
-        ("DELETE", f"/analyses/{a}", {}),
+        ("DELETE", f"/analyses/{b}", {}),
         ("GET", f"/artifacts/{artifact}/download", {}),
         ("GET", f"/jobs/{job}", {}),
         ("DELETE", f"/projects/{project}", {}),
@@ -59,15 +59,6 @@ def test_a_second_user_cannot_reach_the_first_users_data(client, github, record)
         f"{method} {path}": client.request(method, path, headers=intruder, **options).status_code
         for method, path, options in attempts
     }
-    # Running an analysis that reads A's stored requirements, from B's account.
-    statuses["POST /analyze/upload reading A's source"] = client.post("/analyze/upload", headers=intruder, data={
-        "artifacts": json.dumps([
-            {"id": "s", "name": "reqs", "kind": "requirements", "source_id": source},
-            {"id": "t", "name": "code", "kind": "code", "file_indexes": [0]},
-        ]),
-        "source_artifact_ids": '["s"]', "target_artifact_ids": '["t"]',
-        "file_paths": '["A.java"]', "analysis_mode": "project", "project_id": str(project),
-    }, files=[("files", ("A.java", b"class A {}", "text/plain"))]).status_code
 
     allowed = {name: status for name, status in statuses.items() if status not in (401, 403, 404)}
     record(f"{len(statuses)} requests as another user; status codes seen: {sorted(set(statuses.values()))}")
@@ -75,21 +66,21 @@ def test_a_second_user_cannot_reach_the_first_users_data(client, github, record)
 
     anonymous = {
         path: client.get(path).status_code
-        for path in (f"/projects/{project}", f"/analyses/{a}", f"/projects/{project}/sources",
+        for path in (f"/projects/{project}", f"/analyses/{a}", f"{mine}/sources",
                      f"/artifacts/{artifact}/download", "/projects")
     }
-    own_lists = (len(get(client, intruder, "/projects")), len(get(client, intruder, "/analyses")))
-    record(f"anonymous: {sorted(set(anonymous.values()))}; B's own (projects, analyses): {own_lists}")
+    own_lists = (len(get(client, intruder, "/configs")), len(get(client, intruder, "/analyses")))
+    record(f"anonymous: {sorted(set(anonymous.values()))}; B's own (analyses, runs): {own_lists}")
 
     intact = get(client, owner, f"/projects/{project}")
-    sources = get(client, owner, f"/projects/{project}/sources")
-    record(f"A's project afterwards: {len(intact['analyses'])} runs, {len(sources)} active sources")
+    sides_after = get(client, owner, f"{mine}/sources")
+    record(f"A's project afterwards: {len(intact['analyses'])} runs, {len(sides_after)} sides")
 
     assert allowed == {}
     assert set(statuses.values()) <= {404}, statuses
     assert set(anonymous.values()) == {401}
     assert own_lists == (0, 0)
-    assert len(intact["analyses"]) == 2 and len(sources) == 2
+    assert len(intact["analyses"]) == 2 and len(sides_after) == 2
 
 
 @case(

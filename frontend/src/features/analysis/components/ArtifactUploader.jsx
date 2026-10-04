@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import {
-  UploadCloud, FileText, Folder, FileArchive, GitBranch, X, Plus, Type,
+  UploadCloud, FileText, Folder, FileArchive, X, Plus, Type,
 } from 'lucide-react';
 import {
   SIDE_SOURCE,
@@ -12,9 +12,6 @@ import {
   kindForPath,
   resolveSides,
 } from '../api/capabilitiesApi';
-import { SourcePicker } from '../../sync/components/SourcePicker';
-import { sourceLocation } from '../../sync/api/syncApi';
-import { useAuth } from '../../auth/AuthContext';
 
 const SIDE_OPTIONS = [
   [SIDE_SOURCE, 'Trace from'],
@@ -59,7 +56,6 @@ function formatBytes(bytes) {
 }
 
 function ArtifactIcon({ artifact }) {
-  if (artifact.sourceId !== undefined) return <GitBranch size={16} strokeWidth={2} />;
   if (artifact.text !== undefined) return <Type size={16} strokeWidth={2} />;
   if (artifact.isFolder) return <Folder size={16} strokeWidth={2} />;
   if (artifact.entries.some((entry) => entry.path.toLowerCase().endsWith('.zip'))) {
@@ -68,15 +64,11 @@ function ArtifactIcon({ artifact }) {
   return <FileText size={16} strokeWidth={2} />;
 }
 
-export function ArtifactUploader({
-  artifacts, onArtifactsChange, capabilities, projectId, onProjectChange,
-}) {
-  const { user } = useAuth();
+export function ArtifactUploader({ artifacts, onArtifactsChange, capabilities }) {
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [pasting, setPasting] = useState(false);
-  const [picking, setPicking] = useState(false);
   const [skippedCount, setSkippedCount] = useState(0);
 
   const acceptAttribute = capabilities
@@ -150,30 +142,6 @@ export function ArtifactUploader({
     ]);
   };
 
-  /**
-   * A side taken from somewhere the project is connected to rather than
-   * uploaded. It carries no files: the server fetches it when the run starts.
-   */
-  const addSourceArtifact = (source) => {
-    const artifact = {
-      id: nextArtifactId(),
-      name: source.name,
-      kind: source.kind,
-      entries: [],
-      sourceId: source.source_id,
-      location: sourceLocation(source),
-    };
-    // Replaces anything already standing in for the same kind - a project
-    // takes each kind from one place, and so does a run.
-    const others = artifacts.filter(
-      (item) => item.sourceId === undefined || item.kind !== source.kind,
-    );
-    onArtifactsChange([
-      ...others,
-      { ...artifact, side: defaultSide(others, artifact, capabilities) },
-    ]);
-  };
-
   const removeArtifact = (id) =>
     onArtifactsChange(artifacts.filter((artifact) => artifact.id !== id));
 
@@ -232,37 +200,11 @@ export function ArtifactUploader({
         </div>
       </div>
 
-      {/* The second of the two ways to supply a side. A source belongs to a
-          project, so this needs an account - but not a project chosen in
-          advance: the picker asks for one when the run does not have it yet. */}
-      {user && (
-        <button type="button" className="button button-secondary source-option"
-                onClick={() => setPicking(true)}>
-          <GitBranch size={14} strokeWidth={2.2} /> Use a connected source instead
-        </button>
-      )}
-
       <button type="button" className="text-toggle" onClick={() => setPasting((value) => !value)}>
         {pasting ? 'Hide text input' : 'Or paste requirements text instead'}
       </button>
       {pasting && (
         <PasteBox onAdd={(text) => { addTextArtifact(text); setPasting(false); }} />
-      )}
-
-      {picking && (
-        <SourcePicker
-          projectId={projectId}
-          onClose={() => setPicking(false)}
-          // The picker may have settled which project this run belongs to, so
-          // it hands that back with the source it chose.
-          onPicked={(source, chosenProjectId) => {
-            if (chosenProjectId && chosenProjectId !== projectId) {
-              onProjectChange?.(chosenProjectId);
-            }
-            addSourceArtifact(source);
-            setPicking(false);
-          }}
-        />
       )}
 
       {artifacts.length > 0 && (
@@ -277,19 +219,14 @@ export function ArtifactUploader({
               <div className="file-row-name">
                 <b>{artifact.name}</b>
                 <small>
-                  {artifact.sourceId !== undefined
-                    ? `${artifact.location} · fetched when the run starts`
-                    : artifact.text !== undefined
-                      ? `${artifact.text.trim().length.toLocaleString()} characters`
-                      : `${artifact.entries.length} file${artifact.entries.length === 1 ? '' : 's'} · ${formatBytes(totalBytes(artifact))}`}
+                  {artifact.text !== undefined
+                    ? `${artifact.text.trim().length.toLocaleString()} characters`
+                    : `${artifact.entries.length} file${artifact.entries.length === 1 ? '' : 's'} · ${formatBytes(totalBytes(artifact))}`}
                 </small>
               </div>
               <select
                 value={artifact.kind ?? ''}
                 onChange={(event) => update(artifact.id, { kind: event.target.value })}
-                // A connected source supplies one kind, decided when it was
-                // connected. Changing it here would name files it does not hold.
-                disabled={artifact.sourceId !== undefined}
                 aria-label={`Artifact type for ${artifact.name}`}
               >
                 <option value="">Select type</option>

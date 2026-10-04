@@ -5,7 +5,7 @@ import { WorkflowNav } from '../components/common/WorkflowNav';
 import { Button } from '../components/common/Button';
 import { useAnalysis } from '../features/analysis/AnalysisContext';
 import { useAuth } from '../features/auth/AuthContext';
-import { normalizeResult } from '../features/analysis/api/analyzeApi';
+import { normalizeResult, sourceName, targetName } from '../features/analysis/api/analyzeApi';
 import { buildMatrixRows } from '../features/analysis/matrix';
 import { TraceabilityMatrix } from '../features/analysis/components/TraceabilityMatrix';
 import { TracePanels } from '../features/analysis/components/TracePanels';
@@ -189,7 +189,7 @@ export function ResultsPage() {
                     onClick={() => setSelected(index)}
                     key={item.source_id}
                   >
-                    <small>{item.source_id}</small>
+                    <small title={item.source_id}>{sourceName(item)}</small>
                     <b>{item.label}</b>
                     <span>
                       {Math.round(item.best.confidence * 100)}% · {item.links.length} match
@@ -207,7 +207,7 @@ export function ResultsPage() {
               <article className="trace-detail">
                 <header>
                   <div>
-                    <small>{link.source_id}</small>
+                    <small title={link.source_id}>{sourceName(link)}</small>
                     <h2>{requirement.label}</h2>
                   </div>
                   <span className={`confidence ${link.confidence_level}`}>
@@ -220,7 +220,7 @@ export function ResultsPage() {
                     <span><ArrowRight size={15} strokeWidth={2.2} /></span>
                     <section>
                       <small>Linked {target.lower}</small>
-                      <h3>{link.target_id}</h3>
+                      <h3 title={link.target_id}>{targetName(link)}</h3>
                     </section>
                     <b>{Math.round(link.confidence * 100)}%</b>
                   </div>
@@ -235,7 +235,7 @@ export function ResultsPage() {
                     {requirement.links.slice(1).map((other) => (
                       <div className="other-match" key={other.target_id}>
                         <div className="other-match-head">
-                          <code>{other.target_id}</code>
+                          <code title={other.target_id}>{targetName(other)}</code>
                           <span className={`matrix-score ${other.confidence_level}`}>
                             {other.confidence.toFixed(2)}
                           </span>
@@ -247,11 +247,11 @@ export function ResultsPage() {
                 )}
 
                 <div className="connection">
-                  <div><small>{source.singular.toUpperCase()}</small>{link.source_id}</div>
+                  <div title={link.source_id}><small>{source.singular.toUpperCase()}</small>{sourceName(link)}</div>
                   <i>→</i>
-                  <div className="code">
+                  <div className="code" title={link.target_id}>
                     <small>{target.singular.toUpperCase()}</small>
-                    {link.target_id.split('/').at(-1)}
+                    {link.target_name ?? link.target_id.split('/').at(-1)}
                   </div>
                 </div>
               </article>
@@ -276,7 +276,6 @@ export function ResultsPage() {
           draft={draft}
           result={result}
           duration={runMeta?.duration}
-          kinds={[runMeta?.sourceKind, runMeta?.targetKind].filter(Boolean)}
           onSaved={(analysis) => { setSaved(analysis); setSaving(false); }}
           onClose={() => setSaving(false)}
         />

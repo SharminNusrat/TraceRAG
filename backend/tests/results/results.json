@@ -1,165 +1,83 @@
 {
  "environment": {
-  "date": "2026-10-04 15:34",
+  "date": "2026-10-05 00:47",
   "os": "Windows 11 (build 10.0.26200)",
   "python": "3.11.15",
   "pytest": "9.1.1",
   "database": "PostgreSQL 18.3, database 'tracerag_test'",
-  "command": "python -m pytest -q",
+  "command": "python -m pytest -q --no-header -p no:cacheprovider",
   "blocked_at_import": [
    "185.199.108.133:443",
+   "185.199.109.133:443",
    "185.199.111.133:443",
-   "185.199.110.133:443",
-   "185.199.109.133:443"
+   "185.199.110.133:443"
   ]
  },
  "tests": [
   {
-   "nodeid": "tests/graph/test_artifacts_and_sources.py::test_claim_keeps_the_working_folder_only_when_asked",
-   "case": {
-    "id": "G-13",
-    "feature": "Artifact storage / claim_artifacts",
-    "level": "graph",
-    "priority": "Critical",
-    "why": "This is the exact cause of the multi-configuration sync bug: the first run's claim deleted the folder the next configuration still had to read.",
-    "preconditions": "None",
-    "input": "Claim one upload with keep_files=True, and another with the default",
-    "expected": "keep_files=True: 2 artifacts attached and the working folder still exists. Default: 2 attached and the folder is removed"
-   },
-   "description": "A sync asks for the files to stay until every configuration has run; an ordinary save does not.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.5116441999562085,
-   "observed": [
-    "keep_files=True: 2 artifacts, folder exists: True",
-    "default: 2 artifacts, folder exists: False"
-   ]
-  },
-  {
-   "nodeid": "tests/graph/test_artifacts_and_sources.py::test_claim_stores_blobs_sources_and_seals_the_version",
+   "nodeid": "tests/graph/test_artifacts_and_sources.py::test_claim_stores_the_version_files_and_the_sides",
    "case": {
     "id": "G-11",
     "feature": "Artifact storage / claim_artifacts",
     "level": "graph",
     "priority": "Critical",
-    "why": "Claiming is where uploaded bytes become permanent. Every later re-run, sync and download reads what this stored.",
+    "why": "Claiming is where uploaded bytes become permanent and where an analysis gets its two sides. Every later re-run, update and download reads what this stored.",
     "preconditions": "None",
-    "input": "An upload with 2 requirement files and 1 code file, claimed by a run in version 1",
-    "expected": "2 artifacts with 3 files, each file's blob on disk; 2 active upload sources each with a 16-character fingerprint; version 1 records both sources"
+    "input": "An upload with 2 requirement files and 1 code file, claimed for version 1 of a New Analysis",
+    "expected": "Version 1 holds 2 artifacts with 3 files, each file's blob on disk and each artifact an upload with a 16-character fingerprint; the analysis has a source side (requirements) and a target side (code); the working folder is removed"
    },
-   "description": "Claiming an upload stores its files by content, creates the project's sources and records them on the version.",
+   "description": "Claiming an upload stores its files by content as the version's file sets, and creates the analysis's sides.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.3334603998810053,
+   "duration": 0.3198421000270173,
    "observed": [
-    "artifacts: [('source', 'requirements', 2), ('target', 'code', 1)]",
+    "version 1 artifacts: [('source', 'requirements', 2, 'upload', '50d9cbac623279a8'), ('target', 'code', 1, 'upload', '2c4f70c3ebf18eaf')]",
     "blobs on disk: 3 of 3",
-    "sources: [('requirements', 'reqs', 'upload', '65c201a5e7c7e5cf'), ('code', 'code', 'upload', 'ebef2ff2642ef4e7')]",
-    "sources recorded on the version: 2"
+    "sides: [('source', 'requirements', 'reqs', 'upload'), ('target', 'code', 'code', 'upload')]",
+    "working folder left: False"
    ]
   },
   {
-   "nodeid": "tests/graph/test_artifacts_and_sources.py::test_new_upload_of_a_kind_replaces_the_old_source",
-   "case": {
-    "id": "G-12",
-    "feature": "Sources / one source per kind",
-    "level": "graph",
-    "priority": "High",
-    "why": "A kind has one source at a time. Two active sources of one kind leave a sync with no way to choose which to refresh.",
-    "preconditions": "A project whose requirements source is 'reqs' and code source is 'code'",
-    "input": "A second upload naming its requirements 'new reqs' (code unchanged); then an upload with requirements on both sides",
-    "expected": "'reqs' is disconnected and 'new reqs' active, code source reused. With the same kind on both sides, both of those sources stay active"
-   },
-   "description": "Uploading a kind under a new name takes that kind over; two sides of one kind are the one exception.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.7115857000462711,
-   "observed": [
-    "after the second upload: {'requirements:reqs': False, 'code:code': True, 'requirements:new reqs': True}",
-    "same kind on both sides: {'requirements:old SRS': True, 'requirements:new SRS': True}"
-   ]
-  },
-  {
-   "nodeid": "tests/graph/test_artifacts_and_sources.py::test_copied_artifacts_share_blobs_and_sources",
+   "nodeid": "tests/graph/test_artifacts_and_sources.py::test_a_rerun_reads_its_version_files_without_copying_them",
    "case": {
     "id": "G-14",
-    "feature": "Artifact storage / copy_artifacts",
+    "feature": "Artifact storage / files belong to the version",
     "level": "graph",
     "priority": "High",
-    "why": "A re-run and every later configuration in a sync point at the first run's files. They must share its blobs, not lose track of them.",
-    "preconditions": "An analysis that claimed an upload",
-    "input": "copy_artifacts from that analysis to a new one",
-    "expected": "The new analysis has 2 artifacts with the same file hashes and the same source ids; no new blob is written"
+    "why": "Every run of a version reads the same files. A re-run that copied the file list would make two lists that can drift apart, and pay rows for nothing.",
+    "preconditions": "A run that claimed an upload in version 1",
+    "input": "A re-run in the same analysis and version",
+    "expected": "The re-run reports the same 2 artifacts as the first run; no file row and no blob is added"
    },
-   "description": "Copying artifacts adds rows that point at the same stored files.",
+   "description": "Runs of one version share that version's files: a re-run adds a run, not files.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.3611412000609562,
+   "duration": 0.24692780000623316,
    "observed": [
-    "artifacts copied: 2; blobs before 20, after 20"
+    "artifacts: first run [3, 4], re-run [3, 4]",
+    "file rows before 6, after 6; blobs before 6, after 6"
    ]
   },
   {
-   "nodeid": "tests/graph/test_artifacts_and_sources.py::test_disconnect_keeps_recorded_sources_and_removes_unused_ones",
+   "nodeid": "tests/graph/test_artifacts_and_sources.py::test_two_analyses_never_share_a_side",
    "case": {
-    "id": "G-16",
-    "feature": "Sources / disconnect_source",
+    "id": "G-27",
+    "feature": "Sides / one analysis's sides are its own",
     "level": "graph",
-    "priority": "High",
-    "why": "A source a version recorded is history: deleting it would make two versions read as if nothing ever changed between them.",
+    "priority": "Critical",
+    "why": "The old model shared one source per kind across a project, so a new upload for one relation silently replaced the files of another. Each analysis now owns its sides and its files.",
     "preconditions": "None",
-    "input": "Disconnect a source recorded by a version, and a GitHub source connected but never synced",
-    "expected": "The recorded one is kept but inactive (returns False); the never-used one is deleted outright (returns True)"
+    "input": "Two New Analyses in one project, both uploading requirements (under different names) traced to code",
+    "expected": "Each analysis has its own source and target side; the first analysis's sides and the files its version holds are the same after the second upload"
    },
-   "description": "Disconnecting stands a source down, and only deletes it when no version ever recorded it.",
+   "description": "A second analysis's upload leaves the first analysis's sides and files exactly as they were.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.34328210004605353,
+   "duration": 0.29712129989638925,
    "observed": [
-    "recorded source removed outright: False; never-synced source removed outright: True",
-    "sources left (name: active): {'requirements:reqs': False, 'code:code': True}"
-   ]
-  },
-  {
-   "nodeid": "tests/graph/test_artifacts_and_sources.py::test_reconnect_takes_the_kind_back",
-   "case": {
-    "id": "G-15",
-    "feature": "Sources / reconnect_source",
-    "level": "graph",
-    "priority": "High",
-    "why": "Reconnecting must restore the one-source-per-kind rule in the other direction, or the project ends up with two active sources.",
-    "preconditions": "Requirements source 'reqs' was replaced by 'new reqs'",
-    "input": "reconnect_source on the old 'reqs' source",
-    "expected": "'reqs' active again and 'new reqs' disconnected; the code source untouched"
-   },
-   "description": "Reconnecting a source makes it the kind's only source again.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.3866259000496939,
-   "observed": [
-    "after reconnecting 'reqs': {'requirements:reqs': True, 'code:code': True, 'requirements:new reqs': False}"
-   ]
-  },
-  {
-   "nodeid": "tests/graph/test_artifacts_and_sources.py::test_pair_falls_behind_when_a_shared_source_moves_on",
-   "case": {
-    "id": "G-17",
-    "feature": "Pairs / list_pairs and side_is_behind",
-    "level": "graph",
-    "priority": "High",
-    "why": "A pair is what gets synced. If 'out of date' is wrong, a user either re-runs for nothing or trusts links computed on old requirements.",
-    "preconditions": "A project with requirements->code run on one set of files",
-    "input": "A second pair, requirements->architecture, uploaded with changed requirements under the same source name",
-    "expected": "Two pairs listed in the order first run. The requirements side of the first pair is now behind; its code side and the new pair are not"
-   },
-   "description": "Each pair of kinds is tracked separately, and knows when a source it shares has newer files.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.4033841999480501,
-   "observed": [
-    "pairs: [('requirements', 'code'), ('requirements', 'architecture')]",
-    "first pair behind, by kind: {'requirements': True, 'code': False}",
-    "second pair behind: [False, False]"
+    "first analysis (sides, files) before: ([(5, 'reqs'), (6, 'code')], [('source', 'de87fc3e2818bb61'), ('target', '5a37fd6b1268c156')])",
+    "first analysis (sides, files) after the second upload: ([(5, 'reqs'), (6, 'code')], [('source', 'de87fc3e2818bb61'), ('target', '5a37fd6b1268c156')])",
+    "second analysis's sides: [(7, 'second draft'), (8, 'code')]"
    ]
   },
   {
@@ -177,32 +95,10 @@
    "description": "A pair that was judged once is not asked about again, and gets the same verdict.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.01463680004235357,
+   "duration": 0.008176600094884634,
    "observed": [
     "first run: 2 model calls, links ['login', 'login-copy']",
     "second run: 0 model calls, links ['login', 'login-copy']"
-   ]
-  },
-  {
-   "nodeid": "tests/graph/test_caches_jobs_compare.py::test_two_runs_are_diffed_by_link",
-   "case": {
-    "id": "G-20",
-    "feature": "Comparison / compare_analyses",
-    "level": "graph",
-    "priority": "High",
-    "why": "The sync dialog's +added / -removed numbers and the Compare page come from this. Wrong counts misreport what a change did.",
-    "preconditions": "Base run: UC1->login (0.9), UC2->logout (0.8); UC3 unimplemented",
-    "input": "Head run: UC1->login at 0.72 (score and band changed), UC3->borrow new, UC2->logout gone; UC2 now unimplemented",
-    "expected": "added 1, removed 1, modified 1, unchanged 0; UC3 newly implemented, UC2 newly unimplemented; runs are comparable"
-   },
-   "description": "A link is identified by the pair it joins: new pairs are added, missing ones removed, changed ones modified.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.3616411000257358,
-   "observed": [
-    "summary: {'base_total': 2, 'head_total': 2, 'added': 1, 'removed': 1, 'modified': 1, 'unchanged': 0}",
-    "modified fields: ['similarity_score', 'confidence_level']",
-    "newly implemented ['UC3'], newly unimplemented ['UC2']"
    ]
   },
   {
@@ -212,15 +108,15 @@
     "feature": "Background jobs / access and recovery",
     "level": "graph",
     "priority": "High",
-    "why": "Job ids count up, so they are guessable. Only the owner or the token holder may read a job. And a job left 'running' by a crash blocks its project's next sync forever.",
+    "why": "Job ids count up, so they are guessable. Only the owner or the token holder may read a job. And a job left 'running' by a crash blocks its analysis's next update forever.",
     "preconditions": "None",
-    "input": "One job owned by user A. Read it as A, as user B, with its token, and with a wrong token. Then sweep unfinished jobs",
-    "expected": "A and the right token can read it; B and a wrong token cannot. While running it is the project's active job; after the sweep it is failed and no longer blocks"
+    "input": "One update job owned by user A. Read it as A, as user B, with its token, and with a wrong token. Then sweep unfinished jobs",
+    "expected": "A and the right token can read it; B and a wrong token cannot. While running it is the analysis's active job and no other analysis's; after the sweep it is failed and no longer blocks"
    },
    "description": "A job is visible to its owner or its token holder only, and is failed if the server stopped under it.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.5971917000133544,
+   "duration": 0.415220599854365,
    "observed": [
     "can read the job: {'owner': True, 'other user': False, 'right token': True, 'wrong token': False, 'nobody': False}",
     "swept 1 unfinished job(s); state now 'failed': The server stopped before this finished. Start it again."
@@ -241,7 +137,7 @@
    "description": "Embeddings are stored per text and per model namespace.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.017083600047044456,
+   "duration": 0.009003899991512299,
    "observed": [
     "own namespace: 2 of 2 found; other namespace: 0 found",
     "after overwriting: [0.9, 0.9]"
@@ -262,7 +158,7 @@
    "description": "An element whose text has a stored summary is not sent to the model again.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.014940900029614568,
+   "duration": 0.008767499937675893,
    "observed": [
     "chat calls: first 1, second 0, third 1",
     "summaries: ['Summary of item 1.', 'Summary of item 1.', 'Summary of item 2.']"
@@ -283,10 +179,10 @@
    "description": "One unbroken migration chain produces every table and column the code uses.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.12376170000061393,
+   "duration": 0.0736324000172317,
    "observed": [
-    "heads: ['e92b6d4a8c35']; database is at: e92b6d4a8c35",
-    "model tables: 17; columns missing from the database: none"
+    "heads: ['a1f0c7d3e5b9']; database is at: a1f0c7d3e5b9",
+    "model tables: 14; columns missing from the database: none"
    ]
   },
   {
@@ -296,38 +192,39 @@
     "feature": "Link pinning / record_element_links",
     "level": "graph",
     "priority": "Critical",
-    "why": "These rows are what the next sync re-offers to the classifier. Lose them and links silently drop out; keep stale ones and dead pairs are proposed forever.",
-    "preconditions": "A configuration with 2 stored pairs",
+    "why": "These rows are what the next update re-offers to the classifier. Lose them and links silently drop out; keep stale ones and dead pairs are proposed forever.",
+    "preconditions": "An analysis with 2 stored pairs",
     "input": "Record, in turn: the 2 pairs again with a duplicate; None; one new pair; an empty list",
     "expected": "Duplicate collapsed (2 rows); None leaves the 2 rows alone; a new list replaces them (1 row); an empty list clears them (0 rows)"
    },
    "description": "What is stored is always the latest run's pairs; 'no list' and 'empty list' mean different things.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.330907900002785,
+   "duration": 0.21325430006254464,
    "observed": [
     "rows stored after each step: {'2 pairs + 1 duplicate': 2, 'None': 2, '1 new pair': 1, 'empty list': 0}"
    ]
   },
   {
-   "nodeid": "tests/graph/test_configs_and_pins.py::test_same_settings_share_a_configuration_but_different_kinds_do_not",
+   "nodeid": "tests/graph/test_configs_and_pins.py::test_every_new_analysis_is_its_own_analysis",
    "case": {
     "id": "G-08",
-    "feature": "Configuration identity / get_or_create_config",
+    "feature": "Analysis identity / create_config",
     "level": "graph",
     "priority": "Critical",
-    "why": "A configuration row owns a graph. The same settings must find the same row, and a different pair of kinds must never share one.",
+    "why": "An analysis owns its versions and its pins. If a New Analysis were filed under an earlier one with the same settings, a new upload would become a later version of an unrelated analysis.",
     "preconditions": "None",
-    "input": "Save three runs with identical settings: requirements->code twice, then architecture_document->code",
-    "expected": "The first two share one configuration; the third gets its own; the project has 2 configurations with their kinds stored"
+    "input": "Save three New Analyses in one project: requirements->code twice with identical settings, then architecture_document->code",
+    "expected": "Three analyses, each at version 1 with its own runs; the project lists all three with their kinds"
    },
-   "description": "Runs are filed under one configuration per combination of settings and kinds.",
+   "description": "Identical settings do not make two New Analyses one analysis.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.3439968000166118,
+   "duration": 0.2142586000263691,
    "observed": [
-    "config ids: first 12, again 12, documents 13",
-    "stored: [('requirements', 'code', '8a45a58307219325'), ('architecture_document', 'code', '0eea3cf7b951e471')]"
+    "analysis ids: first 8, again 9, documents 10",
+    "version numbers: [1, 1, 1]",
+    "stored: [('requirements', 'code'), ('requirements', 'code'), ('architecture_document', 'code')]"
    ]
   },
   {
@@ -337,79 +234,79 @@
     "feature": "Link pinning / pinned_links",
     "level": "graph",
     "priority": "High",
-    "why": "The pipeline looks pins up by source identifier. The stored rows must come back grouped that way, per configuration.",
+    "why": "The pipeline looks pins up by source identifier. The stored rows must come back grouped that way, per analysis.",
     "preconditions": "A run whose classifier judged UC1 linked to login and to logout",
-    "input": "pinned_links() for that run's configuration, and for a second project's configuration",
+    "input": "pinned_links() for that run's analysis, and for a second project's analysis",
     "expected": "{'UC1.txt': {login, logout}} for the first; an empty map for the other"
    },
-   "description": "A configuration's stored pairs come back as source -> set of targets, and only its own.",
+   "description": "An analysis's stored pairs come back as source -> set of targets, and only its own.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.5854258998297155,
+   "duration": 0.40630560007411987,
    "observed": [
     "pins: {'UC1.txt': ['Auth.java::Auth::login()', 'Auth.java::Auth::logout()']}",
-    "another project's configuration: {}"
+    "another project's analysis: {}"
    ]
   },
   {
    "nodeid": "tests/graph/test_configs_and_pins.py::test_expansion_depth_is_stored_as_zero_for_a_non_code_target",
    "case": {
     "id": "G-09",
-    "feature": "Configuration identity / save_analysis",
+    "feature": "Analysis identity / create_config",
     "level": "graph",
     "priority": "High",
-    "why": "A run against a model does no dependency expansion. Storing depth 1 for it would claim work that never happened and split its configuration in two.",
+    "why": "A run against a model does no dependency expansion. Storing depth 1 for it would claim work that never happened.",
     "preconditions": "None",
     "input": "Save the same settings (depth 1) for requirements->code and for requirements->architecture",
-    "expected": "Stored depth is 1 for the code target and 0 for the architecture target, on both the analysis and its configuration"
+    "expected": "The stored depth is 1 for the code target and 0 for the architecture target"
    },
    "description": "The depth that is saved is the depth that was actually used.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.32957399985753,
+   "duration": 0.20567299996037036,
    "observed": [
-    "(analysis depth, configuration depth): {'code': (1, 1), 'architecture': (0, 0)}"
+    "stored depth per target: {'code': 1, 'architecture': 0}"
    ]
   },
   {
-   "nodeid": "tests/graph/test_configs_and_pins.py::test_versions_are_numbered_per_project",
+   "nodeid": "tests/graph/test_configs_and_pins.py::test_versions_are_numbered_per_analysis",
    "case": {
     "id": "G-10",
     "feature": "Versioning / next_version",
     "level": "graph",
     "priority": "High",
-    "why": "Version numbers are how users line up runs with the state of their artifacts. They must count up per project, not globally.",
+    "why": "Version numbers are how users line up runs with the state of their files. They must count up per analysis - never shared with another analysis, even in the same project.",
     "preconditions": "None",
-    "input": "Three versions in project A, then one in project B, then a fourth in A",
+    "input": "Three versions in analysis A, then one in analysis B of the same project, then a fourth in A",
     "expected": "A: 1, 2, 3, 4. B: 1"
    },
-   "description": "Each project counts its own versions from 1.",
+   "description": "Each analysis counts its own versions from 1.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.6058529000729322,
+   "duration": 0.2103168999310583,
    "observed": [
-    "project A: [1, 2, 3, 4]; project B: [1]"
+    "analysis A: [1, 2, 3, 4]; analysis B: [1]"
    ]
   },
   {
-   "nodeid": "tests/graph/test_garbage_collection.py::test_shared_files_survive_until_the_last_analysis_is_deleted",
+   "nodeid": "tests/graph/test_garbage_collection.py::test_version_files_survive_their_runs_and_go_with_the_analysis",
    "case": {
     "id": "G-18",
-    "feature": "Garbage collection / shared blobs",
+    "feature": "Garbage collection / files belong to the version",
     "level": "graph",
     "priority": "Critical",
-    "why": "A re-run shares its original's files. Deleting the original must not delete files the re-run still needs, or it can never be re-run or downloaded again.",
-    "preconditions": "An analysis and a re-run of it that share the same 3 stored files, all older than the collector's grace period",
-    "input": "Delete the original analysis; then delete the re-run as well",
-    "expected": "After the first delete all 3 files remain. After the second, nothing references them and they are retired to the trash folder"
+    "why": "A version's files are what its runs read and what an update restores from. Deleting a run must never take them; deleting the analysis must let them go.",
+    "preconditions": "An analysis whose version 1 holds 3 stored files, with two runs, all older than the collector's grace period",
+    "input": "Delete both runs; then delete the analysis",
+    "expected": "After deleting both runs all 3 files remain and the version still lists them. After deleting the analysis nothing references them and they are retired to the trash folder"
    },
-   "description": "Stored files are only collected once no analysis references them.",
+   "description": "Stored files outlive the runs that read them, and are collected once their analysis is gone.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.9961239999393001,
+   "duration": 0.5526234998833388,
    "observed": [
-    "after deleting the original: 3 of 3 files still stored",
-    "after deleting the re-run: 0 still stored, 3 retired to trash"
+    "after deleting both runs: 3 of 3 files still stored, version lists 3",
+    "after deleting the analysis: 0 still stored, 3 retired to trash"
    ]
   },
   {
@@ -427,7 +324,7 @@
    "description": "A sweep that would take most of the store, or that no database row justifies, is refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.03165020002052188,
+   "duration": 0.017000499996356666,
    "observed": [
     "files swept: {'nothing referenced': 0, '1 of 4 referenced': 0, '3 of 4 referenced': 1}",
     "left in the store: ['a', 'b', 'c', 'fresh']; in trash: ['d']"
@@ -441,123 +338,40 @@
     "level": "graph",
     "priority": "High",
     "why": "Deleting a project must remove everything it owned and nothing anyone else owns: no orphan rows, and no other project's files.",
-    "preconditions": "Two projects that uploaded byte-identical files (so they share blobs), each with a graph and stored pins",
+    "preconditions": "Two projects that uploaded byte-identical files (so they share blobs), each with stored pins",
     "input": "Delete the first project",
-    "expected": "Its analyses, sources, configurations, graph nodes, edges and pins are all gone; the second project's rows and its files are untouched"
+    "expected": "Its runs, sides, analyses, versions, file sets and pins are all gone; the second project's analysis, pins and files are untouched"
    },
    "description": "A project's rows cascade away with it; files another project also holds stay.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.4688203000696376,
+   "duration": 0.7277532001025975,
    "observed": [
-    "rows left for the deleted project: {'analyses': 0, 'sources': 0, 'configurations': 0, 'graph nodes': 0, 'graph edges': 0, 'pins': 0}",
-    "survivor: 1 analysis, graph {'nodes_present': 2, 'nodes_gone': 0, 'links_active': 1, 'links_stale': 0, 'links_broken': 0}, files stored 2 of 2"
+    "rows left for the deleted project: {'runs': 0, 'sides': 0, 'analyses': 0, 'versions': 0, 'file sets': 0, 'pins': 0}",
+    "survivor: 1 analysis, pins 1, files stored 2 of 2"
    ]
   },
   {
-   "nodeid": "tests/graph/test_graph_status.py::test_first_run_makes_every_link_active",
+   "nodeid": "tests/graph/test_migration_with_data.py::test_reset_migration_keeps_users_and_caches",
    "case": {
-    "id": "G-01",
-    "feature": "Living graph / update_graph",
-    "level": "graph",
-    "priority": "Critical",
-    "why": "The first run is what every later status is measured against. Wrong version stamps here make all history wrong.",
-    "preconditions": "None",
-    "input": "A first run in version 1: 2 requirements, 2 methods, 2 links",
-    "expected": "4 nodes present, 2 links active, and each link's first_seen and last_verified are version 1"
-   },
-   "description": "A first run records its elements as present and its links as active, stamped with its version.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.4224777000490576,
-   "observed": [
-    "summary: {'nodes_present': 4, 'nodes_gone': 0, 'links_active': 2, 'links_stale': 0, 'links_broken': 0}",
-    "statuses: {'UC2.txt -> logout()': 'active', 'UC1.txt -> login()': 'active'}"
-   ]
-  },
-  {
-   "nodeid": "tests/graph/test_graph_status.py::test_link_no_longer_found_becomes_stale",
-   "case": {
-    "id": "G-02",
-    "feature": "Living graph / update_graph",
-    "level": "graph",
-    "priority": "Critical",
-    "why": "'Stale' tells a user the classifier stopped finding a link whose two ends still exist. Mixing it up with 'broken' misreports what changed.",
-    "preconditions": "Version 1 has links UC1->login and UC2->logout",
-    "input": "Version 2: the same 4 elements, but only UC1->login is reported",
-    "expected": "UC1->login active and verified at v2; UC2->logout stale, still verified at v1, first seen at v1; no node gone"
-   },
-   "description": "A link the latest run did not report, between two elements that still exist, is stale - not broken, not deleted.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.43440379993990064,
-   "observed": [
-    "statuses after version 2: {'UC1.txt -> login()': 'active', 'UC2.txt -> logout()': 'stale'}",
-    "summary: {'nodes_present': 4, 'nodes_gone': 0, 'links_active': 1, 'links_stale': 1, 'links_broken': 0}"
-   ]
-  },
-  {
-   "nodeid": "tests/graph/test_graph_status.py::test_link_to_a_removed_element_becomes_broken",
-   "case": {
-    "id": "G-03",
-    "feature": "Living graph / update_graph",
-    "level": "graph",
-    "priority": "Critical",
-    "why": "'Broken' is the one status that always means something is wrong: a requirement whose code is gone. It must be raised, and never lost.",
-    "preconditions": "Version 1 has links UC1->login and UC2->logout",
-    "input": "Version 2: the logout() method no longer exists; UC2 has no link",
-    "expected": "UC2->logout is broken and kept; the logout node is marked gone (1 node gone); UC1->login stays active"
-   },
-   "description": "When one end of a link disappears, the link is kept and marked broken.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.4545042000245303,
-   "observed": [
-    "statuses after version 2: {'UC1.txt -> login()': 'active', 'UC2.txt -> logout()': 'broken'}",
-    "summary: {'nodes_present': 3, 'nodes_gone': 1, 'links_active': 1, 'links_stale': 0, 'links_broken': 1}"
-   ]
-  },
-  {
-   "nodeid": "tests/graph/test_graph_status.py::test_stale_link_found_again_keeps_its_history",
-   "case": {
-    "id": "G-04",
-    "feature": "Living graph / update_graph",
+    "id": "G-28",
+    "feature": "Database / the reset migration on a database with data",
     "level": "graph",
     "priority": "High",
-    "why": "History must survive a link going away and coming back: when it was first seen is a fact that a later run must not rewrite.",
-    "preconditions": "UC2->logout was active in version 1 and stale in version 2",
-    "input": "Version 3 reports UC2->logout again, with a new confidence of 0.75",
-    "expected": "Active again, last_verified = v3, first_seen still v1, confidence updated to 0.75; still one row for that link"
+    "why": "The demo machine's database was made before the redesign. The reset migration must keep every account and every cached embedding, summary and verdict - they cost model calls to rebuild - and start the project tables empty in their new shape.",
+    "preconditions": "A scratch database 'tracerag_migration_test', made for this test and dropped at its end",
+    "input": "Migrate the scratch database to the revision before the reset, insert a user, a project with an analysis, a version and a link, and one row in each of the three caches; then migrate to head",
+    "expected": "The database is at head. The user and the three cache rows are still there with their values. Every project table exists, is empty, and has the columns the models declare (the old graph tables are gone)"
    },
-   "description": "A link that comes back is the same link: reactivated, with its first sighting unchanged.",
+   "description": "Accounts and caches survive the reset migration; project tables come back empty in the new shape.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.4552238999167457,
+   "duration": 0.965967099997215,
    "observed": [
-    "UC2->logout: status active, confidence 0.75, first seen in the first run's version: True, last verified in the third run's version: True",
-    "links stored for this configuration: 2"
-   ]
-  },
-  {
-   "nodeid": "tests/graph/test_graph_status.py::test_renamed_file_keeps_its_links",
-   "case": {
-    "id": "G-05",
-    "feature": "Living graph / rename handling",
-    "level": "graph",
-    "priority": "High",
-    "why": "Moving a file changes every identifier in it. Without following the rename, an ordinary refactor shows every link on that file as broken.",
-    "preconditions": "Version 1 has links to methods in Auth.java",
-    "input": "Version 2: Auth.java moved to security/Auth.java, with the rename map {'Auth.java': 'security/Auth.java'}; then the same move without the map, in a second project",
-    "expected": "With the map: both links active on the new path, no node gone, first_seen still v1. Without it: 2 links broken and 2 new ones created"
-   },
-   "description": "Elements follow their file to its new path, so their links stay active instead of breaking.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.821286000078544,
-   "observed": [
-    "with the rename map: {'nodes_present': 4, 'nodes_gone': 0, 'links_active': 2, 'links_stale': 0, 'links_broken': 0}",
-    "links now on: ['security/Auth.java::Auth::login()', 'security/Auth.java::Auth::logout()']",
-    "without the rename map: {'nodes_present': 4, 'nodes_gone': 2, 'links_active': 2, 'links_stale': 0, 'links_broken': 2}"
+    "migrated e92b6d4a8c35 -> a1f0c7d3e5b9 (head a1f0c7d3e5b9)",
+    "kept: {'users': [['old@example.com']], 'embedding_cache': [[[0.25, 0.5]]], 'summary_cache': [['a summary']], 'classification_cache': [[True]]}",
+    "project table rows after: {'projects': 0, 'project_configs': 0, 'project_versions': 0, 'project_sources': 0, 'analyses': 0, 'trace_links': 0, 'artifacts': 0, 'artifact_files': 0, 'element_links': 0, 'jobs': 0}; tables whose columns differ from the models: none",
+    "old graph tables still there: none"
    ]
   },
   {
@@ -567,20 +381,20 @@
     "feature": "Access control / a second user",
     "level": "integration",
     "priority": "Critical",
-    "why": "Ids count up from 1, so they are guessable. One route that forgets to check the owner lets any user read, sync or delete another user's project.",
-    "preconditions": "User A owns a project with two saved runs, sources, a job and stored artifacts. User B is a different signed-in user",
-    "input": "As B, call every project, analysis, source, sync, artifact and job endpoint with A's ids (21 requests). Then repeat 5 of them with no login",
-    "expected": "Every request by B is refused (404, or 401/403) and none returns A's data. Anonymous requests get 401. B's own lists are empty. A's project, runs and sources are unchanged afterwards"
+    "why": "Ids count up from 1, so they are guessable. One route that forgets to check the owner lets any user read, update or delete another user's project.",
+    "preconditions": "User A owns a project with an analysis that has two saved runs, two sides, a job and stored artifacts. User B is a different signed-in user with a project of their own",
+    "input": "As B, call every project, analysis, side, update, run, artifact and job endpoint with A's ids, and A's analysis under B's own project id. Then repeat 5 of them with no login",
+    "expected": "Every request by B is refused (404, or 401/403) and none returns A's data. Anonymous requests get 401. B's own lists are empty. A's project, runs and sides are unchanged afterwards"
    },
    "description": "Another signed-in user is refused on every endpoint that takes an id belonging to someone else.",
    "outcome": "passed",
    "failure": null,
-   "duration": 2.1870522999670357,
+   "duration": 1.2538963000988588,
    "observed": [
-    "21 requests as another user; status codes seen: [404]",
+    "19 requests as another user; status codes seen: [404]",
     "requests that were NOT refused: none",
-    "anonymous: [401]; B's own (projects, analyses): (0, 0)",
-    "A's project afterwards: 2 runs, 2 active sources"
+    "anonymous: [401]; B's own (analyses, runs): (0, 0)",
+    "A's project afterwards: 2 runs, 2 sides"
    ]
   },
   {
@@ -598,7 +412,7 @@
    "description": "An anonymous run's job and result can be read by the token holder and nobody else.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.6830440000630915,
+   "duration": 0.3540349000832066,
    "observed": [
     "{'right token': 200, 'wrong token': 404, 'no token': 404, 'another signed-in user': 404}"
    ]
@@ -616,14 +430,13 @@
     "expected": "The request is refused (401 or 403) and the file's contents are not returned"
    },
    "description": "An anonymous caller must not be able to make the server read a folder of its choosing.",
-   "outcome": "failed",
-   "failure": "AssertionError: anonymous request was answered with 200\nassert 200 in (401, 403)\n +  where 200 = <Response [200 OK]>.status_code",
-   "duration": 0.1948545000050217,
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.00770279997959733,
    "observed": [
-    "status without login: 200",
-    "file contents returned in the response: True"
-   ],
-   "failed_during": "call"
+    "status without login: 401",
+    "file contents returned in the response: False"
+   ]
   },
   {
    "nodeid": "tests/integration/test_access.py::test_accounts_register_login_and_identify",
@@ -640,35 +453,35 @@
    "description": "An account is created once, signs in only with its password, and is identified by its token.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.0983067998895422,
+   "duration": 0.6080773001303896,
    "observed": [
     "{'register': 201, 'same email in capitals': 409, 'login': 200, 'wrong password': 401, '7-character password': 422, 'me, valid token': 200, 'me, no token': 401, 'me, garbage token': 401}",
     "/auth/me returns: ['created_at', 'email', 'full_name', 'user_id']"
    ]
   },
   {
-   "nodeid": "tests/integration/test_analysis_flow.py::test_new_analysis_is_run_saved_and_graphed",
+   "nodeid": "tests/integration/test_analysis_flow.py::test_new_analysis_is_run_and_saved",
    "case": {
     "id": "I-03",
     "feature": "New analysis / upload, run, save",
     "level": "integration",
     "priority": "Critical",
-    "why": "This is the first thing shown in the demo. If any step between upload and saved graph is wrong, nothing after it can work.",
+    "why": "This is the first thing shown in the demo. If any step between upload and the saved analysis is wrong, nothing after it can work.",
     "preconditions": "A signed-in user with an empty project",
     "input": "Upload 4 use cases and 2 Java files to the project, run (whole document -> method, top-k 10), then save",
-    "expected": "Job succeeds with links UC1->login, UC2->logout, UC3->borrow and UC4 unimplemented. Saving creates version 1 with 2 sources, 1 configuration (requirements->code), 3 active links, and removes the working folder"
+    "expected": "Job succeeds with links UC1->login, UC2->logout, UC3->borrow and UC4 unimplemented. Saving creates one analysis (requirements->code) at version 1 with 1 run and a source and a target side; its report lists 3 valid links and UC4 uncovered; the working folder is removed"
    },
-   "description": "A New Analysis goes from uploaded files to a saved version, sources, configuration and graph.",
+   "description": "A New Analysis goes from uploaded files to a new analysis with its version, sides and report.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8798462001141161,
+   "duration": 0.4040964999003336,
    "observed": [
     "links: [('UC1.txt', 'Auth.java::Auth::login'), ('UC2.txt', 'Auth.java::Auth::logout'), ('UC3.txt', 'Loans.java::Loans::borrow')]",
     "unimplemented: ['UC4.txt']",
-    "versions: [(1, 2, 1)] (number, sources, runs)",
-    "sources: [('requirements', 'reqs', 'upload', True), ('code', 'code', 'upload', True)]",
-    "configurations: [('requirements', 'code', 1)]",
-    "graph: {'nodes_present': 9, 'nodes_gone': 0, 'links_active': 3, 'links_stale': 0, 'links_broken': 0}",
+    "versions: [(1, 2, 1)] (number, sides, runs)",
+    "sides: [('source', 'requirements', 'reqs', 'upload'), ('target', 'code', 'code', 'upload')]",
+    "analyses: [('requirements', 'code', 1, 1)]",
+    "report: {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 1}; uncovered ['UC4.txt']",
     "working folders left: []"
    ]
   },
@@ -676,46 +489,45 @@
    "nodeid": "tests/integration/test_analysis_flow.py::test_rerun_repeats_the_run_in_the_same_version",
    "case": {
     "id": "I-05",
-    "feature": "Re-run / same configuration",
+    "feature": "Re-run / same files, same settings",
     "level": "integration",
     "priority": "Critical",
     "why": "Re-running must not invent a new version or lose the files: nothing about the artifacts changed, so the history must say so.",
     "preconditions": "A saved analysis in version 1",
-    "input": "POST /analyses/{id}/rerun with no body changes",
-    "expected": "201; the same 3 links; still exactly 1 version, now with 2 runs; the same configuration, now with 2 runs; the new run has its 2 artifacts; graph unchanged"
+    "input": "POST /analyses/{id}/rerun",
+    "expected": "201; the same 3 links; still exactly 1 version, now with 2 runs; still one analysis, now with 2 runs; the new run has its 2 artifacts; the report reads the new run and lists 3 valid links"
    },
-   "description": "A re-run with the original settings is a second run of the same version and configuration.",
+   "description": "A re-run is a second run of the same version of the same analysis.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.1490482999943197,
+   "duration": 0.5566003000130877,
    "observed": [
     "status 201; links: [('UC1.txt', 'Auth.java::Auth::login'), ('UC2.txt', 'Auth.java::Auth::logout'), ('UC3.txt', 'Loans.java::Loans::borrow')]",
     "versions (number, runs): [(1, 2)]",
-    "configurations (id, runs): [(31, 2)]",
+    "configurations (id, runs): [(24, 2)]",
     "artifacts on the re-run: [('source', 'requirements', True), ('target', 'code', True)]",
-    "graph: {'nodes_present': 9, 'nodes_gone': 0, 'links_active': 3, 'links_stale': 0, 'links_broken': 0}"
+    "report: read run 26, {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 1}"
    ]
   },
   {
-   "nodeid": "tests/integration/test_analysis_flow.py::test_rerun_with_other_settings_gets_its_own_configuration",
+   "nodeid": "tests/integration/test_analysis_flow.py::test_rerun_always_uses_the_analysis_settings",
    "case": {
-    "id": "I-06",
-    "feature": "Re-run / different configuration",
+    "id": "I-35",
+    "feature": "Re-run / settings cannot change",
     "level": "integration",
     "priority": "High",
-    "why": "Trying another output level on the same files is a core use. It must get its own graph and must not be mistaken for a change to the artifacts.",
+    "why": "Settings belong to the analysis. A re-run that quietly used other settings would put links of a different granularity into the same history and make every version comparison meaningless.",
     "preconditions": "A saved analysis reported at method level",
-    "input": "Re-run it with target output level 'file' instead of 'function'",
-    "expected": "A second configuration with its own graph; links are per file (UC1->Auth.java, UC2->Auth.java, UC3->Loans.java); still 1 version; the first configuration's graph is untouched"
+    "input": "POST /analyses/{id}/rerun with a body that also carries a config asking for file level",
+    "expected": "201; the run uses the analysis's own settings (links still per method, the reported config still says function); still one analysis with 1 version and 2 runs"
    },
-   "description": "Different settings on the same files make a new configuration and graph, in the same version.",
+   "description": "Whatever a re-run request carries, the run uses its analysis's settings.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.0804775001015514,
+   "duration": 0.5311455000191927,
    "observed": [
-    "links at file level: [('UC1.txt', 'Auth.java'), ('UC2.txt', 'Auth.java'), ('UC3.txt', 'Loans.java')]",
-    "configurations: [(32, 'function'), (33, 'file')]",
-    "graph per configuration: {'function': {'nodes_present': 9, 'nodes_gone': 0, 'links_active': 3, 'links_stale': 0, 'links_broken': 0}, 'file': {'nodes_present': 6, 'nodes_gone': 0, 'links_active': 3, 'links_stale': 0, 'links_broken': 0}}"
+    "status 201; links: [('UC1.txt', 'Auth.java::Auth::login'), ('UC2.txt', 'Auth.java::Auth::logout'), ('UC3.txt', 'Loans.java::Loans::borrow')]",
+    "reported target level: function; analyses: 1"
    ]
   },
   {
@@ -728,37 +540,37 @@
     "why": "A visitor can run without an account and save afterwards. The files uploaded for that run must still be there to claim.",
     "preconditions": "None",
     "input": "Run an upload anonymously in session mode; then sign up and save the result into a new project",
-    "expected": "The anonymous job succeeds with 3 links. Saving returns 201 with 2 artifacts claimed, and the project gets 2 sources and version 1"
+    "expected": "The anonymous job succeeds with 3 links. Saving returns 201 with 2 artifacts claimed, and the new analysis gets 2 sides and version 1"
    },
    "description": "A run made without an account keeps its files long enough to be saved once the user signs in.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.7382070999592543,
+   "duration": 0.38316389988176525,
    "observed": [
     "anonymous run: 3 links, upload id present: True",
-    "save: 201, artifacts claimed: 2, sources: 2"
+    "save: 201, artifacts claimed: 2, sides: 2"
    ]
   },
   {
-   "nodeid": "tests/integration/test_analysis_flow.py::test_architecture_document_is_its_own_kind_with_its_own_graph",
+   "nodeid": "tests/integration/test_analysis_flow.py::test_architecture_document_is_its_own_analysis",
    "case": {
     "id": "I-27",
     "feature": "Artifact kinds / architecture document",
     "level": "integration",
     "priority": "High",
-    "why": "Architecture documents use the same preprocessors as requirements. Without the kinds in the key, the two relations would share one configuration and one graph.",
-    "preconditions": "A project with a saved requirements->code run",
+    "why": "Architecture documents use the same preprocessors as requirements. The two relations must stay two analyses, each with its own kinds and links.",
+    "preconditions": "A project with a saved requirements->code analysis",
     "input": "In the same project, run architecture_document->code with exactly the same settings",
-    "expected": "2 configurations with different keys, 2 pairs, each with its own graph: 3 links from requirements, and arch.txt linked to login, logout and borrow"
+    "expected": "2 analyses with their own kinds, each reporting its own links: 3 from requirements, and arch.txt linked to login, logout and borrow"
    },
-   "description": "An architecture document traced to code is a separate relation from requirements traced to code.",
+   "description": "An architecture document traced to code is a separate analysis from requirements traced to code.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.084315400221385,
+   "duration": 0.5689644998637959,
    "observed": [
     "document links: [('arch.txt', 'Auth.java::Auth::login'), ('arch.txt', 'Auth.java::Auth::logout'), ('arch.txt', 'Loans.java::Loans::borrow')]",
-    "configurations: [('requirements', 'code', '8a45a58307219325'), ('architecture_document', 'code', '0eea3cf7b951e471')]",
-    "pairs: [('requirements', 'code'), ('architecture_document', 'code')]; active links per graph: {'requirements': 3, 'architecture_document': 3}"
+    "analyses: [(27, 'requirements', 'code'), (28, 'architecture_document', 'code')]",
+    "valid links per analysis: {'requirements': 3, 'architecture_document': 3}"
    ]
   },
   {
@@ -768,17 +580,17 @@
     "feature": "Configuration identity / expansion depth through the API",
     "level": "integration",
     "priority": "Medium",
-    "why": "The UI can still send depth 1 for a non-code target. What is stored must be what happened, or the same run files under two configurations.",
+    "why": "The UI can still send depth 1 for a non-code target. What is stored must be what happened.",
     "preconditions": "None",
     "input": "Run requirements->architecture_document, sending dependency_expansion_depth=1",
-    "expected": "The saved configuration and the saved analysis both report depth 0"
+    "expected": "The saved analysis and the save response both report depth 0"
    },
    "description": "A depth sent for a target that cannot be expanded is saved as 0.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.765967300045304,
+   "duration": 0.37551440007518977,
    "observed": [
-    "sent depth 1; configuration stores 0, analysis stores 0"
+    "sent depth 1; analysis stores 0, save response says 0"
    ]
   },
   {
@@ -794,13 +606,12 @@
     "expected": "Both report version_number 1"
    },
    "description": "The answer to saving a run names the version the run was saved into.",
-   "outcome": "failed",
-   "failure": "assert None == 1",
-   "duration": 0.7605585999554023,
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.3754326000344008,
    "observed": [
-    "save response version_number: None; list endpoint: 1"
-   ],
-   "failed_during": "call"
+    "save response version_number: 1; list endpoint: 1"
+   ]
   },
   {
    "nodeid": "tests/integration/test_analysis_flow.py::test_capabilities_list_the_kinds_and_their_options",
@@ -817,37 +628,83 @@
    "description": "The options the frontend offers come from the backend's registry.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.010269299964420497,
+   "duration": 0.004995999974198639,
    "observed": [
     "kinds and their preprocessors: {'requirements': ['sentence', 'single'], 'architecture_document': ['sentence', 'single'], 'code': ['method', 'line'], 'architecture': ['model_uml']}",
     "defaults: {'requirements': 'single', 'architecture_document': 'single', 'code': 'method', 'architecture': 'model_uml'}"
    ]
   },
   {
-   "nodeid": "tests/integration/test_github.py::test_github_source_is_fetched_versioned_and_renames_followed",
+   "nodeid": "tests/integration/test_analysis_flow.py::test_analysis_lists_its_sides_files_and_versions",
    "case": {
-    "id": "I-14",
-    "feature": "GitHub sync / fetch, version and follow renames",
+    "id": "I-40",
+    "feature": "Analysis page / sides, files and versions",
     "level": "integration",
-    "priority": "Critical",
-    "why": "The demo syncs code from GitHub. A new commit must be fetched and versioned, and a moved file must keep its links instead of breaking them.",
-    "preconditions": "A saved requirements->code run from uploaded files. GitHub is replaced by a fake repository holding the same code at commit-1",
-    "input": "Connect the repository as the code source and sync. Then push commit-2, which moves Auth.java to security/Auth.java, and sync again",
-    "expected": "Connecting replaces the uploaded code source. First sync: code fetched at commit-1, version 2, 3 links. Second sync: commit-2 fetched, version 3, still 3 active links now on security/Auth.java, 0 broken, no node gone. Afterwards the source reports no change"
+    "priority": "High",
+    "why": "The analysis page shows what each side holds now and every version with its runs. If it reads another side's files, or files a re-run under a new version, the page tells the user something untrue.",
+    "preconditions": "A saved requirements->code analysis, re-run once, then its requirements side updated with a fifth use case",
+    "input": "GET the analysis, then its versions",
+    "expected": "The analysis lists the requirements side holding UC1-UC5 and the code side holding Auth.java and Loans.java. Versions: v2 with 1 run, v1 with 2 runs (the save and the re-run), newest first; v2 records UC5.txt as added"
    },
-   "description": "Code connected from GitHub is fetched when it moves, and a renamed file keeps its links.",
+   "description": "One analysis reads back with each side's current files, and each version with its runs.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.5788683999562636,
+   "duration": 0.6824149998137727,
    "observed": [
-    "connect: 201, location owner/library, branch main",
-    "sources (kind, origin): active -> {('requirements', 'upload'): True, ('code', 'upload'): False, ('code', 'github'): True}",
-    "status before the first sync: changed=True, None -> commit-1",
-    "first sync: Version 2: 1 source(s) refreshed, 1 configuration(s) re-run.; code ref ['commit-1']",
+    "sides: [('source', ['UC1.txt', 'UC2.txt', 'UC3.txt', 'UC4.txt', 'UC5.txt']), ('target', ['Auth.java', 'Loans.java'])]",
+    "versions (number, runs): [(2, 1), (1, 2)]",
+    "v2 changes: {'added': ['UC5.txt'], 'removed': [], 'modified': [], 'renamed': []}"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_analysis_flow.py::test_uml_components_are_sent_with_their_names",
+   "case": {
+    "id": "I-48",
+    "feature": "Display names / a UML analysis end to end",
+    "level": "integration",
+    "priority": "High",
+    "why": "Every screen and every export labels elements from what the API sends. A UML component sent only by its raw id is unreadable everywhere at once.",
+    "preconditions": "tests/data/model.uml, with the components Authentication and Lending",
+    "input": "Run, save and reopen requirements -> architecture model at component level, and read its change report",
+    "expected": "Every link into the model carries the component's name (Authentication or Lending) as target_name, and so does every component element; the raw ids stay in target_id. Requirements keep their file names (no name sent). The report's links carry the same names"
+   },
+   "description": "A UML analysis sends component names with its elements and links, live, saved and in the report.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.40092380018904805,
+   "observed": [
+    "live links (xmi id, target name, source name): [('_auth', 'Authentication', None), ('_lend', 'Lending', None)]",
+    "stored elements: [('model.uml$0$_auth', 'Authentication'), ('model.uml$1$_lend', 'Lending')]",
+    "report: [('Authentication', None), ('Lending', None)]"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_github.py::test_github_side_is_fetched_versioned_and_renames_followed",
+   "case": {
+    "id": "I-14",
+    "feature": "GitHub update / fetch, version and follow renames",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "The demo updates code from GitHub. A new commit must be fetched and versioned, and a moved file must keep its links instead of breaking them.",
+    "preconditions": "A saved requirements->code analysis from uploaded files. GitHub is replaced by a fake repository holding the same code at commit-1",
+    "input": "Take the analysis's code side from the repository and update it. Then push commit-2, which moves Auth.java to security/Auth.java, and update again",
+    "expected": "The code side becomes a GitHub side; the requirements side stays an upload. First update: commit-1 is fetched, holds exactly the stored files, so nothing changed and no version is made - and commit-1 is no longer reported as new. Second update: commit-2 fetched, Auth.java reported renamed, version 2; the report lists the same 3 links as valid, now on security/Auth.java, and none broken or lost. Afterwards the side reports no change"
+   },
+   "description": "A code side taken from GitHub is fetched when it moves, and a renamed file keeps its links.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.6609315000241622,
+   "observed": [
+    "connect: 200, location owner/library, branch main",
+    "sides (kind, origin): {'source': ('requirements', 'upload'), 'target': ('code', 'github')}",
+    "status before the first update: changed=True, e28fafaa06c55bdc -> commit-1",
+    "first update: synced=False, Nothing has changed: the target side already holds exactly these files.",
+    "status after the first update: changed=False, at commit-1",
     "status after the push: changed=True, commit-1 -> commit-2",
-    "second sync: Version 3: 1 source(s) refreshed, 1 configuration(s) re-run.; 3 links, +2 -2",
-    "graph: {'nodes_present': 9, 'nodes_gone': 0, 'links_active': 3, 'links_stale': 0, 'links_broken': 0}; link targets are in: ['Loans.java', 'security/Auth.java', 'security/Auth.java']",
-    "status after the second sync: changed=False"
+    "second update: Version 2: target side updated, 3 trace links.; 3 links, +0 -0",
+    "files renamed: [{'old': 'Auth.java', 'new': 'security/Auth.java'}]",
+    "report v1 -> v2: {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 1}; link targets are in: ['Loans.java', 'security/Auth.java', 'security/Auth.java']",
+    "status after the second update: changed=False"
    ]
   },
   {
@@ -865,11 +722,11 @@
    "description": "Connecting GitHub stores the token encrypted and only ever sends the browser back into the app.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.44485810003243387,
+   "duration": 0.24089050001930445,
    "observed": [
     "redirect after connecting: http://localhost:5173/app/history?github=connected&login=octocat",
     "stored token is plain text: False; decrypts to the token: True",
-    "connection: {'connected': True, 'login': 'octocat', 'configured': True}",
+    "connection: {'connected': True, 'login': 'octocat', 'configured': True, 'needs_reconnect': False}",
     "forged state redirects to: http://localhost:5173/app/profile?github=error&message=That+sign-in+link+is+not+valid.",
     "return_to=//evil.example redirects to: http://localhost:5173/app/profile?github=connected&login=octocat"
    ]
@@ -882,18 +739,349 @@
     "level": "integration",
     "priority": "High",
     "why": "A dead token left in place makes the app say 'connected' while every sync fails. The app must notice, clear it, and offer to reconnect.",
-    "preconditions": "A user with a connected GitHub account and a project whose code source is a GitHub repository",
-    "input": "GitHub starts rejecting the token. Read the sync status, then the connection",
-    "expected": "The code source reports an error with needs_reconnect=true and is not marked changed. The stored account token is cleared, and the connection reads not connected"
+    "preconditions": "A user with a connected GitHub account and an analysis whose code side is a GitHub repository",
+    "input": "GitHub starts rejecting the token. Read the update status, then the connection",
+    "expected": "The code side reports an error with needs_reconnect=true and is not marked changed. The stored account token is cleared, and the connection reads not connected"
    },
    "description": "When GitHub rejects the stored token, the app drops it and says the account must be reconnected.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8977295000804588,
+   "duration": 0.4143189002061263,
    "observed": [
-    "code source status: changed=False, needs_reconnect=True, error=GitHub rejected the access token.",
+    "code side status: changed=False, needs_reconnect=True, error=GitHub rejected the access token.",
     "account token still stored: False",
-    "connection: {'connected': False, 'login': None, 'configured': True}"
+    "connection: {'connected': False, 'login': None, 'configured': True, 'needs_reconnect': False}"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_github.py::test_connection_says_when_it_needs_reconnecting",
+   "case": {
+    "id": "I-41",
+    "feature": "GitHub connection / asking to reconnect",
+    "level": "integration",
+    "priority": "High",
+    "why": "The Connect dialog offers 'Reconnect GitHub' instead of the form when the account connection has died. That only works if the connection check says so.",
+    "preconditions": "A user who connected their GitHub account",
+    "input": "GitHub starts rejecting the token. Read the connection twice",
+    "expected": "First read: not connected, needs_reconnect=true, and the dead token is cleared. Second read: not connected, needs_reconnect=false - there is nothing stored left to reject"
+   },
+   "description": "The connection check reports a token GitHub has just rejected as needing a reconnect.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.22817440005019307,
+   "observed": [
+    "first read: {'connected': False, 'login': None, 'configured': True, 'needs_reconnect': True}",
+    "second read: {'connected': False, 'login': None, 'configured': True, 'needs_reconnect': False}"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_github.py::test_fetch_uses_the_account_unless_the_side_has_its_own_token",
+   "case": {
+    "id": "I-42",
+    "feature": "GitHub side / whose credential a fetch uses",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "With the account connected, a code side is taken from GitHub without a token of its own, and every fetch must use the account connection. A side given its own token on purpose must keep using that one.",
+    "preconditions": "A user who connected their GitHub account (token gho_token_for_abc), with two saved analyses",
+    "input": "Analysis A: take the code side from the repository with no token, and update it. Analysis B: take it with its own token 'side-token', and update it",
+    "expected": "A's side stores no token (has_token=false) and its fetch used the account token. B's side stores its token (has_token=true) and its fetch used 'side-token'"
+   },
+   "description": "A side without a token is fetched with the account connection; a side with one uses its own.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.917011900106445,
+   "observed": [
+    "account side: has_token=False; own-token side: has_token=True",
+    "tokens the two fetches used: ['gho_token_for_abc', 'side-token']"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_demo_story_from_v1_to_v4",
+   "case": {
+    "id": "I-49",
+    "feature": "Demo story / four versions of one analysis",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "This is the demonstration itself in one go. Each step must make exactly one version, and the report across all of them must say what happened to every link and why.",
+    "preconditions": "A signed-in user with an empty project; the corpus UC1-UC4 and Auth.java, Loans.java",
+    "input": "New Analysis requirements -> code (v1). Update the requirements: a cosmetic rewording of UC1 (v2); UC2 rewritten to be about borrowing (v3); UC3 removed (v4). Read the report for v1 -> v4",
+    "expected": "Versions 4, 3, 2, 1, one run each. v1 -> v4: UC1->login valid with its source changed; UC2->logout no longer found (source changed); UC2->borrow new; UC3->borrow broken, its source gone; UC4 uncovered; nothing changed on the code side"
+   },
+   "description": "A New Analysis and three requirement updates give four versions and a report that explains each link.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.9168249999638647,
+   "observed": [
+    "v2: Version 2: source side updated, 3 trace links.",
+    "v3: Version 3: source side updated, 3 trace links.",
+    "v4: Version 4: source side updated, 2 trace links.",
+    "versions (number, runs): [(4, 1), (3, 1), (2, 1), (1, 1)]",
+    "v1 -> v4 summary: {'valid': 1, 'no_longer_found': 1, 'broken': 1, 'new': 1, 'uncovered': 1}; uncovered ['UC4.txt']",
+    "v1 -> v4 links (state, source changed, target changed): {('UC1.txt', 'Auth.java::Auth::login'): ('valid', True, False), ('UC2.txt', 'Auth.java::Auth::logout'): ('no_longer_found', True, False), ('UC3.txt', 'Loans.java::Loans::borrow'): ('broken', True, False), ('UC2.txt', 'Loans.java::Loans::borrow'): ('new', True, False)}"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_code_moved_into_a_folder_keeps_its_links",
+   "case": {
+    "id": "I-50",
+    "feature": "GitHub update / code moved into a folder, mixed line endings",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "A real repository is laid out differently from an upload: code under a folder, CRLF from Windows, a .gitignore. Read naively, every file looks deleted and re-added and every link breaks.",
+    "preconditions": "A saved requirements->code analysis from uploaded flat files (Auth.java, Loans.java, LF line endings)",
+    "input": "Take the code side from a repository whose commit holds code/Auth.java with CRLF line endings, code/Loans.java with LF, and a .gitignore - no rename list from GitHub - and update",
+    "expected": "Both files reported renamed into code/, none added or removed, .gitignore not listed anywhere. The report: 3 links valid, none broken, no longer found or new, every link now on code/"
+   },
+   "description": "Files moved into a folder, some with CRLF, are recognised as renamed and keep their links.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.5864811998326331,
+   "observed": [
+    "update: Version 2: target side updated, 3 trace links.",
+    "files: {'added': [], 'removed': [], 'modified': [], 'renamed': [{'old': 'Auth.java', 'new': 'code/Auth.java'}, {'old': 'Loans.java', 'new': 'code/Loans.java'}]}",
+    "report: {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 1}; link targets in: ['code/Auth.java', 'code/Loans.java']"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_update_gives_the_same_links_as_a_fresh_analysis",
+   "case": {
+    "id": "I-51",
+    "feature": "Update / the same result as a fresh analysis",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "An update re-runs over the new files with pins from the last run. If that ever gives different links from analysing the new files from scratch, the history is lying about what the files say.",
+    "preconditions": "Sentence-level requirements->code analyses over one file of three sentences (login, logout, borrow) and UC4",
+    "input": "Four changes, each applied once as an update and once as a fresh New Analysis of exactly the new files with the same settings: a modified sentence, an inserted sentence, a removed file (UC4), a modified method (logout now also borrows)",
+    "expected": "For every change, the updated version's links equal the fresh analysis's links, pair for pair and score for score"
+   },
+   "description": "An update and a fresh analysis of the same new files find exactly the same links.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 2.471908199833706,
+   "observed": [
+    "modified sentence: update v2 has 3 links, fresh has 3; differing: none",
+    "inserted sentence: update v2 has 3 links, fresh has 3; differing: none",
+    "removed file: update v2 has 3 links, fresh has 3; differing: none",
+    "modified method: update v2 has 4 links, fresh has 4; differing: none"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_classifier_failing_mid_update_leaves_the_previous_version",
+   "case": {
+    "id": "I-52",
+    "feature": "Update / the classifier fails part-way",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "Groq can fail half-way through a run, after the files were read and embedded. Whatever was done up to then must not leave a half-made version behind.",
+    "preconditions": "A saved requirements->code analysis at version 1 with 3 links",
+    "input": "Update the requirements with an edited UC1, with a classifier that answers one question and then raises",
+    "expected": "The job fails with the classifier's error. The analysis still has only version 1 with its one run and its 3 links; its requirements fingerprint is unchanged; the report still answers; no working folder is left"
+   },
+   "description": "A classifier that dies in the middle of an update leaves the analysis exactly as it was.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.6059570000506938,
+   "observed": [
+    "job: failed - the classifier stopped answering",
+    "versions (number, runs): [(1, 1)]",
+    "links of the saved run: 3; report {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 1}",
+    "fingerprint unchanged: True; new working folders: []"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_bad_files_for_an_update_are_refused",
+   "case": {
+    "id": "I-53",
+    "feature": "Update / bad files handed over for a side",
+    "level": "integration",
+    "priority": "High",
+    "why": "The Update dialog takes files from the user's disk. A bad set must be refused before anything runs, never become a version, and never leave a half-written set on the server.",
+    "preconditions": "A saved requirements->code analysis at version 1; the per-file limit lowered to 1,000 bytes",
+    "input": "Stage for an update: no files; a .md file for the requirements; a file named .zip that is not a zip, for the code; an oversized requirements file",
+    "expected": "400, 400, 400 and 413, each with a message. The analysis still has 1 version and no working folder is left"
+   },
+   "description": "Bad files for an update are refused, make no version and leave nothing behind.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.44289459998253733,
+   "observed": [
+    "no files: 400 - Choose at least one file.",
+    "wrong extension: 400 - 'notes.md' is not a supported requirements file. Accepted: .docx, .pdf, .txt.",
+    "not a zip: 400 - '__archive_0.zip' is not a valid .zip archive.",
+    "oversized file: 413 - 'UC1.txt' exceeds the 0 MB per-file limit.",
+    "versions: [(1, 1)]; working folders left: []"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_endpoints_beyond_i20_refuse_other_users_and_anonymous_callers",
+   "case": {
+    "id": "I-54",
+    "feature": "Access control / the endpoints I-20 does not reach",
+    "level": "integration",
+    "priority": "High",
+    "why": "I-20 covers most endpoints. The line diff, the analysis itself and the update endpoints with no login at all are the ones it leaves out, and each of them reads or changes another user's analysis.",
+    "preconditions": "User A owns an analysis at version 2 (UC1 edited). User B is a different signed-in user",
+    "input": "As B: the analysis, its line diff, its delete. With no login: the analysis, report, line diff, sides, update status, staging, update, GitHub side, re-run, run delete and analysis delete",
+    "expected": "Every request by B gets 404; every anonymous request gets 401. A's analysis still has 2 versions and its sides afterwards"
+   },
+   "description": "The line diff, the analysis itself and every update endpoint refuse other users and anonymous callers.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.8776040999218822,
+   "observed": [
+    "as another user: {'GET /projects/35/configs/49': 404, 'GET /projects/35/configs/49/report/diff': 404, 'DELETE /projects/35/configs/49': 404}",
+    "anonymous: [401] over 11 requests",
+    "A's versions afterwards: [(2, 1), (1, 1)]"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_versions_runs_and_blobs_stay_consistent",
+   "case": {
+    "id": "I-55",
+    "feature": "Data integrity / versions, runs and stored files",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "Every screen trusts three things: a version always has a run, every file a version lists can be read back, and deleting a run never takes files another version still needs.",
+    "preconditions": "An analysis taken through four versions as in I-49, with version 4 re-run once so it holds two runs",
+    "input": "Check every version and file row of the analysis; delete one of version 4's runs and collect garbage with the grace period switched off; check again, and read every version's files back",
+    "expected": "Before and after the delete: every version has at least one run, and every file row's blob is in the store. After the delete version 4 keeps one run, none of the analysis's blobs is retired, and every artifact still downloads"
+   },
+   "description": "No version without a run, no file row without its blob, and a deleted run takes no shared files.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 1.1309015001170337,
+   "observed": [
+    "versions [(4, 1), (3, 1), (2, 1), (1, 1)]; file rows 23",
+    "before delete: versions without a run [], rows without a blob []",
+    "delete run: 204; blobs retired by garbage collection: 0",
+    "after delete: versions without a run [], rows without a blob []; artifact downloads: [200]"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_changing_one_uml_component_keeps_the_other_links",
+   "case": {
+    "id": "I-56",
+    "feature": "Update / one UML component changed",
+    "level": "integration",
+    "priority": "High",
+    "why": "UML components are named by a counter, so a component added in front renumbers every one after it. An update that changes one component must not break the links of the others, and must still show them by name.",
+    "preconditions": "A saved requirements -> architecture model analysis at component level over model.uml (Authentication, Lending)",
+    "input": "Update the model with a new component 'Audit' inserted before Authentication, so both existing components get a new counter; read the report",
+    "expected": "Version 2. Every link of version 1 is valid, none broken or no longer found. Every link in the report and in version 2's run carries a component name, never a raw '$' id"
+   },
+   "description": "Inserting one UML component renumbers the others but keeps their links, shown by name.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.619351299945265,
+   "observed": [
+    "update: Version 2: target side updated, 3 trace links.; elements {'added': ['model.uml$0$_audit'], 'removed': [], 'modified': [], 'moved': [{'old': 'model.uml$0$_auth', 'new': 'model.uml$1$_auth'}, {'old': 'model.uml$1$_lend', 'new': 'model.uml$2$_lend'}]}",
+    "component ids before ['model.uml$0$_auth', 'model.uml$1$_lend'], after ['model.uml$1$_auth', 'model.uml$2$_lend']",
+    "report: {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 1}; names [('valid', 'Authentication'), ('valid', 'Lending')]"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_whitespace_only_commit_stops_showing_as_changed",
+   "case": {
+    "id": "I-57",
+    "feature": "GitHub update / a whitespace-only commit",
+    "level": "integration",
+    "priority": "High",
+    "why": "A commit that only reformats files changes the commit id but not the code. It must make no version, and the side must stop showing as changed afterwards, or the Update button nags forever.",
+    "preconditions": "A saved requirements->code analysis whose code side was taken from the repository at commit-1 (same files as stored)",
+    "input": "Push commit-2 with the same code re-indented and with trailing blank lines; read the status, update, read the status again; then push commit-3 with a real change",
+    "expected": "Before the update: changed, commit-1 -> commit-2. The update makes no version ('No meaningful change'). Afterwards: not changed, at commit-2. Commit-3 is then detected as changed again"
+   },
+   "description": "A reformatting commit makes no version and is then no longer reported as new.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.513937900075689,
+   "observed": [
+    "status after the reformatting push: (True, 'commit-1', 'commit-2')",
+    "update: 'No meaningful change: 2 file(s) differ, but no element the analysis compares changed. No new version was made.'",
+    "status after the update: (False, 'commit-2', 'commit-2'); after a real change: (True, 'commit-2', 'commit-3')",
+    "versions: [(1, 1)]"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_the_only_run_of_a_version_cannot_be_deleted",
+   "case": {
+    "id": "I-58",
+    "feature": "Deleting a run / the only run of a version",
+    "level": "integration",
+    "priority": "High",
+    "why": "A version without a run has no links, so the change report has nothing to compare it by. Its last run must not be deletable.",
+    "preconditions": "A saved analysis at v1 with one run",
+    "input": "DELETE that run",
+    "expected": "409 'This is the only run of this version.'; the run is still there and v1 still has 1 run"
+   },
+   "description": "Deleting a version's last run is refused.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.4173078000312671,
+   "observed": [
+    "delete: 409 - This is the only run of this version.; run afterwards: 200; versions [(1, 1)]"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_one_of_two_runs_can_still_be_deleted",
+   "case": {
+    "id": "I-59",
+    "feature": "Deleting a run / one of several",
+    "level": "integration",
+    "priority": "High",
+    "why": "The refusal must only stop the last run; clearing out a re-run stays routine.",
+    "preconditions": "A saved analysis at v1 with a run and a re-run",
+    "input": "DELETE the re-run; then DELETE the remaining run",
+    "expected": "204, and v1 keeps 1 run; then 409 for the remaining run"
+   },
+   "description": "A version with two runs can lose one of them, not both.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.5290769999846816,
+   "observed": [
+    "delete the re-run: 204; versions [(1, 1)]; delete the last run: 409"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_report_with_a_runless_earlier_version",
+   "case": {
+    "id": "I-60",
+    "feature": "Change report / an earlier version with no run",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "Versions left without a run by an older delete still exist. Comparing against one must not fail and hide the later version's links.",
+    "preconditions": "An analysis at v2 (UC1 edited) whose v1 run was deleted before deleting the last run was refused",
+    "input": "Read the report for 1 -> 2; then remove v2's run as well and read 1 -> 2 again",
+    "expected": "1 -> 2: 200, no_run_version 1, v2's 3 links returned, the net change of the files still there. With v2's run gone too: 200, no_run_version 2, no links"
+   },
+   "description": "A run-less earlier version gives the later version's links, uncompared, instead of an error.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.6046774999704212,
+   "observed": [
+    "1 -> 2: 200; no_run_version 1; links 3; net files ['UC1.txt']",
+    "with v2's run gone too: no_run_version 2; links 0"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_scenarios.py::test_default_report_skips_runless_versions",
+   "case": {
+    "id": "I-61",
+    "feature": "Change report / which earlier version is chosen",
+    "level": "integration",
+    "priority": "High",
+    "why": "The Trace Links page opens on the default comparison. It must compare against the nearest version that has links, not a run-less one.",
+    "preconditions": "An analysis at v3 (UC1 edited in v2, again in v3) whose v2 run was deleted; and one at v2 whose v1 run was deleted",
+    "input": "Read the default report of each",
+    "expected": "First: 1 -> 3, compared (no_run_version none). Second: 1 -> 2 with no_run_version 1 and v2's links, since no earlier version has a run"
+   },
+   "description": "By default the report compares against the nearest earlier version with a run.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 1.1358162999385968,
+   "observed": [
+    "v3 with a run-less v2: 1 -> 3, no_run_version None, {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 1}",
+    "v2 with a run-less v1: 1 -> 2, no_run_version 1, links 3"
    ]
   },
   {
@@ -905,13 +1093,13 @@
     "priority": "High",
     "why": "Bad input must be refused with a message the user can act on, before a job is started, and must not leave half-written files on the server.",
     "preconditions": "Per-file limit lowered to 1,000 bytes for the oversized-file case (30 MB in production)",
-    "input": "12 malformed uploads: no artifacts, invalid JSON, one artifact on both sides, unknown kind, two kinds on one side, wrong extension, a zip for a kind that takes none, a file that is not a zip, a file index out of range, an oversized file, pasted text for code, and a connected source without a login",
-    "expected": "400 for each, except 413 for the oversized file and 401 for the connected source without a login. No working folder is left behind by any of them"
+    "input": "11 malformed uploads: no artifacts, invalid JSON, one artifact on both sides, unknown kind, two kinds on one side, wrong extension, a zip for a kind that takes none, a file that is not a zip, a file index out of range, an oversized file, and pasted text for code",
+    "expected": "400 for each, except 413 for the oversized file. No working folder is left behind by any of them"
    },
    "description": "Each kind of bad upload is refused with its own message and cleaned up.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.11753209982998669,
+   "duration": 0.05820429977029562,
    "observed": [
     "no artifacts: 400 - Upload at least one artifact.",
     "invalid JSON: 400 - 'artifacts' is not valid JSON: Expecting property name enclosed in double quotes",
@@ -924,29 +1112,7 @@
     "index out of range: 400 - File index 7 is out of range.",
     "oversized file: 413 - 'big.txt' exceeds the 0 MB per-file limit.",
     "pasted text for code: 400 - 'Code' artifacts cannot be provided as pasted text.",
-    "connected source, no login: 401 - Sign in to run an analysis from a connected source.",
     "working folders left behind: []"
-   ]
-  },
-  {
-   "nodeid": "tests/integration/test_sources_and_files.py::test_second_upload_of_a_kind_replaces_the_source",
-   "case": {
-    "id": "I-18",
-    "feature": "Sources / uploading a kind the project already has",
-    "level": "integration",
-    "priority": "High",
-    "why": "This is what the re-upload confirmation in the UI warns about: saving puts the new files in place of the project's source for that kind.",
-    "preconditions": "A project whose requirements source is 'reqs' and code source is 'code'",
-    "input": "A second New Analysis whose requirements are uploaded under the name 'second draft', with the same code",
-    "expected": "The project lists 2 active sources: requirements 'second draft' and code 'code'. 'reqs' is still listed when disconnected ones are included, as inactive"
-   },
-   "description": "After a second upload of requirements under a new name, that upload is the project's requirements source.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.9894868999253958,
-   "observed": [
-    "active sources: [('code', 'code'), ('requirements', 'second draft')]",
-    "all sources: {('requirements', 'reqs'): False, ('code', 'code'): True, ('requirements', 'second draft'): True}"
    ]
   },
   {
@@ -956,85 +1122,40 @@
     "feature": "Deleting an analysis / shared files through the API",
     "level": "integration",
     "priority": "High",
-    "why": "Deleting an old run is routine clean-up. It must not make a re-run of it impossible to download or run again.",
-    "preconditions": "An analysis and a re-run of it that share stored files older than the collector's grace period",
+    "why": "Deleting an old run is routine clean-up. It must not make the version's files - which a re-run reads too - impossible to download or run again.",
+    "preconditions": "An analysis with a run and a re-run of it in version 1, whose stored files are older than the collector's grace period",
     "input": "DELETE the original analysis; then download the re-run's artifact and re-run it again",
     "expected": "204; the original is gone (404); the re-run's files are still available, its artifact downloads (200), and running it again succeeds (201)"
    },
    "description": "Deleting one analysis does not take away files another analysis still uses.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.3729155998444185,
+   "duration": 0.8144037001766264,
    "observed": [
     "{'delete': 204, 'original afterwards': 404, 'download re-run artifact': 200, 'run it again': 201}",
     "re-run's files still stored: 6 of 6; files_available: [True, True]"
    ]
   },
   {
-   "nodeid": "tests/integration/test_sources_and_files.py::test_sources_can_be_disconnected_seen_and_reconnected",
+   "nodeid": "tests/integration/test_sources_and_files.py::test_sides_are_listed_and_bad_requests_refused",
    "case": {
     "id": "I-19",
-    "feature": "Sources / listing, disconnecting and reconnecting",
+    "feature": "Sides / listing and refusals",
     "level": "integration",
     "priority": "Medium",
-    "why": "A disconnected source must stay visible so it can be brought back, and requests about sources that do not exist must fail cleanly.",
-    "preconditions": "A project with a requirements source and a code source, both recorded by version 1",
-    "input": "Disconnect requirements; list sources with and without disconnected ones; read the pair; reconnect. Then disconnect, reconnect and stage files for a source id that does not exist, stage with no files, and connect a repository for an unknown kind",
-    "expected": "Disconnect is kept (removed=false) and explained. The default list hides it, the full list shows it inactive, and the pair has no source side. Reconnect makes it active again. The five bad requests give 404, 404, 404, 400, 400"
+    "why": "Requests about sides that do not exist, or that cannot work, must fail cleanly before anything is stored.",
+    "preconditions": "An analysis with a requirements side and a code side",
+    "input": "List the sides. Then stage files for a side id that does not exist, stage with no files, take the requirements side from GitHub, and list the sides of an analysis id that does not exist",
+    "expected": "2 sides listed, source first. The four bad requests give 404, 400, 400 and 404"
    },
-   "description": "A disconnected source is hidden from syncing but still listed, and can be reconnected.",
+   "description": "An analysis lists its two sides, and requests that make no sense are refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8827906999504194,
+   "duration": 0.4233219000743702,
    "observed": [
-    "disconnect: removed=False - 'reqs' will no longer be synced. It is kept because 1 saved version records what it was at the time.",
-    "default list: 1 source; full list: {'requirements': False, 'code': True}; pair's source side: None",
-    "reconnect: is_active=True",
-    "bad requests: {'disconnect unknown': 404, 'reconnect unknown': 404, 'stage for unknown': 404, 'stage no files': 400, 'connect unknown kind': 400}"
+    "sides: [('source', 'requirements', 'reqs'), ('target', 'code', 'code')]",
+    "bad requests: {'stage for unknown': 404, 'stage no files': 400, 'GitHub for requirements': 400, 'unknown analysis': 404}"
    ]
-  },
-  {
-   "nodeid": "tests/integration/test_sources_and_files.py::test_compare_reports_what_changed_between_two_runs",
-   "case": {
-    "id": "I-23",
-    "feature": "Comparison / compare endpoint",
-    "level": "integration",
-    "priority": "Medium",
-    "why": "The Compare page shows what a change did to the links. It must diff the right two runs and refuse comparisons that mean nothing.",
-    "preconditions": "Run 1 over UC1-UC4. Run 2 is a sync after UC5 (about the passphrase) was added",
-    "input": "GET /analyses/{run1}/compare/{run2}; then compare a run with itself, and with a run from another project",
-    "expected": "added 1 (UC5->login), removed 0, unchanged 3, comparable. Same run: 400. Other project: 409"
-   },
-   "description": "Two runs of one project are diffed link by link; anything else is refused.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 1.542254899861291,
-   "observed": [
-    "summary: {'base_total': 3, 'head_total': 4, 'added': 1, 'removed': 0, 'modified': 0, 'unchanged': 3}; comparable: True",
-    "added: [('UC5.txt', 'login(String name, String passphrase)')]",
-    "same run: 400; run from another project: 409"
-   ]
-  },
-  {
-   "nodeid": "tests/integration/test_sources_and_files.py::test_a_deleted_requirement_is_not_reported_as_newly_implemented",
-   "case": {
-    "id": "I-32",
-    "feature": "Comparison / removed requirements",
-    "level": "integration",
-    "priority": "Medium",
-    "why": "'Newly implemented' is read as progress. A requirement that was deleted has not been implemented, and listing it there misreports coverage.",
-    "preconditions": "Run 1 has UC4 with no link (unimplemented)",
-    "input": "Sync with requirements that no longer include UC4, then compare run 1 with the new run",
-    "expected": "UC4.txt is not listed under newly_implemented"
-   },
-   "description": "A requirement that disappeared between two runs did not become implemented.",
-   "outcome": "failed",
-   "failure": "AssertionError: assert 'UC4.txt' not in ['UC4.txt']",
-   "duration": 1.292446200037375,
-   "observed": [
-    "newly_implemented: ['UC4.txt']; newly_unimplemented: []"
-   ],
-   "failed_during": "call"
   },
   {
    "nodeid": "tests/integration/test_sources_and_files.py::test_downloaded_artifact_matches_what_was_uploaded",
@@ -1051,58 +1172,35 @@
    "description": "An artifact downloads as a zip holding the same files, byte for byte.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.7620133999735117,
+   "duration": 0.38470289995893836,
    "observed": [
-    "status 200; attachment; filename=\"target-code-94.zip\"",
+    "status 200; attachment; filename=\"target-code-138.zip\"",
     "files in the zip: ['Auth.java', 'Loans.java']; identical to the upload: True"
    ]
   },
   {
-   "nodeid": "tests/integration/test_sync.py::test_sync_runs_every_configuration_of_the_pair",
-   "case": {
-    "id": "I-07",
-    "feature": "Sync / several configurations in one pair",
-    "level": "integration",
-    "priority": "Critical",
-    "why": "Regression test for a real bug: the first configuration's save deleted the working folder, so every later configuration failed with 'Path does not exist'.",
-    "preconditions": "One pair (requirements->code) with 2 configurations: method level and file level",
-    "input": "POST /projects/{id}/sync for the pair with force=true",
-    "expected": "Job succeeds; BOTH configurations succeed with 3 links each and no error; version 2 holds 2 runs, each with its 2 artifacts; no working folder left"
-   },
-   "description": "Every configuration of the pair is re-run over the same files, not only the first.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 1.5098909998778254,
-   "observed": [
-    "job: succeeded - Version 2: 0 source(s) refreshed, 2 configuration(s) re-run.",
-    "config 48: ok, 3 links (+0 -0)",
-    "config 49: ok, 3 links (+0 -0)",
-    "versions (number, runs): [(2, 2), (1, 2)]",
-    "working folders left: []"
-   ]
-  },
-  {
-   "nodeid": "tests/integration/test_sync.py::test_sync_with_uploaded_requirements_updates_the_graph",
+   "nodeid": "tests/integration/test_sync.py::test_update_with_uploaded_requirements",
    "case": {
     "id": "I-08",
-    "feature": "Sync / replace a source by upload",
+    "feature": "Update / replace a side by upload",
     "level": "integration",
     "priority": "Critical",
     "why": "Requirements live on someone's machine, so uploading new files is the only way they change. This is the demo's 'requirements changed' step.",
-    "preconditions": "A saved requirements->code run over UC1-UC4",
-    "input": "Stage a new requirements set (UC1-UC3 unchanged, UC4 removed, new UC5 about the passphrase), then sync with it",
-    "expected": "Staging reports 4 files, 3 matched, 1 missing. Sync creates version 2: requirements refreshed, code carried over, 4 links (+1). The graph has 4 active links and 1 node gone (UC4); the staged upload is consumed"
+    "preconditions": "A saved requirements->code analysis over UC1-UC4",
+    "input": "Stage a new requirements set (UC1-UC3 unchanged, UC4 removed, new UC5 about the passphrase), then update the requirements side with it",
+    "expected": "Staging reports 4 files, 3 matched, 1 missing: UC5 added and UC4 removed. The update creates version 2: requirements refreshed, code carried over, 4 links (+1). The report: 3 valid, 1 new (UC5->login), none lost; UC4 is not listed as uncovered; the staged upload is consumed"
    },
-   "description": "New requirement files handed over for a sync become the project's requirements, and the graph follows.",
+   "description": "New requirement files handed over for an update become the analysis's requirements, and the report follows.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.221076100016944,
+   "duration": 0.6007572000380605,
    "observed": [
     "staged: 4 files, 3 matched, 1 missing",
-    "sync: Version 2: 1 source(s) refreshed, 1 configuration(s) re-run.",
-    "sources: [('requirements', 'refreshed'), ('code', 'carried over')]",
-    "config 50: ok, 4 links (+1 -0)",
-    "graph: {'nodes_present': 9, 'nodes_gone': 1, 'links_active': 4, 'links_stale': 0, 'links_broken': 0}",
+    "update: Version 2: source side updated, 4 trace links.",
+    "files: {'added': ['UC5.txt'], 'removed': ['UC4.txt'], 'modified': [], 'renamed': []}",
+    "sides: [('requirements', 'refreshed'), ('code', 'carried over')]",
+    "run: 4 links (+1 -0)",
+    "report: {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 1, 'uncovered': 0}; new [('UC5.txt', 'Auth.java::Auth::login')]",
     "requirements fingerprint changed: True; staged upload still on disk: False"
    ]
   },
@@ -1110,230 +1208,599 @@
    "nodeid": "tests/integration/test_sync.py::test_no_link_is_lost_when_unrelated_code_is_added",
    "case": {
     "id": "I-26",
-    "feature": "Sync / link pinning end to end",
+    "feature": "Update / link pinning end to end",
     "level": "integration",
     "priority": "Critical",
     "why": "The research finding the tool exists to fix: adding unrelated code pushes an existing link out of the top-k, and it disappears though nothing rejected it.",
     "preconditions": "A New Analysis saved with top-k 2, where one requirement is linked to both login() and logout()",
-    "input": "Add an unrelated class (Pager) that ranks above login() for that requirement, upload the new code, and sync",
-    "expected": "Pins for the 2 links were stored when the analysis was saved, and both links are still there after the sync: 2 links, 0 removed. The sync logs that 1 link was carried over, and no warning that the pins matched nothing"
+    "input": "Add an unrelated class (Pager) that ranks above login() for that requirement, upload the new code, and update the code side",
+    "expected": "Pins for the 2 links were stored when the analysis was saved, and both links are still there after the update: 2 links, 0 removed. The update logs that 1 link was carried over, and no warning that the pins matched nothing"
    },
-   "description": "The first sync after a New Analysis re-offers that analysis's links, so none is lost to a shifted top-k.",
+   "description": "The first update after a New Analysis re-offers that analysis's links, so none is lost to a shifted top-k.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.2194919999456033,
+   "duration": 0.49851849977858365,
    "observed": [
     "links after the New Analysis: [('UC9.txt', 'Auth.java::Auth::login'), ('UC9.txt', 'Auth.java::Auth::logout')]",
     "'element_links' present in the result the client is given: True",
-    "pins stored for the configuration after saving: 2",
-    "links after adding Pager.java and syncing: [('UC9.txt', 'Auth.java::Auth::login'), ('UC9.txt', 'Auth.java::Auth::logout')]",
-    "sync reports: 2 links, +0 -0",
+    "pins stored for the analysis after saving: 2",
+    "links after adding Pager.java and updating: [('UC9.txt', 'Auth.java::Auth::login'), ('UC9.txt', 'Auth.java::Auth::logout')]",
+    "update reports: 2 links, +0 -0",
     "pipeline log: ['Carried 1 link(s) from the last run into classification']; 'no match' warnings: 0"
    ]
   },
   {
-   "nodeid": "tests/integration/test_sync.py::test_pinning_holds_once_a_sync_has_stored_the_pins",
+   "nodeid": "tests/integration/test_sync.py::test_pinning_holds_after_a_rerun",
    "case": {
     "id": "I-31",
-    "feature": "Sync / link pinning end to end",
+    "feature": "Update / link pinning end to end",
     "level": "integration",
     "priority": "High",
-    "why": "Shows pinning itself works once pins exist, which isolates the fault in I-26 to how a New Analysis is saved rather than to the pinning mechanism.",
-    "preconditions": "The same project as I-26, but one forced sync has already run since the New Analysis",
-    "input": "Add the unrelated Pager class, upload the new code, and sync",
-    "expected": "The forced sync stored 2 pins; after adding Pager both links are still there, 0 removed, and the log says 1 link was carried over"
+    "why": "Pins are replaced by every run, not only by a save. A re-run in between must leave pins that the next update can still use.",
+    "preconditions": "The same analysis as I-26, re-run once since the New Analysis",
+    "input": "Add the unrelated Pager class, upload the new code, and update the code side",
+    "expected": "The re-run stored 2 pins; after adding Pager both links are still there, 0 removed, and the log says 1 link was carried over"
    },
-   "description": "After any sync has run, the next one re-offers its links and none is lost.",
+   "description": "After a re-run, the next update re-offers that run's links and none is lost.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.3715518000535667,
+   "duration": 0.5616601000074297,
    "observed": [
-    "pins stored after one forced sync: 2",
-    "links after adding Pager.java and syncing: [('UC9.txt', 'Auth.java::Auth::login'), ('UC9.txt', 'Auth.java::Auth::logout')]",
-    "sync reports: 2 links, +0 -0",
+    "pins stored after one re-run: 2",
+    "links after adding Pager.java and updating: [('UC9.txt', 'Auth.java::Auth::login'), ('UC9.txt', 'Auth.java::Auth::logout')]",
+    "update reports: 2 links, +0 -0",
     "pipeline log: ['Carried 1 link(s) from the last run into classification']"
    ]
   },
   {
-   "nodeid": "tests/integration/test_sync.py::test_saving_a_result_without_pairs_leaves_the_pins_alone",
+   "nodeid": "tests/integration/test_sync.py::test_saving_a_result_without_pairs_touches_no_other_analysis",
    "case": {
     "id": "I-33",
     "feature": "Link pinning / saving a result that carries no pairs",
     "level": "integration",
     "priority": "High",
-    "why": "An older saved result, or another client, does not send the pairs. Reading that as 'this run linked nothing' would delete the pins a later sync depends on.",
-    "preconditions": "A configuration with 2 stored pins, from a saved New Analysis",
-    "input": "Run the same New Analysis twice more into the same configuration, changing only the result before saving: once with the 'element_links' field removed, once with it sent as an empty list",
-    "expected": "All three runs are filed under one configuration. Field removed: the save succeeds and the 2 pins are left untouched. Empty list sent: the pins are cleared, because that run said it linked nothing"
+    "why": "An older saved result, or another client, does not send the pairs. Saving it must work, and must never touch the pins of another analysis.",
+    "preconditions": "A project with one saved New Analysis holding 2 pins",
+    "input": "Save two more New Analyses of the same files into the same project: one with the 'element_links' field removed, one with it sent as an empty list",
+    "expected": "Both saves succeed as analyses of their own, each with 0 pins. The first analysis still has its 2 pins after both"
    },
-   "description": "A result that does not mention the pairs changes nothing; only an explicit empty list clears them.",
+   "description": "A result that does not carry pairs is saved without any, and every other analysis keeps its own.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.1583532001823187,
+   "duration": 0.5953669998561963,
    "observed": [
-    "pins after the New Analysis: 2",
-    "saved with no 'element_links' field: 201, pins now 2",
-    "saved with 'element_links': []: 201, pins now 0",
-    "configurations (id, runs): [(53, 3)]"
+    "pins of the first analysis: 2 before, 2 after",
+    "saved with no 'element_links' field: status and own pins (201, 0)",
+    "saved with 'element_links': []: status and own pins (201, 0)",
+    "analyses (id, runs): [(64, 1), (65, 1), (66, 1)]"
    ]
   },
   {
-   "nodeid": "tests/integration/test_sync.py::test_pairs_from_one_user_never_reach_another_users_configuration",
+   "nodeid": "tests/integration/test_sync.py::test_pairs_from_one_user_never_reach_another_users_analysis",
    "case": {
     "id": "I-34",
-    "feature": "Link pinning / pairs stay with the saving user's configuration",
+    "feature": "Link pinning / pairs stay with the saving user's analysis",
     "level": "integration",
     "priority": "High",
-    "why": "The pairs now arrive from the browser. They must only ever be stored against the configuration of the project the caller owns.",
+    "why": "The pairs arrive from the browser. They must only ever be stored against an analysis in a project the caller owns.",
     "preconditions": "User A has a saved New Analysis with 2 pins. User B is a different signed-in user",
     "input": "B saves a result carrying pairs into B's own project, with the same settings as A. Then B posts that result to A's project",
-    "expected": "B's own configuration gets its 2 pins. The post to A's project is refused with 404. A's pins are 2 before and after both"
+    "expected": "B's own analysis gets its 2 pins. The post to A's project is refused with 404. A's pins are 2 before and after both"
    },
    "description": "Pairs sent with a save are stored for the saver's own project and nowhere else.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.4861885998398066,
+   "duration": 0.6627980000339448,
    "observed": [
     "A's pins before: 2; after B's own save and B's post to A's project: 2",
-    "B's own configuration (a different one): 2 pins",
+    "B's own analysis (a different one): 2 pins",
     "B posting to A's project: 404"
    ]
   },
   {
-   "nodeid": "tests/integration/test_sync.py::test_other_pair_is_marked_out_of_date_and_catches_up",
+   "nodeid": "tests/integration/test_sync.py::test_updating_one_analysis_leaves_the_other_alone",
    "case": {
     "id": "I-09",
-    "feature": "Sync / a kind shared by two pairs",
+    "feature": "Update / analyses do not share sides",
     "level": "integration",
     "priority": "High",
-    "why": "Requirements feed two pairs. After syncing one, the other is looking at old requirements and must say so, then catch up on request.",
-    "preconditions": "One project with requirements->code and requirements->architecture_document, both run on the same requirements",
-    "input": "Sync the code pair with changed requirements. Read the pairs. Then sync the document pair with no new files and no force",
-    "expected": "After the first sync only the document pair is out of date. Its sync starts without force, re-runs 1 configuration, and afterwards neither pair is out of date"
+    "why": "The old model shared one requirements source between every pair, so updating one relation left another silently out of date. Each analysis is now updated on its own.",
+    "preconditions": "One project with requirements->code and requirements->architecture_document analyses, both on the same requirements",
+    "input": "Update the requirements side of the code analysis with a new UC5",
+    "expected": "The code analysis moves to version 2 with 4 links. The document analysis stays at version 1 with 1 run, and its requirements side keeps its old fingerprint"
    },
-   "description": "A pair whose shared source moved on is flagged, and a plain sync brings it up to date.",
+   "description": "Updating one analysis's side changes nothing about another analysis in the same project.",
    "outcome": "passed",
    "failure": null,
-   "duration": 2.0394532000645995,
+   "duration": 0.7330736998701468,
    "observed": [
-    "out of date at the start: {'code': False, 'architecture_document': False}",
-    "after syncing requirements->code: {'code': False, 'architecture_document': True}",
-    "document pair sync: started=True, Version 4: 0 source(s) refreshed, 1 configuration(s) re-run.",
-    "after syncing the document pair: {'code': False, 'architecture_document': False}"
+    "code analysis: Version 2: source side updated, 4 trace links.",
+    "versions: code [(2, 1), (1, 1)], document [(1, 1)]",
+    "document's requirements fingerprint unchanged: True"
    ]
   },
   {
-   "nodeid": "tests/integration/test_sync.py::test_sync_does_nothing_unless_something_moved_or_it_is_forced",
+   "nodeid": "tests/integration/test_sync.py::test_update_does_nothing_when_nothing_moved",
    "case": {
     "id": "I-10",
-    "feature": "Sync / nothing changed",
+    "feature": "Update / nothing to take in",
     "level": "integration",
     "priority": "High",
-    "why": "A sync with nothing to do must not create an empty version or spend model calls; but re-running on purpose must still be possible.",
-    "preconditions": "A saved requirements->code run; nothing has changed since",
-    "input": "Sync the pair without force, then with force=true",
-    "expected": "Without force: started=false, 'already up to date', still 1 version. With force: a job runs and creates version 2 with the same 3 links (+0 -0)"
+    "why": "An update with nothing new must not create an empty version or spend model calls.",
+    "preconditions": "A saved requirements->code analysis whose code side was then taken from a GitHub repository holding the same files",
+    "input": "Update the code side; update it again with the repository unchanged; then ask to update the uploaded requirements side without giving any files",
+    "expected": "First update: the fetched files are the stored ones, so nothing changed and no version is made. Second: started=false, 'Nothing has changed', nothing fetched. Requirements without files: 400. The analysis still has 1 version"
    },
-   "description": "An unchanged pair is left alone unless the user asks for a re-run.",
+   "description": "An unchanged side is left alone, and an uploaded side cannot be updated without its files.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.31015969987493,
+   "duration": 0.4491997000295669,
    "observed": [
-    "no force: started=False, 'Everything is already up to date. Nothing was fetched.', versions [(1, 1)]",
-    "force: Version 2: 0 source(s) refreshed, 1 configuration(s) re-run.; config 58: ok, 3 links (+0 -0)"
+    "first update: synced=False, 'Nothing has changed: the target side already holds exactly these files.'",
+    "unchanged repository: started=False, 'Nothing has changed since this side was last fetched. Nothing was fetched.'",
+    "requirements without files: 400 - 'reqs' is uploaded, so nothing can fetch it. Upload its current files to update it.",
+    "versions: [(1, 1)]"
    ]
   },
   {
-   "nodeid": "tests/integration/test_sync.py::test_sync_refuses_what_it_cannot_do_safely",
+   "nodeid": "tests/integration/test_sync.py::test_uploading_the_same_files_changes_nothing",
    "case": {
-    "id": "I-11",
-    "feature": "Sync / refusals",
+    "id": "I-36",
+    "feature": "Update / the same files again",
     "level": "integration",
-    "priority": "High",
-    "why": "Each refusal protects something: a pair with nothing to restore from, files that are no longer there, and two syncs writing the same graph at once.",
-    "preconditions": "A saved requirements->code run",
-    "input": "Sync: a pair never run; a replacement for an unknown source; a replacement naming an expired upload; an empty body; and a sync while another sync job is unfinished",
-    "expected": "409, 400, 410, 422 and 409 in that order, each with a message saying what is wrong; no new version created by any of them"
+    "priority": "Critical",
+    "why": "Uploading a side's files again unchanged is common - nobody remembers what they sent last time. It must say so and not make a version that differs from the last in nothing but its number.",
+    "preconditions": "A saved requirements->code analysis over UC1-UC4",
+    "input": "Stage exactly the same 4 requirement files for the requirements side, then ask to update with them",
+    "expected": "Staging reports no file changed. The update does not start: 'Nothing has changed'. The analysis still has 1 version"
    },
-   "description": "A sync that cannot be done is refused up front with a reason.",
+   "description": "Identical files are recognised as identical, and no version is made.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8955241000512615,
+   "duration": 0.4001351000042632,
    "observed": [
-    "pair never run: 409 - This project has no saved run from requirements to architecture with stored artifacts, so there is nothing to ",
-    "unknown source: 400 - Source 999999 cannot have its files uploaded.",
+    "staged changes: {'role': 'source', 'files': {'added': [], 'removed': [], 'modified': [], 'renamed': []}, 'elements': {'added': [], 'removed': [], 'modified': [], 'moved': []}, 'changed': False, 'meaningful': False}",
+    "update: started=False, 'Nothing has changed: the source side already holds exactly these files.'"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_sync.py::test_whitespace_only_change_makes_no_version",
+   "case": {
+    "id": "I-37",
+    "feature": "Update / whitespace-only change",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "Re-saving files in another editor changes their bytes but not their meaning. That is not a new state of the requirements, and must not make a version.",
+    "preconditions": "A saved requirements->code analysis over UC1-UC4",
+    "input": "Stage the same 4 files with extra spaces and blank lines added to each, then ask to update with them",
+    "expected": "Staging reports 4 files modified but no element changed (meaningful=false). The update does not start: 'No meaningful change'. The analysis still has 1 version"
+   },
+   "description": "Files that differ only in whitespace make no new version.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.4410465999972075,
+   "observed": [
+    "staged: files modified ['UC1.txt', 'UC2.txt', 'UC3.txt', 'UC4.txt']; elements {'added': [], 'removed': [], 'modified': [], 'moved': []}; meaningful False",
+    "update: started=False, 'No meaningful change: 4 file(s) differ, but no element the analysis compares changed. No new version was made.'"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_sync.py::test_inserted_sentence_keeps_every_link_on_its_sentence",
+   "case": {
+    "id": "I-38",
+    "feature": "Update / a sentence inserted, end to end",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "With sentence-level requirements, one inserted sentence renames every sentence after it. The pins handed to the run, and the links that come out, must follow the sentences rather than their old positions.",
+    "preconditions": "A New Analysis of one file with 3 sentences (login, logout, borrow), split into sentences, each linked to its method",
+    "input": "Stage the same file with a sentence about account locking inserted after the first, check what staging says, then update",
+    "expected": "Staging: UC.txt modified; 1 sentence added (sentence_1), 2 moved. The run is handed pins for sentence_0, sentence_2 and sentence_3 - the logout and borrow pins followed their sentences. Version 2's links: sentence_0->login, sentence_2->logout, sentence_3->borrow. Version 2 records what changed"
+   },
+   "description": "Pins and links follow sentences that moved when another was inserted above them.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.5405745998723432,
+   "observed": [
+    "links before: [('UC.txt::sentence_0', 'Auth.java::Auth::login'), ('UC.txt::sentence_1', 'Auth.java::Auth::logout'), ('UC.txt::sentence_2', 'Loans.java::Loans::borrow')]",
+    "staged: files ['UC.txt'], elements {'added': ['UC.txt::sentence_1'], 'removed': [], 'modified': [], 'moved': [{'old': 'UC.txt::sentence_1', 'new': 'UC.txt::sentence_2'}, {'old': 'UC.txt::sentence_2', 'new': 'UC.txt::sentence_3'}]}",
+    "pins handed to the run: [('UC.txt::sentence_0', 'Auth.java::Auth::login'), ('UC.txt::sentence_2', 'Auth.java::Auth::logout'), ('UC.txt::sentence_3', 'Loans.java::Loans::borrow')]",
+    "links after: [('UC.txt::sentence_0', 'Auth.java::Auth::login'), ('UC.txt::sentence_2', 'Auth.java::Auth::logout'), ('UC.txt::sentence_3', 'Loans.java::Loans::borrow')]",
+    "version 2 records: [('source', ['UC.txt::sentence_1'])]"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_sync.py::test_update_refuses_what_it_cannot_do_safely",
+   "case": {
+    "id": "I-11",
+    "feature": "Update / refusals",
+    "level": "integration",
+    "priority": "High",
+    "why": "Each refusal protects something: an analysis with nothing to restore from, files that are no longer there, and two updates writing the same versions at once.",
+    "preconditions": "A saved requirements->code analysis, and one saved without its files",
+    "input": "Update: the analysis saved without files; a side that does not exist; an expired upload; an empty body; and an update while another update job of the same analysis is unfinished",
+    "expected": "409, 404, 410, 422 and 409 in that order, each with a message saying what is wrong; no new version created by any of them"
+   },
+   "description": "An update that cannot be done is refused up front with a reason.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.4417361000087112,
+   "observed": [
+    "no stored files: 409 - This analysis has no stored files, so there is nothing to update. Run and save it from an upload first.",
+    "unknown side: 404 - Side not found.",
     "expired upload: 410 - Those uploaded files are no longer waiting - staged uploads are cleared after a while. Upload them again.",
-    "empty body: 422 - source_kind and target_kind are required",
-    "already syncing: 409 - This project is already being synced by job 48."
+    "empty body: 422 - source_id is required",
+    "already updating: 409 - This analysis is already being updated by job 89."
    ]
   },
   {
    "nodeid": "tests/integration/test_sync.py::test_removed_requirement_shows_as_a_broken_link",
    "case": {
     "id": "I-24",
-    "feature": "Sync / broken links through the API",
+    "feature": "Change report / broken links through the API",
     "level": "integration",
     "priority": "High",
-    "why": "'Broken' is what the user is told to act on. The graph endpoint must show the link, both ends named, with the missing end marked.",
-    "preconditions": "A saved run where UC3 is linked to borrow()",
-    "input": "Sync with requirements that no longer include UC3; then GET the graph filtered to broken links",
-    "expected": "1 broken link, UC3.txt -> borrow, with from_present=false and to_present=true; the other 2 links active"
+    "why": "'Broken' is what the user is told to act on. The report must show the link, both ends named, with the missing end marked and the reason given.",
+    "preconditions": "A saved analysis where UC3 is linked to borrow()",
+    "input": "Update the requirements side with files that no longer include UC3; then GET the change report",
+    "expected": "1 broken link, UC3.txt -> borrow, with source_present=false, target_present=true and source_changed=true; the other 2 links valid"
    },
    "description": "A link whose requirement was removed is reported as broken, not dropped.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.1606992000015453,
+   "duration": 0.5467102000257,
    "observed": [
-    "summary: {'nodes_present': 8, 'nodes_gone': 1, 'links_active': 2, 'links_stale': 0, 'links_broken': 1}",
-    "broken links: [('UC3.txt', 'borrow(String title)', False, True)]"
+    "summary: {'valid': 2, 'no_longer_found': 0, 'broken': 1, 'new': 0, 'uncovered': 1}",
+    "broken links: [('UC3.txt', 'borrow(String title)', False, True, True)]"
    ]
   },
   {
-   "nodeid": "tests/integration/test_sync.py::test_one_failing_configuration_does_not_lose_the_others",
-   "case": {
-    "id": "I-12",
-    "feature": "Sync / one configuration fails",
-    "level": "integration",
-    "priority": "High",
-    "why": "A model outage halfway through must not lose the configurations that already succeeded, or leave fetched files lying around.",
-    "preconditions": "One pair with 2 configurations",
-    "input": "Sync with force, with the pipeline made to raise for the file-level configuration only",
-    "expected": "The method-level configuration succeeds with 3 links; the file-level one reports the error; version 2 holds the 1 successful run; no working folder left"
-   },
-   "description": "One configuration failing is reported for that configuration and does not undo the rest.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 1.5118812998989597,
-   "observed": [
-    "config 61: ok, 3 links (+0 -0)",
-    "config 62: FAILED - the model could not be reached",
-    "job state: succeeded; versions (number, runs): [(2, 1), (1, 2)]",
-    "working folders left: []"
-   ]
-  },
-  {
-   "nodeid": "tests/integration/test_sync.py::test_a_sync_where_everything_fails_changes_nothing",
+   "nodeid": "tests/integration/test_sync.py::test_a_failed_update_changes_nothing",
    "case": {
     "id": "I-13",
-    "feature": "Sync / every configuration fails",
+    "feature": "Update / the run fails",
     "level": "integration",
     "priority": "High",
-    "why": "If nothing ran, nothing about the project changed. A version with no runs in it is a state of the artifacts that nothing ever analysed.",
-    "preconditions": "A saved requirements->code run in version 1, and new requirements staged for upload",
-    "input": "Sync with the staged requirements, with the pipeline made to raise for every configuration",
-    "expected": "The configuration reports its error; no working folder is left; the requirements source keeps its old fingerprint; and no new, empty version is created"
+    "why": "If nothing ran, nothing about the analysis changed. A version with no run in it is a state of the files that nothing ever analysed.",
+    "preconditions": "A saved requirements->code analysis in version 1",
+    "input": "Update the requirements side with changed files, with the pipeline made to raise",
+    "expected": "The job fails with the error; no new version is created; the requirements side keeps its old fingerprint; no working folder is left"
    },
-   "description": "A sync that produced no run leaves the project exactly as it was.",
-   "outcome": "failed",
-   "failure": "AssertionError: an empty version was left behind: [(2, 0), (1, 1)]\nassert [(2, 0), (1, 1)] == [(1, 1)]\n  \n  At index 0 diff: (2, 0) != (1, 1)\n  Left contains one more item: (1, 1)\n  Use -v to get more diff",
-   "duration": 0.9159423001110554,
+   "description": "An update whose run failed leaves the analysis exactly as it was.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.45927800005301833,
    "observed": [
-    "job state: succeeded - Version 2: 1 source(s) refreshed, 1 configuration(s) re-run.",
-    "config 63: FAILED - the model could not be reached",
-    "versions (number, runs): [(2, 0), (1, 1)]",
+    "job state: failed - the model could not be reached",
+    "versions (number, runs): [(1, 1)]",
     "requirements fingerprint unchanged: True; new working folders: []"
-   ],
-   "failed_during": "call"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_sync.py::test_report_spans_several_versions",
+   "case": {
+    "id": "I-39",
+    "feature": "Change report / across several versions",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "The report can compare any two versions, not only neighbours. Across several updates the id maps of every version in between must be followed, or a sentence that moved twice reads as lost.",
+    "preconditions": "A sentence-level analysis of UC.txt (login, logout, borrow) at version 1",
+    "input": "Version 2 inserts a sentence after login; version 3 removes the borrow sentence. Read the report for 1 -> 3, then for 2 -> 3 by default, then ask for 3 -> 1 and for version 9",
+    "expected": "1 -> 3: login and logout valid (logout now sentence_2), borrow broken with its source gone; version 2 and 3's file changes listed. Default report is 2 -> 3. 3 -> 1 and version 9 are refused with 409"
+   },
+   "description": "A report between distant versions follows every version's id map in between.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.9356670000124723,
+   "observed": [
+    "1 -> 3: {('UC.txt::sentence_0', 'Auth.java::Auth::login'): 'valid', ('UC.txt::sentence_2', 'Auth.java::Auth::logout'): 'valid', ('UC.txt::sentence_2', 'Loans.java::Loans::borrow'): 'broken'}",
+    "versions listed: [(2, {'added': ['UC.txt::sentence_1'], 'removed': [], 'modified': [], 'moved': [{'old': 'UC.txt::sentence_1', 'new': 'UC.txt::sentence_2'}, {'old': 'UC.txt::sentence_2', 'new': 'UC.txt::sentence_3'}]}), (3, {'added': [], 'removed': ['UC.txt::sentence_3'], 'modified': [], 'moved': []})]",
+    "default: 2 -> 3",
+    "3 -> 1: 409 The earlier version must come before the later one.; version 9: 409 Version 9 does not exist."
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_sync.py::test_inserted_and_removed_sentence_leaves_links_valid",
+   "case": {
+    "id": "I-43",
+    "feature": "Change report / a sentence inserted and removed again",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "Across a version that inserted a sentence and one that removed it again, every original sentence is back where it was. Reporting their links as broken would be a false alarm.",
+    "preconditions": "A sentence-level analysis of UC.txt (login, logout, borrow) at version 1",
+    "input": "Version 2 inserts a sentence after login; version 3 removes it again. Read the report for 1 -> 3",
+    "expected": "All 3 links valid, none broken, no longer found or new"
+   },
+   "description": "A sentence inserted and removed again leaves every link valid.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.6593398998957127,
+   "observed": [
+    "1 -> 3: {('UC.txt::sentence_0', 'Auth.java::Auth::login'): 'valid', ('UC.txt::sentence_1', 'Auth.java::Auth::logout'): 'valid', ('UC.txt::sentence_2', 'Loans.java::Loans::borrow'): 'valid'}; {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 0}"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_sync.py::test_net_change_leaves_out_what_came_and_went",
+   "case": {
+    "id": "I-44",
+    "feature": "Change report / net change over several versions",
+    "level": "integration",
+    "priority": "Critical",
+    "why": "Between two distant versions the user wants what is different now, not every step taken to get there. A file added in one version and removed in a later one is no difference at all.",
+    "preconditions": "A saved requirements->code analysis over UC1-UC4 (whole documents)",
+    "input": "v2 adds UC5; v3 removes UC5 again and edits UC1. Read the report for 1 -> 3",
+    "expected": "Net, requirements side: only UC1.txt, modified, touched by 1 link whose source changed; UC5.txt does not appear; the side is whole documents. Step by step: v2 and v3, with UC5 added in v2"
+   },
+   "description": "The net change between two versions shows only what differs between them.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.7208678999450058,
+   "observed": [
+    "net rows: [('UC1.txt', 'modified', 1, 1)]; whole documents: True; counts {'files_added': 0, 'files_removed': 0, 'files_modified': 1, 'files_renamed': 0, 'elements_added': 0, 'elements_removed': 0, 'elements_modified': 1, 'elements_moved': 0}",
+    "step by step (version, files added): [(2, ['UC5.txt']), (3, [])]"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_sync.py::test_net_change_of_a_sentence_that_came_and_went",
+   "case": {
+    "id": "I-45",
+    "feature": "Change report / a sentence that came and went",
+    "level": "integration",
+    "priority": "High",
+    "why": "An element added in one version and removed in a later one must not appear in the net change, even though each version recorded it.",
+    "preconditions": "A sentence-level analysis of UC.txt (login, logout, borrow) at version 1",
+    "input": "v2 inserts a sentence after login; v3 removes it. Read the report for 1 -> 3",
+    "expected": "Net: nothing changed on either side (every count 0, no file rows). Step by step: v2 added sentence_1, v3 removed it"
+   },
+   "description": "A sentence inserted and removed again is not part of the net change.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.6718637999147177,
+   "observed": [
+    "net: [('source', {'files_added': 0, 'files_removed': 0, 'files_modified': 0, 'files_renamed': 0, 'elements_added': 0, 'elements_removed': 0, 'elements_modified': 0, 'elements_moved': 0}, []), ('target', {'files_added': 0, 'files_removed': 0, 'files_modified': 0, 'files_renamed': 0, 'elements_added': 0, 'elements_removed': 0, 'elements_modified': 0, 'elements_moved': 0}, [])]",
+    "step by step (version, added, removed): [(2, ['UC.txt::sentence_1'], []), (3, [], ['UC.txt::sentence_1'])]"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_sync.py::test_report_without_the_net_change_when_a_file_is_gone",
+   "case": {
+    "id": "I-46",
+    "feature": "Change report / a stored file is gone",
+    "level": "integration",
+    "priority": "Medium",
+    "why": "Blobs can be removed by hand or by garbage collection. The report must still answer, without the net change it cannot work out, and say so.",
+    "preconditions": "An analysis at v2 whose v1 requirements included UC4.txt, removed in v2",
+    "input": "Delete UC4.txt's blob from the store (and the trash), then read the report for 1 -> 2",
+    "expected": "200; net_available=false and no net sides; the step by step list for v2 is still there; the links are still reported"
+   },
+   "description": "A missing blob drops the net change, not the report.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.5335002000210807,
+   "observed": [
+    "net_available: False; net sides: 0; step by step versions: [2]; summary {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 0}"
+   ]
+  },
+  {
+   "nodeid": "tests/integration/test_sync.py::test_line_diff_of_a_changed_file",
+   "case": {
+    "id": "I-47",
+    "feature": "Change report / line diff of a changed file",
+    "level": "integration",
+    "priority": "Medium",
+    "why": "Seeing what changed inside a modified file is what tells a reader whether a link's source really changed. It is read from the stored files, and must stay short enough to read.",
+    "preconditions": "An analysis at v2, where v2 edited UC1.txt and added a 300-line UC9.txt",
+    "input": "The line diff of UC1.txt for 1 -> 2; of UC9.txt; and of a .pdf path",
+    "expected": "UC1.txt: the old line removed and the new line added. UC9.txt: cut at 200 lines and marked truncated. The .pdf: 400"
+   },
+   "description": "A changed text file's diff is read from the stored files, capped, and refused for PDFs.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.6159444999648258,
+   "observed": [
+    "UC1.txt: {'lines': ['@@ -1 +1 @@', '-A visitor performs a login with a passphrase.', '+A visitor performs a login with a passphrase, twice.'], 'truncated': False}",
+    "UC9.txt: 200 lines, truncated=True; pdf: 400"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_change_report.py::test_link_in_both_versions_is_valid",
+   "case": {
+    "id": "U-39",
+    "feature": "Change report / valid",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "A link found in both versions is the normal case. If it is not reported valid, every update looks like a loss.",
+    "preconditions": "None",
+    "input": "The same 3 links in both versions, over the same elements",
+    "expected": "3 valid links, none changed at either end; summary valid=3 and every other count 0"
+   },
+   "description": "A link both runs found, between unchanged elements, is valid and neither end changed.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0016579999355599284,
+   "observed": [
+    "{'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 0}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_change_report.py::test_link_lost_with_neither_end_changed",
+   "case": {
+    "id": "U-40",
+    "feature": "Change report / no longer found, neither end changed",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "When neither element changed and the link is gone, the cause is the classifier or a shifted top-k - not the artifacts. The report has to say so, because that is the case pinning exists for.",
+    "preconditions": "None",
+    "input": "UC2 -> logout in the earlier version only; both elements unchanged and still present",
+    "expected": "UC2 -> logout: no_longer_found, source_changed=false, target_changed=false"
+   },
+   "description": "A link that disappeared between two unchanged elements is no longer found, for no reason in the files.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0011029000161215663,
+   "observed": [
+    "{'state': 'no_longer_found', 'source_id': 'UC2', 'target_id': 'Auth::logout()', 'source_present': True, 'target_present': True, 'source_changed': False, 'target_changed': False, 'confidence': 0.9, 'confidence_level': 'high', 'explanation': None}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_change_report.py::test_link_lost_because_the_source_changed",
+   "case": {
+    "id": "U-41",
+    "feature": "Change report / source changed",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "An edited requirement is the most common reason a link moves. The report must name the source as the reason.",
+    "preconditions": "None",
+    "input": "UC2's text edited between the versions, and UC2 -> logout no longer found",
+    "expected": "UC2 -> logout: no_longer_found, source_changed=true, target_changed=false"
+   },
+   "description": "A link lost after its requirement was edited names the source as what changed.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0010782998288050294,
+   "observed": [
+    "{('UC1', 'Auth::login()'): (False, False), ('UC2', 'Auth::logout()'): (True, False), ('UC3', 'Loans::borrow()'): (False, False)}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_change_report.py::test_link_kept_although_the_target_changed",
+   "case": {
+    "id": "U-42",
+    "feature": "Change report / target changed",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "Code changes under a requirement all the time. When that is what moved a link, the report must point at the code.",
+    "preconditions": "None",
+    "input": "logout()'s body edited between the versions; UC2 -> logout still found",
+    "expected": "UC2 -> logout: valid, source_changed=false, target_changed=true; the other two links valid with neither changed"
+   },
+   "description": "A link kept across an edit to its code says the target changed.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0010670999763533473,
+   "observed": [
+    "{('UC1', 'Auth::login()'): (False, False), ('UC2', 'Auth::logout()'): (False, True), ('UC3', 'Loans::borrow()'): (False, False)}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_change_report.py::test_link_to_a_removed_element_is_broken",
+   "case": {
+    "id": "U-43",
+    "feature": "Change report / broken",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "A link whose requirement or code was removed is broken: the one state that always needs a person to look. It must not be mistaken for the classifier changing its mind.",
+    "preconditions": "None",
+    "input": "UC3 removed from the requirements (its id map entry says removed), and borrow() removed from the code in a second case",
+    "expected": "UC3 -> borrow: broken with source_present=false and source_changed=true. In the second case: broken with target_present=false and target_changed=true"
+   },
+   "description": "A link with an end that no longer exists is broken, and says which end.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.001095699961297214,
+   "observed": [
+    "requirement removed: {'state': 'broken', 'source_id': 'UC3', 'target_id': 'Loans::borrow()', 'source_present': False, 'target_present': True, 'source_changed': True, 'target_changed': False, 'confidence': 0.9, 'confidence_level': 'high', 'explanation': None}",
+    "code removed: {'state': 'broken', 'source_id': 'UC3', 'target_id': 'Loans::borrow()', 'source_present': True, 'target_present': False, 'source_changed': False, 'target_changed': True, 'confidence': 0.9, 'confidence_level': 'high', 'explanation': None}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_change_report.py::test_link_only_in_the_later_version_is_new",
+   "case": {
+    "id": "U-44",
+    "feature": "Change report / new",
+    "level": "unit",
+    "priority": "High",
+    "why": "A link only the later run found is what an update adds. Whether it came from new text or from the classifier matters for trusting it.",
+    "preconditions": "None",
+    "input": "A new requirement UC4 linked to borrow() in the later version, and a new link UC1 -> logout between two unchanged elements",
+    "expected": "UC4 -> borrow: new, source_changed=true (UC4 did not exist). UC1 -> logout: new, neither changed"
+   },
+   "description": "A link only the later run found is new, and says whether either end is new or edited.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0010728000197559595,
+   "observed": [
+    "{('UC1', 'Auth::login()'): (False, False), ('UC2', 'Auth::logout()'): (False, False), ('UC3', 'Loans::borrow()'): (False, False), ('UC4', 'Loans::borrow()'): (True, False), ('UC1', 'Auth::logout()'): (False, False)}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_change_report.py::test_uncovered_sources_are_listed_and_deleted_ones_are_not",
+   "case": {
+    "id": "U-45",
+    "feature": "Change report / uncovered",
+    "level": "unit",
+    "priority": "High",
+    "why": "Requirements with no link are the coverage gap a report exists to show. A requirement that was deleted is not a gap, and must not be listed as one.",
+    "preconditions": "None",
+    "input": "Later version: UC2 has no link and still exists; UC3 was removed. The later run lists UC2 as unimplemented",
+    "expected": "uncovered = ['UC2'] (UC3 is not listed); summary uncovered=1"
+   },
+   "description": "Sources with no link in the later version are listed; removed ones are not.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0010655998485162854,
+   "observed": [
+    "uncovered: ['UC2']; summary {'valid': 1, 'no_longer_found': 1, 'broken': 1, 'new': 0, 'uncovered': 1}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_change_report.py::test_links_are_matched_through_the_id_map",
+   "case": {
+    "id": "U-46",
+    "feature": "Change report / identifiers that moved",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "With sentence-level requirements, inserting a sentence renames the ones after it. Read without the id map, every later link would show as no longer found plus new.",
+    "preconditions": "None",
+    "input": "Earlier: s0 -> login, s1 -> logout. A sentence inserted at 1, so s1 is now s2 (id map). Later: s0 -> login, s2 -> logout",
+    "expected": "Both links valid, reported under the later identifiers (s0, s2), with neither end changed; no link new or no longer found"
+   },
+   "description": "A link whose element moved is the same link under its new identifier.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0010397000005468726,
+   "observed": [
+    "{('s0', 'Auth::login()'): 'valid', ('s2', 'Auth::logout()'): 'valid'}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_change_report.py::test_a_first_version_lists_its_links_as_they_stand",
+   "case": {
+    "id": "U-47",
+    "feature": "Change report / the first version",
+    "level": "unit",
+    "priority": "Medium",
+    "why": "An analysis that was never updated has nothing to compare with. Its links must still be listed, as they stand.",
+    "preconditions": "None",
+    "input": "No earlier run; a later run with 3 links and UC4 uncovered",
+    "expected": "3 links, all valid with neither end changed; uncovered ['UC4']"
+   },
+   "description": "With nothing to compare against, every link is reported as it stands.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0010689998744055629,
+   "observed": [
+    "{'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 1}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_change_report.py::test_links_are_counted_per_changed_file",
+   "case": {
+    "id": "U-56",
+    "feature": "Change report / links per changed file",
+    "level": "unit",
+    "priority": "High",
+    "why": "A changed file is worth looking at in proportion to the links it touches. Counting them per file is what lets the user go from a change to the links it affected.",
+    "preconditions": "None",
+    "input": "Changed code files: Auth.java (modified) and security/Pay.java (renamed from Pay.java). Links: two into Auth.java (one whose target changed), one into security/Pay.java, one into Loans.java",
+    "expected": "Auth.java: 2 links, 1 changed. security/Pay.java: 1 link, 1 changed. Loans.java is not a changed file and is not counted"
+   },
+   "description": "Each changed file says how many links touch it on its side, and how many say that end changed.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0011298001045361161,
+   "observed": [
+    "[('Auth.java', 2, 1), ('security/Pay.java', 1, 1)]"
+   ]
   },
   {
    "nodeid": "tests/unit/test_classifier_parsing.py::test_tagged_replies_are_read_correctly",
@@ -1350,7 +1817,7 @@
    "description": "A reply that follows the prompt's format is read from its tags, whatever else it says.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.003036299953237176,
+   "duration": 0.0013275999808683991,
    "observed": [
     "simple: {'<trace>yes</trace>': True, '<trace>NO</trace>': False, '<think>yes, this could match</think>\\n<trace>no</trace>': False, 'Reasoning: yes and no.\\n<trace>no</trace>': False}",
     "reasoning: {'<trace>yes</trace>': True, '<trace>NO</trace>': False, '<think>yes, this could match</think>\\n<trace>no</trace>': False, 'Reasoning: yes and no.\\n<trace>no</trace>': False}",
@@ -1370,16 +1837,384 @@
     "expected": "Both read as not linked, by both classifiers"
    },
    "description": "A reply without the tag that plainly says no must not become a link.",
-   "outcome": "failed",
-   "failure": "AssertionError: 4 of 4 replies saying 'No' were read as a link\nassert not [('simple', 'No. The eyes of the reader are not involved.'), ('simple', 'No - that was removed yesterday.'), ('reasoning', 'No. The eyes of the reader are not involved.'), ('reasoning', 'No - that was removed yesterday.')]",
-   "duration": 0.0020228999201208353,
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0011339000193402171,
    "observed": [
-    "simple: 'No. The eyes of the reader are not involved.' -> linked",
-    "simple: 'No - that was removed yesterday.' -> linked",
-    "reasoning: 'No. The eyes of the reader are not involved.' -> linked",
-    "reasoning: 'No - that was removed yesterday.' -> linked"
-   ],
-   "failed_during": "call"
+    "simple: 'No. The eyes of the reader are not involved.' -> not linked",
+    "simple: 'No - that was removed yesterday.' -> not linked",
+    "reasoning: 'No. The eyes of the reader are not involved.' -> not linked",
+    "reasoning: 'No - that was removed yesterday.' -> not linked"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_sentence_inserted_in_the_middle",
+   "case": {
+    "id": "U-29",
+    "feature": "Element diff / a sentence inserted in the middle",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "Sentences are named by position. One new sentence renames every sentence after it, which without the id map reads as every later link lost and found again, and offers pins to the wrong sentences.",
+    "preconditions": "None",
+    "input": "UC1.txt with 3 sentences (login, logout, borrow); then the same file with a new sentence inserted between login and logout",
+    "expected": "1 sentence added (the new sentence_1); nothing removed or modified; logout and borrow moved from sentence_1 and sentence_2 to sentence_2 and sentence_3; login keeps its identifier"
+   },
+   "description": "An inserted sentence is the only addition; the sentences after it moved, not changed.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.001408300013281405,
+   "observed": [
+    "{'added': ['UC1.txt::sentence_1'], 'removed': [], 'modified': [], 'moved': [('UC1.txt::sentence_1', 'UC1.txt::sentence_2'), ('UC1.txt::sentence_2', 'UC1.txt::sentence_3')]}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_sentence_removed",
+   "case": {
+    "id": "U-30",
+    "feature": "Element diff / a sentence removed",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "A removed sentence is what makes a link broken. The sentence after it takes over its position and identifier, so matching by identifier would wrongly say the removed sentence was edited.",
+    "preconditions": "None",
+    "input": "UC1.txt with 3 sentences; then the same file without the middle one",
+    "expected": "sentence_1 (logout) removed; borrow moved from sentence_2 to sentence_1; nothing added or modified; the removed identifier translates to nothing"
+   },
+   "description": "A removed sentence is reported removed, and the one that slid into its place is reported moved.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.001266400096938014,
+   "observed": [
+    "{'added': [], 'removed': ['UC1.txt::sentence_1'], 'modified': [], 'moved': [('UC1.txt::sentence_2', 'UC1.txt::sentence_1')]}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_sentence_modified",
+   "case": {
+    "id": "U-31",
+    "feature": "Element diff / a sentence modified",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "An edited sentence is the same requirement reworded. It must read as modified - the reason a link's source changed - not as one removed and one added.",
+    "preconditions": "None",
+    "input": "UC1.txt with 3 sentences; then the same file with the login sentence reworded ('password' -> 'passphrase')",
+    "expected": "1 modified (sentence_0 -> sentence_0); nothing added, removed or moved. The whole-file element changed too, but only the compared sentences are listed"
+   },
+   "description": "A reworded sentence is modified in place.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.001366900047287345,
+   "observed": [
+    "{'added': [], 'removed': [], 'modified': [('UC1.txt::sentence_0', 'UC1.txt::sentence_0')], 'moved': []}",
+    "shown to the user: {'added': [], 'removed': [], 'modified': ['UC1.txt::sentence_0'], 'moved': []}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_two_sentences_swapped",
+   "case": {
+    "id": "U-32",
+    "feature": "Element diff / two sentences swapped",
+    "level": "unit",
+    "priority": "High",
+    "why": "Reordering changes no text. Both sentences must keep their links by moving with them, rather than each link pointing at the other sentence.",
+    "preconditions": "None",
+    "input": "UC1.txt with login then logout; then logout then login",
+    "expected": "Both moved (sentence_0 <-> sentence_1); nothing added, removed or modified"
+   },
+   "description": "Swapped sentences are two moves, and no edit.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.001229100045748055,
+   "observed": [
+    "{'added': [], 'removed': [], 'modified': [], 'moved': [('UC1.txt::sentence_0', 'UC1.txt::sentence_1'), ('UC1.txt::sentence_1', 'UC1.txt::sentence_0')]}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_file_renamed_with_the_same_hash",
+   "case": {
+    "id": "U-33",
+    "feature": "File diff / renamed with the same content",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "An uploaded folder has no rename list. A file moved without being edited must still be recognised by its content, or every link on it breaks.",
+    "preconditions": "None",
+    "input": "Files {UC1.txt, UC2.txt}; then UC2.txt moved to archive/UC2.txt unchanged and UC1.txt edited. Then the elements of the moved file, read under both paths",
+    "expected": "UC1.txt modified; UC2.txt renamed to archive/UC2.txt; nothing added or removed. Both sentences moved to the same identifier under the new path, and the id map takes the file itself there too"
+   },
+   "description": "A file whose content reappears under a new path is a rename, and its elements follow it.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0012251001317054033,
+   "observed": [
+    "files: added [], removed [], modified ['UC1.txt'], renamed {'UC2.txt': 'archive/UC2.txt'}",
+    "{'added': [], 'removed': [], 'modified': [], 'moved': [('UC2.txt::sentence_0', 'archive/UC2.txt::sentence_0'), ('UC2.txt::sentence_1', 'archive/UC2.txt::sentence_1')]}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_whitespace_only_change_is_not_meaningful",
+   "case": {
+    "id": "U-34",
+    "feature": "Element diff / whitespace-only change",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "Reformatting a file changes its bytes and its hash but not its meaning. It must not make a new version or be reported as an edit.",
+    "preconditions": "None",
+    "input": "UC1.txt with 2 sentences; then the same text with extra spaces, a blank line and a trailing newline. And a Java file re-indented",
+    "expected": "The file hashes differ, but no element is added, removed, modified or moved, and the change is not meaningful - for both files"
+   },
+   "description": "Only whitespace changed: the files differ, the elements do not.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0020732999546453357,
+   "observed": [
+    "file diff: modified ['UC1.txt']",
+    "text: {'added': [], 'removed': [], 'modified': [], 'moved': []}, meaningful False",
+    "java: {'added': [], 'removed': [], 'modified': [], 'moved': []}, meaningful False"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_uml_components_with_counter_ids",
+   "case": {
+    "id": "U-35",
+    "feature": "Element diff / UML components named by a counter",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "A component's identifier carries its position among the components. A component added at the front renumbers every other one, which must read as moves - not as every component replaced.",
+    "preconditions": "None",
+    "input": "tests/data/model.uml (Authentication, Lending); then the same model with a new Catalogue component placed before them",
+    "expected": "1 component added (Catalogue, counter 0); Authentication moved from $0$ to $1$ and Lending from $1$ to $2; no component removed or modified"
+   },
+   "description": "A new component shifts the counters of the others; they are moved, not changed.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0023530001053586602,
+   "observed": [
+    "shown to the user: {'added': ['model.uml$0$_cat'], 'removed': [], 'modified': [], 'moved': [{'old': 'model.uml$0$_auth', 'new': 'model.uml$1$_auth'}, {'old': 'model.uml$1$_lend', 'new': 'model.uml$2$_lend'}]}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_methods_are_matched_by_name_or_text",
+   "case": {
+    "id": "U-36",
+    "feature": "Element diff / methods keep their names",
+    "level": "unit",
+    "priority": "High",
+    "why": "A method is named by its signature, not its position. One rewritten beyond recognition is still the same method, and a method deleted while an unrelated one is added must not be called an edit.",
+    "preconditions": "None",
+    "input": "Auth.java with login, logout, clear; then login's body rewritten, clear deleted, and a new method audit added after logout",
+    "expected": "login modified (same identifier); clear removed; audit added; logout unchanged"
+   },
+   "description": "A rewritten method stays itself; a deleted one and a new one stay apart.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0022901998599991202,
+   "observed": [
+    "shown to the user: {'added': ['Auth.java::Auth::audit(String event)'], 'removed': ['Auth.java::Auth::clear()'], 'modified': ['Auth.java::Auth::login(String name, String password)'], 'moved': []}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_pins_are_translated_through_the_id_map",
+   "case": {
+    "id": "U-37",
+    "feature": "Id map / pins translated",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "Pins are re-offered to the classifier by identifier. Untranslated, a pin made on the old sentence_1 is offered for whatever sentence now sits at position 1.",
+    "preconditions": "The diff of U-29 (sentence inserted) on the source side and of U-30's kind (logout() removed) on the target side",
+    "input": "Pins {sentence_0 -> login(), sentence_1 -> logout(), sentence_2 -> borrow()} translated through both id maps",
+    "expected": "{sentence_0 -> login(), sentence_3 -> borrow()}: the logout pin is dropped because its target is gone, and borrow's source follows it to sentence_3"
+   },
+   "description": "Pins follow moved elements and are dropped when an end was removed.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0015314999036490917,
+   "observed": [
+    "before: {'UC1.txt::sentence_0': ['Auth.java::Auth::login()'], 'UC1.txt::sentence_1': ['Auth.java::Auth::logout()'], 'UC1.txt::sentence_2': ['Loans.java::Loans::borrow()']}",
+    "after: {'UC1.txt::sentence_0': ['Auth.java::Auth::login()'], 'UC1.txt::sentence_3': ['Loans.java::Loans::borrow()']}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_id_maps_round_trip_and_compose",
+   "case": {
+    "id": "U-38",
+    "feature": "Id map / stored and composed",
+    "level": "unit",
+    "priority": "High",
+    "why": "The map is stored on a version and read back for the change report, which may span several versions. It must survive the round trip and chain correctly.",
+    "preconditions": "None",
+    "input": "Version 2's map (sentence inserted at 1) and version 3's map (sentence_3 removed), stored as JSON-ready dicts, read back and composed",
+    "expected": "Read back equal. Composed: sentence_1 -> sentence_2, sentence_2 -> gone (it became sentence_3, which version 3 removed), sentence_0 unchanged"
+   },
+   "description": "Maps read back from storage are the maps that were stored, and chain across versions.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0017430000007152557,
+   "observed": [
+    "version 2: {'moved': {'UC1.txt::sentence_1': 'UC1.txt::sentence_2', 'UC1.txt::sentence_2': 'UC1.txt::sentence_3'}, 'removed': []}",
+    "version 3: {'moved': {}, 'removed': ['UC1.txt::sentence_3']}",
+    "{'sentence_0': 'UC1.txt::sentence_0', 'sentence_1': 'UC1.txt::sentence_2', 'sentence_2': None}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_insert_then_remove_at_the_same_place",
+   "case": {
+    "id": "U-48",
+    "feature": "Id map / composed: insert, then remove at the same place",
+    "level": "unit",
+    "priority": "Critical",
+    "why": "An identifier a later version removes names the element holding it after the earlier version, not the element that once had that name. Read the other way, a sentence that never went away is reported broken.",
+    "preconditions": "None",
+    "input": "v2 inserts a sentence at s5, so the old s5 moves to s6. v3 removes the inserted sentence, so the old one moves back to s5",
+    "expected": "v1's s5 translates to s5, and nothing is removed"
+   },
+   "description": "A sentence pushed down and back up again is still there under its old name.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0010861000046133995,
+   "observed": [
+    "{'moved': {}, 'removed': []}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_two_swaps_cancel_out",
+   "case": {
+    "id": "U-49",
+    "feature": "Id map / composed: two swaps",
+    "level": "unit",
+    "priority": "High",
+    "why": "Two swaps of the same pair put every element back where it was. Any leftover entry would send a link to the other element.",
+    "preconditions": "None",
+    "input": "v2 swaps a and b; v3 swaps them back",
+    "expected": "a translates to a and b to b; the composed map is empty"
+   },
+   "description": "Swapping twice returns every identifier to its element.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0011205000337213278,
+   "observed": [
+    "{'moved': {}, 'removed': []}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_move_then_remove",
+   "case": {
+    "id": "U-50",
+    "feature": "Id map / composed: move, then remove",
+    "level": "unit",
+    "priority": "High",
+    "why": "An element that moved and was then deleted is gone. Its links are broken, whatever name it had in between.",
+    "preconditions": "None",
+    "input": "v2 moves s1 to s2; v3 removes s2",
+    "expected": "v1's s1 translates to nothing"
+   },
+   "description": "An element removed after moving is removed.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0011296001030132174,
+   "observed": [
+    "{'moved': {}, 'removed': ['s1']}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_freed_name_taken_by_another_element",
+   "case": {
+    "id": "U-51",
+    "feature": "Id map / composed: removed, then another element moved onto the freed name",
+    "level": "unit",
+    "priority": "High",
+    "why": "A freed identifier is soon taken by a neighbour. The removed element must stay removed, and the neighbour must not inherit its links.",
+    "preconditions": "None",
+    "input": "v2 removes x; v3 moves y onto x",
+    "expected": "x translates to nothing; y translates to x"
+   },
+   "description": "The element that takes a freed name is not the one that had it.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0012293000472709537,
+   "observed": [
+    "{'moved': {'y': 'x'}, 'removed': ['x']}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_three_versions_chain",
+   "case": {
+    "id": "U-52",
+    "feature": "Id map / composed: three versions",
+    "level": "unit",
+    "priority": "High",
+    "why": "A report across several versions chains every map in between. The result must not depend on how the chain is grouped.",
+    "preconditions": "None",
+    "input": "v2 inserts at s1 (s1->s2, s2->s3); v3 removes s3; v4 inserts at s0 (s0->s1, s1->s2, s2->s3). Composed left to right, and right to left",
+    "expected": "s0->s1, s1->s3, s2 gone; both groupings give the same map"
+   },
+   "description": "Chaining three maps gives one answer, whichever pair is joined first.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0010719000129029155,
+   "observed": [
+    "left: {'moved': {'s0': 's1', 's1': 's3'}, 'removed': ['s2']}; right: {'moved': {'s0': 's1', 's1': 's3'}, 'removed': ['s2']}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_moves_inside_a_file_are_counted_not_listed",
+   "case": {
+    "id": "U-53",
+    "feature": "Net change / moved elements",
+    "level": "unit",
+    "priority": "High",
+    "why": "A sentence that slid down because another was inserted is unchanged. Listing every one of them would bury the change that caused it; a sentence that went to another file is a real change.",
+    "preconditions": "None",
+    "input": "UC1.txt: login, logout, borrow becomes: a new sentence, login, borrow - so login slides down one place. The logout sentence moved to UC2.txt",
+    "expected": "Counts: 1 added, 2 moved. Listed: the added sentence, and the move to UC2.txt (old -> new); login, which only slid down, is not listed"
+   },
+   "description": "Elements that only changed position in their file are counted; a move to another file is listed.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0014995000092312694,
+   "observed": [
+    "counts: {'files_added': 0, 'files_removed': 0, 'files_modified': 2, 'files_renamed': 0, 'elements_added': 1, 'elements_removed': 0, 'elements_modified': 0, 'elements_moved': 2}",
+    "listed: {'UC1.txt': [('added', None, 'UC1.txt::sentence_0')], 'UC2.txt': [('moved', 'UC1.txt::sentence_1', 'UC2.txt::sentence_1')]}"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_a_renamed_method_is_listed_old_to_new",
+   "case": {
+    "id": "U-54",
+    "feature": "Net change / a renamed method",
+    "level": "unit",
+    "priority": "High",
+    "why": "A method renamed but otherwise kept is the same method. It must show as modified with its old and new name, and with a name a reader recognises.",
+    "preconditions": "None",
+    "input": "Auth.java: login(String name) renamed to signIn(String name), body unchanged",
+    "expected": "Listed once, as modified, old -> new: Auth.java::Auth::login(String name) -> Auth.java::Auth::signIn(String name), labelled 'Auth.signIn'"
+   },
+   "description": "A renamed method is one modified element, listed with its old and new identifier.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0019258001120761037,
+   "observed": [
+    "[{'change': 'modified', 'old': 'Auth.java::Auth::login(String name)', 'new': 'Auth.java::Auth::signIn(String name)', 'label': 'Auth.signIn'}]"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_element_diff.py::test_a_file_renamed_then_modified",
+   "case": {
+    "id": "U-55",
+    "feature": "Net change / a file renamed, then modified",
+    "level": "unit",
+    "priority": "High",
+    "why": "Compared directly, a file renamed in one version and edited in a later one has a new path and new content, so nothing ties the two together. The renames the versions recorded have to.",
+    "preconditions": "None",
+    "input": "v2 renames UC2.txt to archive/UC2.txt; v3 edits it; v4 renames it again to old/UC2.txt. The net file diff from v1 to v4, with and without the chained renames",
+    "expected": "Chained renames: UC2.txt -> old/UC2.txt. With them, the file is renamed; without them, it reads as one removed and one added"
+   },
+   "description": "Renames recorded along the way tie a renamed and later edited file back to its old path.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0010714998934417963,
+   "observed": [
+    "chained renames: {'UC2.txt': 'old/UC2.txt'}",
+    "with them: renamed {'UC2.txt': 'old/UC2.txt'}; without: added ['old/UC2.txt'], removed ['UC2.txt']"
+   ]
   },
   {
    "nodeid": "tests/unit/test_environment.py::test_tests_use_their_own_database_and_storage",
@@ -1396,7 +2231,7 @@
    "description": "The application under test is pointed at the test database and a scratch storage folder.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.002880200045183301,
+   "duration": 0.0012774999486282468,
    "observed": [
     "database in use: tracerag_test; database in .env: tracerag",
     "storage root: D:\\Downloads\\TraceRAG\\backend\\tests\\.work\\storage",
@@ -1418,7 +2253,7 @@
    "description": "A connection that would leave the machine, or reach Ollama, is refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.002201800001785159,
+   "duration": 0.0012602999340742826,
    "observed": [
     "api.github.com:443 -> Network access is blocked in tests: api.github.com:443",
     "localhost:11434 -> Network access is blocked in tests: localhost:11434"
@@ -1439,7 +2274,7 @@
    "description": "The fake embedder and classifier give the same answer every time.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.003613100037910044,
+   "duration": 0.0020121000707149506,
    "observed": [
     "similarity(login req, login code) = 0.167",
     "similarity(login req, report code) = 0.000",
@@ -1462,7 +2297,7 @@
    "description": "Only a path inside the app is accepted as somewhere to send the browser back to.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.001863999990746379,
+   "duration": 0.0010601998073980212,
    "observed": [
     "{'/app/history?project=4': '/app/history?project=4', 'https://evil.com': '/app/profile', '//evil.com': '/app/profile', '/\\\\evil.com': '/app/profile', 'app/profile': '/app/profile', '': '/app/profile', 'None': '/app/profile'}"
    ]
@@ -1482,7 +2317,7 @@
    "description": "A state token is accepted only if it is ours, unexpired and made for this handshake.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0027123999316245317,
+   "duration": 0.00150420016143471,
    "observed": [
     "valid state -> user 7, return to /app/history",
     "tampered -> That sign-in link is not valid.",
@@ -1506,7 +2341,7 @@
    "description": "Only plain files inside the repository are unpacked, with GitHub's wrapper folder dropped.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.023656799807213247,
+   "duration": 0.013829699950292706,
    "observed": [
     "files on disk after extraction: ['repo.tar.gz', 'work/checkout/src/A.java']"
    ]
@@ -1526,7 +2361,7 @@
    "description": "Every way GitHub writes a repository's address is understood; anything else is refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0027418999234214425,
+   "duration": 0.0012830999912694097,
    "observed": [
     "{'owner/repo': 'owner/repo', 'https://github.com/owner/repo': 'owner/repo', 'github.com/owner/repo.git': 'owner/repo', 'git@github.com:owner/repo.git': 'owner/repo', 'https://github.com/owner/repo/': 'owner/repo', 'https://github.com/owner/repo/tree/main': 'owner/repo'}",
     "'not a repository!!' -> 'not a repository!!' does not look like a GitHub repository. Paste its URL, or write it as owner/name.",
@@ -1548,9 +2383,9 @@
    "description": "A stored token is unreadable without the key, and says so when the key is wrong.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0022151999874040484,
+   "duration": 0.0013572999741882086,
    "observed": [
-    "stored form starts: gAAAAABqwh2b6R3v... (120 characters)",
+    "stored form starts: gAAAAABqwp9QUQWe... (120 characters)",
     "with a different key: A stored access token could not be read. This happens when secret_key changes; the connection has to be made again."
    ]
   },
@@ -1569,10 +2404,10 @@
    "description": "The two providers name elements differently; the stored form must be the same for both.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.020473900134675205,
+   "duration": 0.010531900101341307,
    "observed": [
     "document provider gives: UC1.txt",
-    "code provider gives: C:\\Users\\LENOVO\\AppData\\Local\\Temp\\pytest-of-LENOVO\\pytest-16\\test_document_and_code_identif0\\target\\Auth.java",
+    "code provider gives: C:\\Users\\LENOVO\\AppData\\Local\\Temp\\pytest-of-LENOVO\\pytest-40\\test_document_and_code_identif0\\target\\Auth.java",
     "stored form of the document: UC1.txt",
     "stored form of the method: Auth.java::Auth::login(String name, String passphrase)"
    ]
@@ -1592,9 +2427,9 @@
    "description": "A path is shortened only when it is really inside a workspace root.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.004006999894045293,
+   "duration": 0.0022324000019580126,
    "observed": [
-    "{'nested': 'pkg/sub/A.java', 'sibling': 'C:\\\\Users\\\\LENOVO\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-LENOVO\\\\pytest-16\\\\test_only_paths_inside_the_wor0\\\\target2\\\\A.java', 'outside': 'C:\\\\elsewhere\\\\A.java::A::run()'}"
+    "{'nested': 'pkg/sub/A.java', 'sibling': 'C:\\\\Users\\\\LENOVO\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-LENOVO\\\\pytest-40\\\\test_only_paths_inside_the_wor0\\\\target2\\\\A.java', 'outside': 'C:\\\\elsewhere\\\\A.java::A::run()'}"
    ]
   },
   {
@@ -1612,9 +2447,29 @@
    "description": "Whitespace a reader would not notice does not change what the content is.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.002148199826478958,
+   "duration": 0.0010889999102801085,
    "observed": [
     "original 3d4be321093b, reformatted 3d4be321093b, edited ccb94c558ef1"
+   ]
+  },
+  {
+   "nodeid": "tests/unit/test_names.py::test_components_are_shown_by_name",
+   "case": {
+    "id": "U-57",
+    "feature": "Display names / display_names",
+    "level": "unit",
+    "priority": "High",
+    "why": "A UML component's identifier is a counter and an XMI id, which means nothing to a reader. Every screen and export shows the name this returns, so it has to name each element once and unambiguously.",
+    "preconditions": "None",
+    "input": "A component 'Authentication'; two components called 'Lending' in two model files; a component with no name; a sentence and a method",
+    "expected": "'Authentication'; 'Lending (a.uml)' and 'Lending (b.uml)'; the nameless component and the sentence and method keep their identifiers. model_name gives a name only at component level"
+   },
+   "description": "Components are named by their model; duplicates get their file; everything else keeps its id.",
+   "outcome": "passed",
+   "failure": null,
+   "duration": 0.0010716000106185675,
+   "observed": [
+    "{'bbb.uml$0$_auth': 'Authentication', 'a.uml$1$_lend': 'Lending (a.uml)', 'b.uml$1$_lend': 'Lending (b.uml)', 'bbb.uml$2$_x': 'bbb.uml$2$_x', 'UC1.txt::sentence_8': 'UC1.txt::sentence_8', 'Auth.java::Auth::login()': 'Auth.java::Auth::login()'}"
    ]
   },
   {
@@ -1632,7 +2487,7 @@
    "description": "A link retrieval no longer surfaces is offered to the classifier again and kept.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.6103405000176281,
+   "duration": 0.2783514999318868,
    "observed": [
     "first run, top-k 10: [('UC9.txt', 'Auth.java::Auth::login'), ('UC9.txt', 'Auth.java::Auth::logout')]",
     "top-k 1, no pins: [('UC9.txt', 'Auth.java::Auth::logout')]",
@@ -1654,7 +2509,7 @@
    "description": "The whole pipeline, on a corpus where the right answer is known.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.4162262000609189,
+   "duration": 0.20069100009277463,
    "observed": [
     "links: [('UC1.txt', 'Auth.java::Auth::login'), ('UC2.txt', 'Auth.java::Auth::logout'), ('UC3.txt', 'Loans.java::Loans::borrow')]",
     "unimplemented: ['UC4.txt']",
@@ -1676,7 +2531,7 @@
    "description": "Pins that do not match this run's identifiers are reported, not silently ignored.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.39148000010754913,
+   "duration": 0.16694569995161146,
    "observed": [
     "links: 1",
     "warning: None of the 1 pinned source identifier(s) match this run's elements, so no link can be carried over. They are probably stored in a different form than the run produces."
@@ -1697,7 +2552,7 @@
    "description": "A Java file is split into a file, its class, and one element per method.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.003895200090482831,
+   "duration": 0.0016109999269247055,
    "observed": [
     "['code/Auth.java [file, compare=False]', 'code/Auth.java::Auth [class, compare=False]', 'code/Auth.java::Auth::login(String name, String passphrase) [function, compare=True]', 'code/Auth.java::Auth::logout() [function, compare=True]', 'code/Auth.java::Auth::clear() [function, compare=True]']"
    ]
@@ -1717,7 +2572,7 @@
    "description": "Links are reported on the ancestor at the requested level, one per pair.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0025665999855846167,
+   "duration": 0.0011231001699343324,
    "observed": [
     "at file level: [('A.java', 0.9, 'high'), ('B.java', 0.5, 'low')]",
     "with no level: ['A.java::A::m1', 'A.java::A::m2', 'B.java::m1']"
@@ -1738,7 +2593,7 @@
    "description": "A document is read as one element, or as one element per sentence under it.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.060947599937208,
+   "duration": 0.0013238998362794518,
    "observed": [
     "whole document: ['arch.txt [artifact, compare=True]']",
     "by sentence: ['arch.txt [artifact, compare=False]', 'arch.txt::sentence_0 [sentence, compare=True]', 'arch.txt::sentence_1 [sentence, compare=True]']"
@@ -1759,7 +2614,7 @@
    "description": "A UML model is split into components, each knowing what it provides and requires.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0030564001062884927,
+   "duration": 0.0016064000083133578,
    "observed": [
     "Authentication: provides ['IAuth'], requires []",
     "Lending: provides ['ILending'], requires ['IAuth']",
@@ -1781,7 +2636,7 @@
    "description": "Links follow call edges up to the depth given, losing confidence with each step.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.001987900002859533,
+   "duration": 0.0011730999685823917,
    "observed": [
     "depth 1: {('strong', 'a'): 0.9, ('weak', 'a'): 0.3, ('strong', 'b'): 0.765}",
     "depth 2: {('strong', 'a'): 0.9, ('weak', 'a'): 0.3, ('strong', 'b'): 0.765, ('strong', 'c'): 0.65}"
@@ -1796,88 +2651,26 @@
     "priority": "Medium",
     "why": "Each side's elements live in a collection. If both sides shared one, an element would be offered as a candidate for itself.",
     "preconditions": "None",
-    "input": "requirements -> code, and requirements -> requirements, with the same configuration key",
-    "expected": "Two different collection names in both cases, each containing the configuration key"
+    "input": "requirements -> code, and requirements -> requirements",
+    "expected": "Two different collection names in both cases, each named after its kind"
    },
    "description": "The two sides of a run never share a collection, even when they hold the same kind.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0017499998211860657,
+   "duration": 0.0010342999594286084,
    "observed": [
-    "requirements -> code: ('requirements_abc123', 'code_abc123')",
-    "requirements -> requirements: ('requirements_abc123', 'requirements-target_abc123')"
-   ]
-  },
-  {
-   "nodeid": "tests/unit/test_run_config.py::test_different_kinds_get_different_keys",
-   "case": {
-    "id": "U-02",
-    "feature": "Configuration identity / config_key",
-    "level": "unit",
-    "priority": "Critical",
-    "why": "Two relations sharing one key share one graph: their links would be merged and overwrite each other silently.",
-    "preconditions": "None",
-    "input": "Identical settings, once for requirements -> code and once for architecture_document -> code",
-    "expected": "Two different keys"
-   },
-   "description": "Requirements and architecture documents use the same preprocessors, so only the kinds tell them apart.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.0018588000675663352,
-   "observed": [
-    "requirements -> code: 13e64d8e09c028af",
-    "architecture_document -> code: 9f8b06e3a95b3fa2",
-    "code -> requirements: 0821e8b264b60813"
-   ]
-  },
-  {
-   "nodeid": "tests/unit/test_run_config.py::test_same_settings_give_the_same_key",
-   "case": {
-    "id": "U-01",
-    "feature": "Configuration identity / config_key",
-    "level": "unit",
-    "priority": "High",
-    "why": "The request holds enums and the database holds strings; if they keyed differently, every re-run would start a new graph.",
-    "preconditions": "None",
-    "input": "The same settings passed as enum members and as their stored string values",
-    "expected": "The same 16-character key both times"
-   },
-   "description": "A key does not depend on whether the caller held an enum or its stored text.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.0017783999210223556,
-   "observed": [
-    "from strings: 13e64d8e09c028af; from enums: 13e64d8e09c028af"
-   ]
-  },
-  {
-   "nodeid": "tests/unit/test_run_config.py::test_every_setting_changes_the_key",
-   "case": {
-    "id": "U-03",
-    "feature": "Configuration identity / config_key",
-    "level": "unit",
-    "priority": "Medium",
-    "why": "A setting left out of the key would let two runs that find different things be compared as if they were the same.",
-    "preconditions": "None",
-    "input": "The base settings, then each setting changed one at a time",
-    "expected": "Every change produces a key different from the base and from each other"
-   },
-   "description": "Each of the ten settings is part of the key.",
-   "outcome": "passed",
-   "failure": null,
-   "duration": 0.0024796001380309463,
-   "observed": [
-    "10 distinct keys from 10 single-setting changes"
+    "requirements -> code: ('requirements_elements', 'code_elements')",
+    "requirements -> requirements: ('requirements_elements', 'requirements-target_elements')"
    ]
   },
   {
    "nodeid": "tests/unit/test_run_config.py::test_expansion_only_counts_for_a_code_target",
    "case": {
     "id": "U-04",
-    "feature": "Configuration identity / expansion_depth",
+    "feature": "Analysis settings / expansion_depth",
     "level": "unit",
     "priority": "High",
-    "why": "Expansion only happens for code. Recording it for other kinds splits identical runs into two configurations.",
+    "why": "Expansion only happens for code. Recording it for other kinds would claim an expansion that never happened.",
     "preconditions": "None",
     "input": "Depth 2 with target kind code, architecture, architecture_document, requirements, and unknown (None)",
     "expected": "code -> 2; the other three kinds -> 0; unknown -> 2 (left as given)"
@@ -1885,7 +2678,7 @@
    "description": "Dependency expansion is recorded as 0 unless the target is code.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0017456000205129385,
+   "duration": 0.0010233999928459525,
    "observed": [
     "depth 2 becomes: {'code': 2, 'architecture': 0, 'architecture_document': 0, 'requirements': 0, None: 2}"
    ]
@@ -1905,7 +2698,7 @@
    "description": "Entries that try to climb out of the destination are kept inside it.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0505181000335142,
+   "duration": 0.017679099808447063,
    "observed": [
     "inside the destination: ['abs.java', 'deep/evil.java', 'evil.java', 'src/A.java']",
     "outside the destination: []"
@@ -1926,7 +2719,7 @@
    "description": "Whatever path is supplied, the result stays inside the folder it is written to.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.011246500071138144,
+   "duration": 0.005677799927070737,
    "observed": [
     "{'a/b.txt': 'a/b.txt', '../../etc/passwd': 'etc/passwd', '/etc/passwd': 'etc/passwd', 'C:\\\\Windows\\\\x.txt': 'C-Windows-x.txt', 'a\\\\..\\\\b': 'a-..-b', './a/./b': 'a/b', '  /x//y ': 'x/y', 'we!rd$name.java': 'we-rd-name.java', '': 'file'}"
    ]
@@ -1946,7 +2739,7 @@
    "description": "Bytes are counted across the whole request, and the limit is exact.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.002787900040857494,
+   "duration": 0.0011021000100299716,
    "observed": [
     "used after two files: 10 of 10",
     "third file: Upload exceeds the 0 MB total limit (adding 'c.txt')."
@@ -1967,7 +2760,7 @@
    "description": "A file over the per-file limit is refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.006622100016102195,
+   "duration": 0.0036726000253111124,
    "observed": [
     "600-byte file: saved 600 bytes",
     "1,500-byte file: 'big.txt' exceeds the 0 MB per-file limit."
@@ -1988,7 +2781,7 @@
    "description": "An archive is checked before it is trusted, and what it unpacks to counts against the budget.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.018744600005447865,
+   "duration": 0.012497400166466832,
    "observed": [
     "not a zip: 'notes.zip' is not a valid .zip archive.",
     "unpacks past the budget: Upload exceeds the 0 MB total limit (adding 'data.java')."

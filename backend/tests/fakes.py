@@ -120,6 +120,9 @@ class FakeGitHub:
         self.renames: dict[str, str] = {}
         # When set, every request is refused the way GitHub refuses a dead token.
         self.credential_dead = False
+        # The token each download was made with, so a test can see whose
+        # credential a fetch used.
+        self.download_tokens: list[str | None] = []
         self.login = "octocat"
 
     def push(self, commit: str, files: dict[str, str], renames: dict[str, str] | None = None) -> None:
@@ -172,7 +175,11 @@ class FakeRepository:
 
     def download(self, ref: str, destination) -> None:
         self.github.check()
+        self.github.download_tokens.append(self.token)
         for path, text in self.github.files.items():
             target = destination / path
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(text, encoding="utf-8")
+            # Bytes, not text: written in text mode, Windows would turn every
+            # newline into CRLF and the files would differ from an upload of
+            # the very same text.
+            target.write_bytes(text.encode("utf-8"))

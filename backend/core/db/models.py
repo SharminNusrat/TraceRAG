@@ -1,15 +1,21 @@
-"""Tables: User -> Project -> Analysis -> TraceLink, cascading on delete.
+"""Tables: User -> Project -> analyses, cascading on delete.
 
-A project also carries the state sync works against, which is a second shape
-laid beside the first rather than replacing it:
+An analysis is one traceability relation between two sides, read with its own
+settings. It owns everything that changes over time, so two analyses never
+share a version, a pin or a side - not even when they read the same files:
 
-    Project -> ProjectSource    what can be refreshed, and where it came from
-    Project -> ProjectVersion   one per sync; what the artifacts were then
-    Project -> ProjectConfig    one per lens; how a run reads those artifacts
-    ProjectConfig -> GraphNode -> GraphEdge   the living graph for that lens
+    Project -> ProjectConfig                  one analysis: its kinds and settings
+    ProjectConfig -> ProjectSource            its two sides, and where each comes from
+    ProjectConfig -> ProjectVersion           one per state of its files
+    ProjectVersion -> Artifact -> ArtifactFile   both sides' files at that state
+    ProjectVersion -> Analysis -> TraceLink   the runs made against that state
+    ProjectConfig -> ElementLink              the pairs the next run re-offers
 
-Analyses stay immutable snapshots of one run. The graph is the current answer
-and is patched in place. Neither is derived from the other.
+What changed between two versions is not kept as a living graph: it is worked
+out from the two versions' runs when it is asked for (core.projects.report).
+
+The names are older than this shape: a ProjectConfig row is the analysis, and
+an Analysis row is one run of it. A project is only the folder they sit in.
 """
 
 from datetime import datetime, timezone
@@ -48,7 +54,7 @@ class User(Base):
 
 
 class Project(Base):
-    """A named workspace holding one codebase's analyses over time."""
+    """A named folder of analyses. It owns nothing they share."""
 
     __tablename__ = "projects"
 
@@ -73,22 +79,15 @@ class Project(Base):
         cascade="all, delete-orphan",
         order_by="Analysis.created_at.desc()",
     )
-    sources: Mapped[list["ProjectSource"]] = relationship(
-        back_populates="project", cascade="all, delete-orphan"
-    )
-    versions: Mapped[list["ProjectVersion"]] = relationship(
-        back_populates="project",
-        cascade="all, delete-orphan",
-        order_by="ProjectVersion.version_number.desc()",
-    )
     configs: Mapped[list["ProjectConfig"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
 
 
 class Analysis(Base):
-    """One saved run: the settings it used and the links it recovered.
-    """
+    """One run of an analysis: the links it recovered from one version's files."""
+    # The settings are not repeated here. They belong to the analysis, and a
+    # run cannot use any others - different settings are a different analysis.
 
     __tablename__ = "analyses"
 
@@ -96,41 +95,17 @@ class Analysis(Base):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.project_id", ondelete="CASCADE"), index=True, nullable=False
     )
-    # Which artifact state this ran against, and which lens it read them
-    # through. Two runs are only comparable when both match: a different
-    # version is the change being measured, a different config means the
-    # identifiers on each side describe different things.
-    #
-    # Both are nullable and cleared rather than cascaded on delete: runs saved
-    # before versioning existed have neither, and removing a config must not
-    # take the history of what it once found with it. The settings columns
-    # below still record what the run actually used either way.
-    version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("project_versions.version_id", ondelete="SET NULL"),
-        index=True,
-        nullable=True,
+    # Which analysis this is a run of, and which state of its files it read.
+    # Several runs can share a version: a re-run reads the same files again.
+    config_id: Mapped[int] = mapped_column(
+        ForeignKey("project_configs.config_id", ondelete="CASCADE"), index=True, nullable=False
     )
-    config_id: Mapped[int | None] = mapped_column(
-        ForeignKey("project_configs.config_id", ondelete="SET NULL"),
-        index=True,
-        nullable=True,
+    version_id: Mapped[int] = mapped_column(
+        ForeignKey("project_versions.version_id", ondelete="CASCADE"), index=True, nullable=False
     )
-    # What the user says is different about this run - "reported at class
-    # level", "summaries off". Runs are identified by when they ran; this says
-    # why this one exists, which is what a comparison is read against.
+    # What the user says is different about this run. Runs are identified by
+    # when they ran; this says why this one exists.
     note: Mapped[str | None] = mapped_column(String(200), nullable=True)
-
-    source_preprocessor: Mapped[str] = mapped_column(String(50), nullable=False)
-    target_preprocessor: Mapped[str] = mapped_column(String(50), nullable=False)
-    source_output_level: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    target_output_level: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    top_k: Mapped[int] = mapped_column(Integer, nullable=False)
-    dependency_expansion_depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    classifier_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    # Whether elements were described by the model before being embedded. It
-    # changes which candidates retrieval returns, so a re-run has to repeat it
-    # and a comparison has to be able to name it as the reason links moved.
-    summarize_elements: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     execution_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -142,40 +117,39 @@ class Analysis(Base):
     snapshot_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
 
     project: Mapped["Project"] = relationship(back_populates="analyses")
+    config: Mapped["ProjectConfig"] = relationship()
+    version: Mapped["ProjectVersion"] = relationship(back_populates="analyses")
     trace_links: Mapped[list["TraceLink"]] = relationship(
         back_populates="analysis", cascade="all, delete-orphan"
     )
-    artifacts: Mapped[list["Artifact"]] = relationship(
-        back_populates="analysis", cascade="all, delete-orphan"
-    )
+
+    @property
+    def artifacts(self) -> list["Artifact"]:
+        """The files this run read: its version's, which every run of it shares."""
+        return self.version.artifacts
 
 
 class Artifact(Base):
-    """The files one saved analysis was run against."""
-    # Hung off the analysis, not the project as the SRS had it: a project is
-    # re-analysed as its artifacts change, and one current set per project
-    # would rewrite history each time.
+    """One side's complete file set at one version of an analysis."""
+    # Hung off the version, not the run: every run of a version reads the very
+    # same files, so a re-run adds a run and not another copy of the file list.
 
     __tablename__ = "artifacts"
 
     artifact_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    analysis_id: Mapped[int] = mapped_column(
-        ForeignKey("analyses.analysis_id", ondelete="CASCADE"), index=True, nullable=False
-    )
-    # Which of the project's sources these files came from. The rows below say
-    # what was analysed; this says what it was analysed *as*, so a run can be
-    # read back as "the requirements source, at the state it was in then".
-    # Nullable: uploads saved before sources existed have no source to name.
-    source_id: Mapped[int | None] = mapped_column(
-        ForeignKey("project_sources.source_id", ondelete="SET NULL"),
-        index=True,
-        nullable=True,
+    version_id: Mapped[int] = mapped_column(
+        ForeignKey("project_versions.version_id", ondelete="CASCADE"), index=True, nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     # "requirements" or "code" - the key from the capabilities registry.
     artifact_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    # Which side of the trace it was on: "source" or "target".
+    # Which side of the trace it is: "source" or "target".
     role: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Where these files came from - "upload" or "github" - and what they were:
+    # the commit they were fetched at, or a fingerprint of their contents for
+    # an upload. What the next update compares against.
+    origin: Mapped[str] = mapped_column(String(20), nullable=False, default="upload")
+    ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     file_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # What the user uploaded, not what it cost to keep: files shared with
     # another analysis are stored once but still counted here, because this is
@@ -185,7 +159,7 @@ class Artifact(Base):
         DateTime(timezone=True), default=utcnow, nullable=False
     )
 
-    analysis: Mapped["Analysis"] = relationship(back_populates="artifacts")
+    version: Mapped["ProjectVersion"] = relationship(back_populates="artifacts")
     files: Mapped[list["ArtifactFile"]] = relationship(
         back_populates="artifact", cascade="all, delete-orphan"
     )
@@ -195,7 +169,7 @@ class ArtifactFile(Base):
     """One file inside a stored artifact: its name here, its bytes elsewhere.
 
     The blob store is keyed purely by content, so names and ownership live
-    here. Two runs over an unchanged codebase differ only in these rows.
+    here. Two versions that share a file list it twice and store it once.
     """
 
     __tablename__ = "artifact_files"
@@ -277,117 +251,12 @@ class TraceLink(Base):
     analysis: Mapped["Analysis"] = relationship(back_populates="trace_links")
 
 
-class ProjectSource(Base):
-    """One artifact set a project can refresh, and where it is refreshed from."""
-    # Artifacts hang off an analysis, which records what one run used. Nothing
-    # said what a project *has* - so syncing had nothing to offer the user and
-    # nothing to re-fetch. This is that missing list.
-
-    __tablename__ = "project_sources"
-
-    source_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_id: Mapped[int] = mapped_column(
-        ForeignKey("projects.project_id", ondelete="CASCADE"), index=True, nullable=False
-    )
-    # The key from the capabilities registry: "requirements", "code", and
-    # whichever kinds come later. A plain string, so adding one is a registry
-    # entry rather than a migration.
-    kind: Mapped[str] = mapped_column(String(50), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-
-    # "upload" or "github". Decides whether a sync re-fetches this source on
-    # its own or has to ask the user to supply it again.
-    origin: Mapped[str] = mapped_column(String(20), nullable=False)
-    # Where a connected source lives - "owner/repo" for GitHub. Null for
-    # uploads, which have no address to return to.
-    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # Encrypted, and only for a source whose provider needs one of its own - a
-    # private repository the server's own token cannot see. Never returned to
-    # a client: once given, a token can be replaced but not read back.
-    access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    # What this source was when it was last taken in: a commit sha for a
-    # connected repository, or a fingerprint of the file contents for an
-    # upload. Either way, comparing it is how a sync decides nothing moved.
-    last_sync_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    last_synced_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    # Disconnected sources are hidden rather than removed. Every version this
-    # source appeared in recorded what it was at the time, and deleting the row
-    # would take that record with it - leaving two versions looking identical
-    # when the whole point of keeping them was that they were not.
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False
-    )
-
-    project: Mapped["Project"] = relationship(back_populates="sources")
-
-
-class ProjectVersion(Base):
-    """The state of a project's artifacts at one point. A sync makes the next one."""
-    # Change is only ever measured between two of these. Analyses are ordered
-    # by when they ran, which says nothing about whether the artifacts under
-    # them moved in between - so re-running a config twice on an unchanged
-    # codebase must not read as a change, and this is what tells them apart.
-
-    __tablename__ = "project_versions"
-
-    version_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_id: Mapped[int] = mapped_column(
-        ForeignKey("projects.project_id", ondelete="CASCADE"), index=True, nullable=False
-    )
-    # Counts from 1 within the project, so a user can say "version 3" without
-    # knowing the row id.
-    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False
-    )
-
-    project: Mapped["Project"] = relationship(back_populates="versions")
-    # Left to the database on delete: these rows hang off a source as well as a
-    # version, so deleting a project reaches them by two routes and whichever
-    # arrives second would find its work already done.
-    sources: Mapped[list["VersionSource"]] = relationship(
-        back_populates="version", cascade="all, delete-orphan", passive_deletes=True
-    )
-
-    __table_args__ = (UniqueConstraint("project_id", "version_number"),)
-
-
-class VersionSource(Base):
-    """What one source was at one version."""
-    # A version is not a timestamp, it is the set of refs its sources were at.
-    # Kept apart from ProjectSource because that row moves forward and this one
-    # must not: it is how a past version stays readable.
-
-    __tablename__ = "version_sources"
-
-    version_id: Mapped[int] = mapped_column(
-        ForeignKey("project_versions.version_id", ondelete="CASCADE"), primary_key=True
-    )
-    source_id: Mapped[int] = mapped_column(
-        ForeignKey("project_sources.source_id", ondelete="CASCADE"), primary_key=True
-    )
-    # A commit sha, or a fingerprint of the contents that were uploaded.
-    ref: Mapped[str] = mapped_column(String(255), nullable=False)
-
-    version: Mapped["ProjectVersion"] = relationship(back_populates="sources")
-    # Read-only from this side: a source does not need to carry every version
-    # that ever recorded it, but a version does need to say what each one was.
-    source: Mapped["ProjectSource"] = relationship()
-
-
 class ProjectConfig(Base):
-    """One lens on a project: how its artifacts are split, embedded and judged."""
-    # Two runs are comparable only if they read the artifacts the same way. A
-    # file-level run and a sentence-level run produce different elements from
-    # the same file, so diffing them would report every element as new. That
-    # constraint is what this row exists to name: a config is the unit a graph,
-    # an element set and a comparison all belong to.
+    """One analysis: a traceability relation between two sides, and its settings."""
+    # Made by every New Analysis and never looked up by its settings: two
+    # analyses with identical settings are still two analyses, each with its
+    # own sides, versions and pins. The settings live here and nowhere else,
+    # because a run can only ever use its analysis's settings.
 
     __tablename__ = "project_configs"
 
@@ -395,15 +264,7 @@ class ProjectConfig(Base):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.project_id", ondelete="CASCADE"), index=True, nullable=False
     )
-    # Hash of the settings below, so the same configuration is recognised as
-    # the same lens across versions. Sixteen hex characters rather than the
-    # full digest: it also names this config's vector collections, and those
-    # have a length limit.
-    config_key: Mapped[str] = mapped_column(String(16), nullable=False)
-    # Which config the dashboard shows when the user has not picked one.
-    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
-    # Which two artifact kinds this lens links - keys from the capabilities
+    # Which two artifact kinds this analysis links - keys from the capabilities
     # registry. Null only for a run saved without its files, where nothing
     # recorded what it was pointed at.
     source_kind: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -415,6 +276,9 @@ class ProjectConfig(Base):
     top_k: Mapped[int] = mapped_column(Integer, nullable=False)
     dependency_expansion_depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     classifier_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Whether elements were described by the model before being embedded. It
+    # changes which candidates retrieval returns, so every run of the analysis
+    # repeats it.
     summarize_elements: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -422,110 +286,119 @@ class ProjectConfig(Base):
     )
 
     project: Mapped["Project"] = relationship(back_populates="configs")
-    nodes: Mapped[list["GraphNode"]] = relationship(
-        back_populates="config", cascade="all, delete-orphan"
+    sources: Mapped[list["ProjectSource"]] = relationship(
+        back_populates="config", cascade="all, delete-orphan", order_by="ProjectSource.role"
+    )
+    versions: Mapped[list["ProjectVersion"]] = relationship(
+        back_populates="config",
+        cascade="all, delete-orphan",
+        order_by="ProjectVersion.version_number.desc()",
     )
 
-    __table_args__ = (UniqueConstraint("project_id", "config_key"),)
 
+class ProjectSource(Base):
+    """One side of an analysis, and where its files come from."""
+    # A side belongs to exactly one analysis. The same requirements traced to
+    # code and to a model are two sides of two analyses, updated separately:
+    # sharing them is what made one analysis fall out of date behind another.
 
-class GraphNode(Base):
-    """One element as it currently stands, under one lens."""
-    # Doubles as the state a sync diffs against: content_hash is what says an
-    # element is unchanged, so an unchanged element is never re-embedded and
-    # never re-classified. Identity is the identifier, which survives an edit
-    # but not a rename - a renamed element arrives as a delete and an add, and
-    # matching the two back together is the differ's job, not this table's.
+    __tablename__ = "project_sources"
 
-    __tablename__ = "graph_nodes"
-
-    node_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # The project is reachable through the config, so it is not repeated here.
+    source_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     config_id: Mapped[int] = mapped_column(
         ForeignKey("project_configs.config_id", ondelete="CASCADE"), index=True, nullable=False
     )
+    # "source" or "target": which end of the trace this side is.
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    # The key from the capabilities registry: "requirements", "code", and
+    # whichever kinds come later.
     kind: Mapped[str] = mapped_column(String(50), nullable=False)
-    identifier: Mapped[str] = mapped_column(String(500), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    # Of the element's content, after normalising away what carries no meaning
-    # - whitespace, and the numbering an element is written under. Otherwise
-    # reformatting a file or renumbering a document reads as a full rewrite.
-    content_hash: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
-    level: Mapped[str] = mapped_column(String(50), nullable=False)
-    parent_identifier: Mapped[str | None] = mapped_column(String(500), nullable=True)
-
-    first_seen_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("project_versions.version_id", ondelete="SET NULL"), nullable=True
+    # "upload" or "github". Decides whether an update fetches this side on its
+    # own or has to ask the user to supply the files again.
+    origin: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Where a connected side lives - "owner/repo" for GitHub. Null for
+    # uploads, which have no address to return to.
+    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Encrypted, and only for a repository the user's own connection cannot
+    # see. Never returned to a client: once given, a token can be replaced but
+    # not read back.
+    access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The newest commit an update fetched from the repository, whether or not
+    # it made a version. A commit whose files change nothing the analysis
+    # reads makes no version, and without this the side would report that
+    # commit as new every time it was asked. What the side holds is not kept
+    # here: it is the files of the analysis's newest version.
+    checked_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
-    last_seen_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("project_versions.version_id", ondelete="SET NULL"), nullable=True
-    )
-    # Deleted elements are deactivated rather than removed: the links that
-    # pointed at them are the reason a user is told something broke.
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    config: Mapped["ProjectConfig"] = relationship(back_populates="nodes")
+    config: Mapped["ProjectConfig"] = relationship(back_populates="sources")
 
-    __table_args__ = (UniqueConstraint("config_id", "kind", "identifier"),)
+    __table_args__ = (UniqueConstraint("config_id", "role"),)
 
 
-class GraphEdge(Base):
-    """One recovered link, as it currently stands."""
-    # The mutable twin of TraceLink: that one records what a run found and is
-    # never touched again, this one is patched each sync and is what chains,
-    # coverage and impact are read from.
+class ProjectVersion(Base):
+    """One state of an analysis's files. Changing a side makes the next one."""
+    # Change is only ever measured between two of these. Runs are ordered by
+    # when they ran, which says nothing about whether the files under them
+    # moved in between - so re-running on unchanged files must not read as a
+    # change, and this is what tells the two apart.
 
-    __tablename__ = "graph_edges"
+    __tablename__ = "project_versions"
 
-    edge_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    version_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     config_id: Mapped[int] = mapped_column(
         ForeignKey("project_configs.config_id", ondelete="CASCADE"), index=True, nullable=False
     )
-    from_node_id: Mapped[int] = mapped_column(
-        ForeignKey("graph_nodes.node_id", ondelete="CASCADE"), index=True, nullable=False
-    )
-    to_node_id: Mapped[int] = mapped_column(
-        ForeignKey("graph_nodes.node_id", ondelete="CASCADE"), index=True, nullable=False
-    )
-    # Repeated from the nodes on purpose. Walking a chain asks "which edges
-    # leave this node for a test?" at every step, and answering it from the
-    # edge alone avoids joining both ends of every candidate.
-    from_kind: Mapped[str] = mapped_column(String(50), nullable=False)
-    to_kind: Mapped[str] = mapped_column(String(50), nullable=False)
-
-    confidence: Mapped[float] = mapped_column(Float, nullable=False)
-    confidence_level: Mapped[str] = mapped_column(String(20), nullable=False)
-    explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    # "active", "stale" when a re-run stopped finding it, or "broken" when an
-    # element it depended on is gone.
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
-    first_seen_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("project_versions.version_id", ondelete="SET NULL"), nullable=True
-    )
-    last_verified_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("project_versions.version_id", ondelete="SET NULL"), nullable=True
+    # Counts from 1 within the analysis, so a user can say "version 3" without
+    # knowing the row id.
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # What changed since the version before, for the side that was updated:
+    # the files and elements added, removed, modified and moved, and the id
+    # map from the old identifiers to the new. Stored rather than worked out
+    # again, because it can never change once the version exists - and the
+    # old files it was worked out from may since have been collected. Null
+    # for version 1, which has nothing before it.
+    changes_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
 
-    __table_args__ = (UniqueConstraint("config_id", "from_node_id", "to_node_id"),)
+    config: Mapped["ProjectConfig"] = relationship(back_populates="versions")
+    # Both sides' complete file sets: what this version is.
+    artifacts: Mapped[list["Artifact"]] = relationship(
+        back_populates="version", cascade="all, delete-orphan", order_by="Artifact.role"
+    )
+    analyses: Mapped[list["Analysis"]] = relationship(
+        back_populates="version", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (UniqueConstraint("config_id", "version_number"),)
 
 
 class ElementLink(Base):
     """One link as the classifier actually made it, before it was rolled up.
 
-    A graph edge is reported at the configuration's output level, so a
-    file-level edge does not say which method earned it. That is fine to look
-    at and useless to act on: the classifier takes elements, and a file is not
-    an element when the processing level is methods.
+    A link is reported at the analysis's output level, so a file-level link
+    does not say which method earned it. That is fine to look at and useless
+    to act on: the classifier takes elements, and a file is not an element when
+    the processing level is methods.
 
     So the pairs are kept here at the level they were judged. The next run puts
     them back in front of the classifier alongside whatever retrieval turns up,
     which is what stops a link disappearing because a growing corpus pushed it
-    out of the top-k rather than because anything decided against it.
+    out of the top-k rather than because anything decided against it. An
+    update translates them through its id map first, so a pin follows its
+    element when the element's identifier moves.
 
-    Living state, like the graph: replaced wholesale on every run. Only the
-    last run's pairs are worth offering again - keeping older ones would mean
-    re-proposing pairs that stopped being relevant several syncs ago.
+    Replaced wholesale on every run. Only the last run's pairs are worth
+    offering again - keeping older ones would mean re-proposing pairs that
+    stopped being relevant several updates ago.
     """
 
     __tablename__ = "element_links"
@@ -534,9 +407,8 @@ class ElementLink(Base):
     config_id: Mapped[int] = mapped_column(
         ForeignKey("project_configs.config_id", ondelete="CASCADE"), index=True, nullable=False
     )
-    # Identifiers rather than node ids: these are processing-level elements,
-    # which have no graph node of their own whenever the output level is
-    # coarser than the processing level.
+    # Processing-level identifiers, which are finer than the level links are
+    # reported at whenever the output level is coarser.
     source_identifier: Mapped[str] = mapped_column(String(500), nullable=False)
     target_identifier: Mapped[str] = mapped_column(String(500), nullable=False)
 
@@ -546,10 +418,9 @@ class ElementLink(Base):
 class Job(Base):
     """Work that outlives the request that asked for it.
 
-    A sync fetches, re-runs every configuration and rewrites a graph, which
-    takes minutes. Done inside the request, the browser gives up long before
-    the server does and the answer is lost even though the work succeeded. So
-    the request only files this row and returns; the client watches it instead.
+    An update fetches, compares and re-runs an analysis, which takes minutes. Done inside the request, the browser gives up long before the
+    server does and the answer is lost even though the work succeeded. So the
+    request only files this row and returns; the client watches it instead.
     """
 
     __tablename__ = "jobs"
@@ -563,10 +434,13 @@ class Job(Base):
     # Handed to whoever asked for the work and to nobody else. Job ids run in
     # sequence, so holding one is no proof of having started it.
     token: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
-    # What it is working on, and what makes two jobs conflict: one project is
-    # only ever synced by one job at a time.
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.project_id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    # The analysis it is updating, and what makes two jobs conflict. Analyses
+    # share nothing, so two different ones can be updated at the same time.
+    config_id: Mapped[int | None] = mapped_column(
+        ForeignKey("project_configs.config_id", ondelete="CASCADE"), index=True, nullable=True
     )
     kind: Mapped[str] = mapped_column(String(50), nullable=False)
     state: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
@@ -590,10 +464,10 @@ class Job(Base):
 
 class ClassificationCacheEntry(Base):
     """One verdict on one pair of elements, kept so it is never asked for twice."""
-    # The third cache, and the one that decides whether syncing is affordable:
+    # The third cache, and the one that decides whether updating is affordable:
     # embeddings and summaries were already cached, but the classifier - the
     # only step that costs a model call per pair - was not, so re-running an
-    # unchanged project paid full price every time.
+    # unchanged analysis paid full price every time.
     #
     # Keyed like the others, by content rather than by identity. The prompt
     # names neither element, only their text, so a method that was renamed and

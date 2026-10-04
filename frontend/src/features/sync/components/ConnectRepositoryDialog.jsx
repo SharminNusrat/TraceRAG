@@ -1,48 +1,69 @@
 import { useEffect, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { GitBranch, Search, X } from 'lucide-react';
 import { Button } from '../../../components/common/Button';
-import { useCapabilities } from '../../analysis/api/capabilitiesApi';
 import {
   PROVIDERS,
-  connectGitHubSource,
+  connectGitHubSide,
   getGitHubConnection,
   listBranches,
   listMyRepositories,
+  startGitHubOAuth,
 } from '../api/syncApi';
 
 /**
- * Points one of a project's artifact sets at a GitHub repository.
+ * Takes the code side of one analysis from a GitHub repository.
  *
- * Connecting takes over that kind: whatever used to supply the code is stood
- * down, so a sync has one place to fetch from rather than a choice to guess
- * between. The backend says so in its response; this says so up front.
+ * Only that side of that analysis: another analysis tracing the same code
+ * keeps its own side, and is pointed at a repository on its own.
+ *
+ * The account connection is the way in: connected, the repository is simply
+ * chosen and every fetch uses that connection; not connected, the one thing
+ * offered is to connect. A token for this one repository is still possible,
+ * but kept out of the way.
  */
-export function ConnectRepositoryDialog({ projectId, kind: fixedKind, currentKinds, onConnected, onClose }) {
-  const { capabilities } = useCapabilities();
+export function ConnectRepositoryDialog({
+  projectId, configId, sourceId, needsReconnect, onConnected, onClose,
+}) {
+  const [connection, setConnection] = useState(null);
   // What this user's own GitHub connection can reach. When they have one,
   // there is nothing to type: the repositories are simply listed.
-  const [mine, setMine] = useState(null);
+  const [mine, setMine] = useState([]);
+  const [useToken, setUseToken] = useState(false);
   const [provider, setProvider] = useState(PROVIDERS[0].key);
-  const [kind, setKind] = useState(fixedKind ?? 'code');
   const [repository, setRepository] = useState('');
   const [branch, setBranch] = useState('');
   const [branches, setBranches] = useState(null);
-  const [name, setName] = useState('');
   const [token, setToken] = useState('');
   const [error, setError] = useState(null);
   const [pending, setPending] = useState(false);
   const [loadingBranches, setLoadingBranches] = useState(false);
 
-  // Silent when there is no connection: pasting a URL still works, and an
-  // error here is not something the user asked for.
   useEffect(() => {
     let active = true;
     getGitHubConnection()
-      .then((connection) => (connection.connected ? listMyRepositories() : []))
-      .then((repos) => { if (active) setMine(repos); })
-      .catch(() => { if (active) setMine([]); });
+      .then(async (found) => {
+        const repos = found.connected ? await listMyRepositories().catch(() => []) : [];
+        if (active) { setConnection(found); setMine(repos); }
+      })
+      .catch(() => { if (active) setConnection({ connected: false, configured: false }); });
     return () => { active = false; };
   }, []);
+
+  /** Off to GitHub, and back to this analysis with this dialog open again. */
+  const connect = async () => {
+    setError(null);
+    setPending(true);
+    try {
+      const returnTo = `/app/analyses/${configId}?project=${projectId}&connect=${sourceId}`;
+      const { authorize_url: url } = await startGitHubOAuth(returnTo);
+      // A full navigation: GitHub's approval page is for the user to look at,
+      // and it will not answer a cross-origin request.
+      window.location.assign(url);
+    } catch (requestError) {
+      setError(requestError.message);
+      setPending(false);
+    }
+  };
 
   // Naming a repository is enough to connect it - the branch is only looked up
   // so one can be picked rather than typed from memory.
@@ -51,7 +72,7 @@ export function ConnectRepositoryDialog({ projectId, kind: fixedKind, currentKin
     setError(null);
     setLoadingBranches(true);
     try {
-      setBranches(await listBranches(repository, token));
+      setBranches(await listBranches(repository, useToken ? token : null));
     } catch (requestError) {
       setBranches(null);
       setError(requestError.message);
@@ -65,14 +86,21 @@ export function ConnectRepositoryDialog({ projectId, kind: fixedKind, currentKin
     setError(null);
     setPending(true);
     try {
-      onConnected(await connectGitHubSource(projectId, { kind, repository, branch, name, token }));
+      // No token on the account path: the side then holds none of its own,
+      // and every fetch uses the account connection.
+      onConnected(await connectGitHubSide(projectId, configId, sourceId, {
+        repository, branch, token: useToken ? token : null,
+      }));
     } catch (requestError) {
       setError(requestError.message);
       setPending(false);
     }
   };
 
-  const replacing = currentKinds?.includes(kind);
+  const chooseRepository = (value) => { setRepository(value); setBranches(null); };
+  const connected = connection?.connected;
+  const reconnect = needsReconnect || connection?.needs_reconnect;
+  const showForm = connected || useToken;
 
   return (
     <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Connect a source">
@@ -86,8 +114,8 @@ export function ConnectRepositoryDialog({ projectId, kind: fixedKind, currentKin
 
         <form onSubmit={submit}>
           <p className="dialog-note">
-            TraceRAG will fetch from here whenever you sync, instead of asking you
-            to upload the files again.
+            TraceRAG will fetch from here whenever you update this side, instead of
+            asking you to upload the files again.
           </p>
 
           <label>
@@ -99,143 +127,115 @@ export function ConnectRepositoryDialog({ projectId, kind: fixedKind, currentKin
             </select>
           </label>
 
-          {/* Fixed when the caller is filling one particular side of a trace. */}
-          {!fixedKind && (
-            <label>
-              Supplies
-              <select value={kind} onChange={(event) => setKind(event.target.value)}>
-                {(capabilities?.artifact_kinds ?? []).map((option) => (
-                  <option key={option.key} value={option.key}>{option.label}</option>
-                ))}
-              </select>
-              {replacing && (
-                <small className="field-hint">
-                  This project already takes its {kind} from somewhere else. Connecting
-                  here replaces it — the old source is kept, but stops being synced.
-                </small>
-              )}
-            </label>
+          {connection === null && <p className="field-hint">Checking your GitHub account…</p>}
+
+          {connection !== null && !showForm && (
+            <Button type="button" onClick={connect} disabled={pending || !connection.configured}>
+              <GitBranch size={14} strokeWidth={2.2} />
+              {reconnect ? 'Reconnect GitHub' : 'Connect GitHub'}
+            </Button>
           )}
 
-          {/* Which of the two ways to name a repository applies is not known
-              until the lookup answers. Waiting is better than showing the
-              paste-a-URL form and swapping it out underneath the user, which
-              reads as the dialog having forgotten their account. */}
-          {mine === null ? (
+          {showForm && (
             <label>
               Repository
-              <p className="field-hint">Checking your GitHub account…</p>
-            </label>
-          ) : mine.length ? (
-            <label>
-              Repository
-              <select
-                value={repository}
-                onChange={(event) => { setRepository(event.target.value); setBranches(null); }}
-                required
-              >
-                <option value="">Choose a repository…</option>
-                {mine.map((repo) => (
-                  <option key={repo.full_name} value={repo.full_name}>
-                    {repo.full_name}{repo.private ? ' (private)' : ''}
-                  </option>
-                ))}
-              </select>
-              <small className="field-hint">
-                From your connected GitHub account. No token needed — yours is used.
-              </small>
-            </label>
-          ) : (
-            <>
-              <label>
-                Repository
-                <div className="field-with-action">
+              <div className="field-with-action">
+                {connected && !useToken && mine.length ? (
+                  <select
+                    value={repository}
+                    onChange={(event) => chooseRepository(event.target.value)}
+                    required
+                  >
+                    <option value="">Choose a repository…</option>
+                    {mine.map((repo) => (
+                      <option key={repo.full_name} value={repo.full_name}>
+                        {repo.full_name}{repo.private ? ' (private)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
                   <input
                     value={repository}
-                    onChange={(event) => { setRepository(event.target.value); setBranches(null); }}
+                    onChange={(event) => chooseRepository(event.target.value)}
                     required
                     autoFocus
                     autoComplete="off"
                     placeholder={PROVIDERS.find((p) => p.key === provider)?.placeholder}
                   />
-                  <button
-                    type="button"
-                    onClick={loadBranches}
-                    disabled={!repository.trim() || loadingBranches}
-                    title="Look up the branches of this repository"
-                  >
-                    <Search size={13} strokeWidth={2} />
-                    {loadingBranches ? 'Checking…' : 'Find branches'}
-                  </button>
-                </div>
-                <small className="field-hint">
-                  Paste the URL, or write it as owner/name.
-                </small>
-              </label>
-
-              <label>
-                <span className="field-name">
-                  Access token<span className="dialog-optional">private repositories</span>
-                </span>
-                <input
-                  type="password"
-                  value={token}
-                  onChange={(event) => setToken(event.target.value)}
-                  name="tracerag-source-token"
-                  autoComplete="new-password"
-                  data-lpignore="true"
-                  data-form-type="other"
-                  placeholder="Leave empty for a public repository"
-                />
-                <small className="field-hint">
-                  Stored encrypted and never shown again. Connecting your GitHub
-                  account on the Profile page avoids needing one per repository.
-                </small>
-              </label>
-            </>
+                )}
+                <button
+                  type="button"
+                  onClick={loadBranches}
+                  disabled={!repository.trim() || loadingBranches}
+                  title="Look up the branches of this repository"
+                >
+                  <Search size={13} strokeWidth={2} />
+                  {loadingBranches ? 'Checking…' : 'Find branches'}
+                </button>
+              </div>
+              <small className="field-hint">
+                {connected && !useToken
+                  ? `Read with your GitHub connection${connection.login ? ` as ${connection.login}` : ''}.`
+                  : 'Paste the URL, or write it as owner/name.'}
+              </small>
+            </label>
           )}
 
-          <label>
-            <span className="field-name">
-              Branch<span className="dialog-optional">optional</span>
-            </span>
-            {branches ? (
-              <select value={branch} onChange={(event) => setBranch(event.target.value)}>
-                <option value="">Repository default</option>
-                {branches.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            ) : (
+          {useToken && (
+            <label>
+              <span className="field-name">
+                Access token<span className="dialog-optional">private repositories</span>
+              </span>
               <input
-                value={branch}
-                onChange={(event) => setBranch(event.target.value)}
-                autoComplete="off"
-                placeholder="Leave empty for the default branch"
+                type="password"
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+                name="tracerag-source-token"
+                autoComplete="new-password"
+                data-lpignore="true"
+                data-form-type="other"
+                placeholder="Leave empty for a public repository"
               />
-            )}
-          </label>
+              <small className="field-hint">Stored encrypted and never shown again.</small>
+            </label>
+          )}
 
-          <label>
-            <span className="field-name">
-              Name<span className="dialog-optional">optional</span>
-            </span>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              name="tracerag-source-name"
-              autoComplete="off"
-              data-lpignore="true"
-              data-form-type="other"
-              placeholder="Named after the repository"
-            />
-          </label>
+          {showForm && (
+            <label>
+              <span className="field-name">
+                Branch<span className="dialog-optional">optional</span>
+              </span>
+              {branches ? (
+                <select value={branch} onChange={(event) => setBranch(event.target.value)}>
+                  <option value="">Repository default</option>
+                  {branches.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              ) : (
+                <input
+                  value={branch}
+                  onChange={(event) => setBranch(event.target.value)}
+                  autoComplete="off"
+                  placeholder="Leave empty for the default branch"
+                />
+              )}
+            </label>
+          )}
+
+          {connection !== null && !useToken && (
+            <button type="button" className="text-toggle" onClick={() => setUseToken(true)}>
+              Use an access token instead
+            </button>
+          )}
 
           {error && <p className="auth-error" role="alert">{error}</p>}
 
           <div className="dialog-actions">
             <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={pending || !repository.trim()}>
-              {pending ? 'Connecting…' : 'Connect'}
-            </Button>
+            {showForm && (
+              <Button type="submit" disabled={pending || !repository.trim()}>
+                {pending ? 'Connecting…' : 'Connect'}
+              </Button>
+            )}
           </div>
         </form>
       </section>
