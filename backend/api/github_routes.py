@@ -57,11 +57,12 @@ def github_connection(user: User = Depends(get_current_user)):
     dead token is how someone ends up staring at a working-looking connection
     that fails every request.
     """
+    rejected = False
     if user.github_token:
         try:
             verify_token(secrets.decrypt(user.github_token))
         except GitHubCredentialError:
-            forget_account_token(user)
+            rejected = forget_account_token(user)
         except (GitHubError, SecretError) as error:
             # GitHub unreachable, or the token unreadable. Neither says the
             # connection is over, so it is left alone and reported as it stands.
@@ -71,6 +72,7 @@ def github_connection(user: User = Depends(get_current_user)):
         connected=bool(user.github_token),
         login=user.github_login or None,
         configured=settings.github_oauth_configured,
+        needs_reconnect=rejected,
     )
 
 

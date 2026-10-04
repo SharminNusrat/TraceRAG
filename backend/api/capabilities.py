@@ -60,7 +60,7 @@ def _levels(*levels: ElementLevel) -> list[OutputLevelOption]:
 # is also omitted - it needs a local LLM pass over every artifact. `section` is
 # not offered either: documents arrive one item per file, so there are no
 # numbered headings to split on. The preprocessor itself is still there, and
-# saved runs that used it can still be re-run and synced.
+# saved runs that used it can still be re-run and updated.
 REQUIREMENT_PREPROCESSORS = [
     PreprocessorOption(
         key=PreprocessorType.SENTENCE,

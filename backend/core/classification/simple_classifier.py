@@ -2,7 +2,7 @@ import re
 from typing import Optional
 from core.cache import namespace_for
 from core.schemas import Element
-from core.classification.base import Classifier, Verdict
+from core.classification.base import Classifier, Verdict, untagged_verdict
 from core.classification.prompts import SimplePromptTemplate, format_prompt
 from core.classification.chat_provider import ChatProvider
 from core.classification.ollama_chat_provider import OllamaChatProvider
@@ -48,4 +48,4 @@ class SimpleClassifier(Classifier):
             return trace_match.group(1).lower() == "yes"
 
         # No tag at all, so there is nothing better to go on than the prose.
-        return "yes" in cleaned.lower()
+        return untagged_verdict(cleaned)

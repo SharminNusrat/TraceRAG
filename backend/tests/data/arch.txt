@@ -1,0 +1,3 @@
+The authentication module handles login and logout.
+
+The lending module lets a reader borrow a title.

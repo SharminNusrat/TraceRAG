@@ -54,11 +54,7 @@ export function toUploadFormData(draft, artifacts, sides, projectId) {
       kind: artifact.kind,
     };
 
-    if (artifact.sourceId !== undefined) {
-      // Nothing to upload: the server fetches this side from the source the
-      // project is connected to, and records the commit it came from.
-      entry.source_id = artifact.sourceId;
-    } else if (artifact.text !== undefined) {
+    if (artifact.text !== undefined) {
       entry.text = artifact.text;
     } else {
       entry.file_indexes = artifact.entries.map(() => index++);
@@ -140,6 +136,15 @@ export async function runAnalysisUpload(draft, artifacts, sides, projectId, onPr
   return { ...result, upload_id: result.upload_id ?? started.upload_id };
 }
 
+/**
+ * What an element, or one end of a link, is called where a person reads it.
+ * The server sends a name where the identifier is not one - a UML component -
+ * and nothing otherwise, so the identifier is shown as it is.
+ */
+export const elementName = (element) => element.display_name ?? element.identifier;
+export const sourceName = (link) => link.source_name ?? link.source_id;
+export const targetName = (link) => link.target_name ?? link.target_id;
+
 /** First non-empty line of an element's content, used as a display label. */
 export function toLabel(content, fallback, maxLength = 120) {
   const firstLine = (content ?? '').split('\n').map((line) => line.trim()).find(Boolean);
@@ -175,6 +180,7 @@ export function normalizeResult(response) {
     if (!groups.has(link.source_id)) {
       groups.set(link.source_id, {
         source_id: link.source_id,
+        source_name: link.source_name,
         source_content: link.source_content ?? '',
         label: toLabel(link.source_content, link.source_id),
         links: [],

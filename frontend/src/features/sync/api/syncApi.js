@@ -1,28 +1,17 @@
 import { httpClient } from '../../../services/httpClient';
 
 /**
- * Where a project's artifacts come from, and keeping them current.
+ * Where an analysis's two sides come from, and updating one of them.
  *
- * A source is the project's standing entry for one artifact set - "the code
- * lives at myorg/payments on main". Saved analyses record what a run used;
- * these say where to get it again.
+ * A side is one end of one analysis - "the code lives at myorg/payments on
+ * main". It belongs to that analysis alone, so updating it never touches
+ * another analysis in the same project.
  */
 
-export const listSources = (projectId, includeDisconnected = false) => httpClient(
-  `/projects/${projectId}/sources?include_disconnected=${includeDisconnected}`,
-);
+const analysisPath = (projectId, configId) => `/projects/${projectId}/configs/${configId}`;
 
 /**
- * The connected sources that saving an upload of these kinds would replace.
- *
- * A project takes each kind from one source, so an upload of a kind it
- * already has takes that source's place.
- */
-export const sourcesReplacedBy = async (projectId, kinds) =>
-  (await listSources(projectId)).filter((source) => kinds.includes(source.kind));
-
-/**
- * The providers a source can be connected from.
+ * The providers a side can be connected to.
  *
  * A list rather than a single button, because the next one is coming: adding
  * Jira should be a new entry and a form, not a redesign of the choice.
@@ -61,89 +50,58 @@ export const listBranches = (repository, token) => httpClient('/github/branches'
   body: JSON.stringify({ repository: repository.trim(), token: token?.trim() || null }),
 });
 
-export const connectGitHubSource = (projectId, { kind, repository, branch, name, token }) => httpClient(
-  `/projects/${projectId}/sources/github`,
-  {
+/** Take an analysis's code side from a GitHub repository. */
+export const connectGitHubSide = (projectId, configId, sourceId, { repository, branch, token }) =>
+  httpClient(`${analysisPath(projectId, configId)}/sources/${sourceId}/github`, {
     method: 'POST',
     body: JSON.stringify({
-      kind,
       repository: repository.trim(),
       // Omitted rather than sent empty: the API takes whichever branch the
       // repository itself defaults to.
       branch: branch?.trim() || null,
-      name: name?.trim() || null,
-      // Only for a repository the server's own token cannot read. Sent once
+      // Only for a repository the account connection cannot read. Sent once
       // and never read back.
       token: token?.trim() || null,
     }),
-  },
-);
+  });
 
-export const disconnectSource = (projectId, sourceId) => httpClient(
-  `/projects/${projectId}/sources/${sourceId}`,
-  { method: 'DELETE' },
-);
-
-/** Bring a disconnected source back, in place of whatever replaced it. */
-export const reconnectSource = (projectId, sourceId) => httpClient(
-  `/projects/${projectId}/sources/${sourceId}/reconnect`,
-  { method: 'POST' },
+/** Where each side of an analysis stands, without fetching anything. */
+export const getSyncStatus = (projectId, configId) => httpClient(
+  `${analysisPath(projectId, configId)}/sync/status`,
 );
 
 /**
- * The pairs of artifact kinds a project traces between.
+ * Hand over a side's complete current file set.
  *
- * A pair is what a sync brings up to date: its two sources are refreshed and
- * its own configurations re-run, leaving the project's other pairs alone.
+ * Staged first and named in the update afterwards, so the files can be
+ * chosen, checked and replaced without starting anything. The answer says how
+ * many of them land where the side's files already are - a requirement is
+ * identified by its path, so files arriving somewhere else read as new ones.
  */
-export const listPairs = (projectId) => httpClient(`/projects/${projectId}/pairs`);
-
-/** What a sync of one pair would pick up, without fetching anything. */
-export const getSyncStatus = (projectId, pair) => httpClient(
-  `/projects/${projectId}/sync/status?source_kind=${pair.source_kind}&target_kind=${pair.target_kind}`,
-);
-
-/**
- * Hand over new files for a source nothing can fetch.
- *
- * Staged first and named in the sync afterwards, so the files can be chosen,
- * checked and replaced without starting anything. The answer says how many of
- * them land where the source's files already are - a requirement is identified
- * by its path, so files arriving somewhere else read as new ones.
- */
-export function stageSourceFiles(projectId, sourceId, files) {
+export function stageSideFiles(projectId, configId, sourceId, files) {
   const form = new FormData();
   files.forEach((file) => form.append('files', file));
   // The folder each file came from, when it came from one. Kept because it is
-  // part of the path the graph knows the file by.
+  // part of the path the analysis knows the file by.
   form.append('file_paths', JSON.stringify(files.map((f) => f.webkitRelativePath || f.name)));
-  return httpClient(`/projects/${projectId}/sources/${sourceId}/files`, {
+  return httpClient(`${analysisPath(projectId, configId)}/sources/${sourceId}/files`, {
     method: 'POST',
     body: form,
   });
 }
 
 /**
- * Ask for one pair to be synced. Returns immediately with a job to watch, or with
- * `started: false` when there was nothing to do.
+ * Update one side and re-run the analysis over it. Returns immediately with a
+ * job to watch, or with `started: false` when there was nothing to do.
  */
-export const startSync = (
-  projectId,
-  pair,
-  { sourceIds, configIds, replacements, force, note } = {},
-) => httpClient(
-  `/projects/${projectId}/sync`,
+export const startUpdate = (projectId, configId, { sourceId, uploadId, note } = {}) => httpClient(
+  `${analysisPath(projectId, configId)}/sync`,
   {
     method: 'POST',
     body: JSON.stringify({
-      source_kind: pair.source_kind,
-      target_kind: pair.target_kind,
-      source_ids: sourceIds ?? null,
-      config_ids: configIds ?? null,
-      // source_id -> staged upload id, for the sources whose files were
-      // uploaded rather than fetched.
-      replacements: replacements ?? {},
-      force: Boolean(force),
+      source_id: sourceId,
+      // The staged files, for a side that is uploaded rather than fetched.
+      upload_id: uploadId ?? null,
       note: note?.trim() || null,
     }),
   },
@@ -151,10 +109,10 @@ export const startSync = (
 
 export const getJob = (jobId) => httpClient(`/jobs/${jobId}`);
 
-/** Where the source stands: the short form of a commit, or of a fingerprint. */
+/** Where the side stands: the short form of a commit, or of a fingerprint. */
 export const shortRef = (ref) => (ref ? ref.slice(0, 8) : null);
 
-/** How a source describes itself in one line. */
+/** How a side describes itself in one line. */
 export function sourceLocation(source) {
   if (source.origin === 'github') {
     return source.branch ? `${source.location} · ${source.branch}` : source.location;

@@ -1,0 +1,1 @@
+A visitor performs a login with a passphrase.

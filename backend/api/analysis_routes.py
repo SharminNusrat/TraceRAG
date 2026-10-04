@@ -18,12 +18,12 @@ from api.schemas import (
     CapabilitiesResponse, PreprocessorType, ClassifierType,
 )
 from api.uploads import materialise_side, parse_id_list, parse_json_field, resolve_side
-from api.workspace import get_chroma_path, get_project_id, upload_project_id
+from api.workspace import get_chroma_path, get_project_id
 from core import jobs
-from core.auth import get_current_user_optional
-from core.db.models import Project, ProjectSource, User
+from core.auth import get_current_user, get_current_user_optional
+from core.db.models import User
 from core.db.session import get_db
-from core.projects import artifact_store, service
+from core.projects import artifact_store
 from core.projects.uploads import UploadBudget, UploadError
 from core.schemas import ElementLevel
 
@@ -71,7 +71,9 @@ def capabilities():
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze(request: AnalyzeRequest):
+async def analyze(request: AnalyzeRequest, user: User = Depends(get_current_user)):
+    # Signed-in callers only: this reads a folder on the server by its path,
+    # so left open it would hand any visitor whatever the server can read.
     try:
         return run_analysis(request)
     except HTTPException:
@@ -82,71 +84,6 @@ async def analyze(request: AnalyzeRequest):
         logger.error(f"Pipeline failed: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-def require_owned_project(db: Session, user: User | None, project_id: str | None) -> Project:
-    """The project a connected source is being read from.
-
-    Uploading needs no account, but fetching from a source does: the source
-    belongs to a project, and reading it is reading whatever that project's
-    stored credentials can reach.
-    """
-    if user is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Sign in to run an analysis from a connected source.",
-        )
-
-    numeric = str(project_id or "").strip()
-    if not numeric.isdigit():
-        raise HTTPException(
-            status_code=400,
-            detail="Running from a connected source needs the project it belongs to.",
-        )
-
-    project = service.get_project(db, user.user_id, int(numeric))
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found.")
-    return project
-
-
-def side_source(
-    db: Session, project: Project, artifacts: list[dict], role: str
-) -> ProjectSource | None:
-    """The connected source a side is taken from, if it is not uploaded.
-
-    A side is one or the other. Half a codebase fetched and half uploaded is
-    not a thing anyone means, and allowing it would leave the source recording
-    a commit it does not actually hold.
-    """
-    named = [artifact for artifact in artifacts if artifact.get("source_id")]
-    if not named:
-        return None
-
-    if len(named) != len(artifacts) or len({a["source_id"] for a in named}) > 1:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"The {role} side must be either uploaded or taken from a single "
-                f"connected source, not a mixture."
-            ),
-        )
-
-    source = service.get_source(db, project, int(named[0]["source_id"]))
-    if source is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No connected source matches the one chosen for the {role} side.",
-        )
-    if source.kind != artifacts[0]["kind"]:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"'{source.name}' supplies {source.kind}, which is not what the "
-                f"{role} side is set to."
-            ),
-        )
-    return source
 
 
 @router.post("/analyze/upload", response_model=AnalysisStartResponse)
@@ -179,21 +116,17 @@ async def analyze_upload(
 
     `artifacts` is a JSON array describing each side's material:
         [{"id","name","kind","file_indexes":[...]},   uploaded files
-         {"id","name","kind","text"},                 pasted text
-         {"id","name","kind","source_id": 4}]         a connected source
+         {"id","name","kind","text"}]                 pasted text
 
     `file_indexes` point into `files`, and `file_paths` carries each file's
-    relative path so folder uploads keep their structure. An artifact naming a
-    `source_id` is fetched from that source instead - which is how a codebase
-    already on GitHub never has to be uploaded by hand.
+    relative path so folder uploads keep their structure.
 
     Each side takes a list of artifact ids. Several artifacts on one side are
     analysed together as a single corpus - that is how a set of loose code
     files becomes one codebase. Only the referenced artifacts are written to
     disk.
 
-    Anonymous callers may upload; fetching from a connected source needs the
-    signed-in owner of the project it belongs to.
+    Anonymous callers may upload.
     """
     artifact_list = parse_json_field(artifacts, "artifacts", [])
     if not isinstance(artifact_list, list) or not artifact_list:
@@ -215,33 +148,10 @@ async def analyze_upload(
     source_artifacts = resolve_side(artifact_list, source_ids, ROLE_SOURCE)
     target_artifacts = resolve_side(artifact_list, target_ids, ROLE_TARGET)
 
-    # A side may be taken from something the project is already connected to
-    # rather than uploaded. That belongs to a project, so it needs the project
-    # and its owner - neither of which an anonymous run has.
-    project = None
-    if any(a.get("source_id") for a in source_artifacts + target_artifacts):
-        project = require_owned_project(db, user, project_id)
-    side_sources = {
-        ROLE_SOURCE: side_source(db, project, source_artifacts, ROLE_SOURCE) if project else None,
-        ROLE_TARGET: side_source(db, project, target_artifacts, ROLE_TARGET) if project else None,
-    }
-
-    chroma_path = "./chroma_data/session"
-    use_persistent_cache = False
-    reset_vector_stores = True
-
-    if analysis_mode == AnalysisMode.PROJECT:
-        # Project mode persists the embedding cache between runs, so re-running
-        # the same codebase skips re-embedding unchanged content.
-        resolved_project_id = upload_project_id(
-            source_artifacts + target_artifacts, paths, project_id
-        )
-        chroma_path = get_chroma_path(resolved_project_id)
-        use_persistent_cache = True
-        reset_vector_stores = False
-        logger.info(f"Using project mode with project_id={resolved_project_id}")
-    else:
-        logger.info("Using session mode")
+    # Project mode keeps the model caches - embeddings, summaries, verdicts -
+    # between runs, so re-running the same files pays for nothing twice.
+    use_persistent_cache = analysis_mode == AnalysisMode.PROJECT
+    logger.info(f"Using {analysis_mode.value} mode")
 
     # The workspace outlives the request: the run happens after it, and saving
     # is a separate call that may not come for minutes. Anything nobody saves
@@ -249,18 +159,18 @@ async def analyze_upload(
     artifact_store.purge_expired_uploads()
     upload_id, workspace = artifact_store.create_upload_dir()
 
-    # Session runs used to share one directory, so two of them at once wiped
-    # each other's vectors. Each gets its own now that runs outlive requests.
-    if analysis_mode != AnalysisMode.PROJECT:
-        chroma_path = get_chroma_path(f"session-{upload_id}")
+    # Every run indexes into a directory of its own: two runs sharing one
+    # would replace each other's elements, and a New Analysis is not yet any
+    # analysis whose index it could reuse. The embeddings themselves are
+    # cached by content, so a fresh index costs no model calls.
+    chroma_path = get_chroma_path(f"run-{upload_id}")
 
     budget = UploadBudget()
     try:
         # Uploaded bytes are read here and nowhere else: an UploadFile is a
         # stream from this request and is gone once the response is sent.
         for role, side in ((ROLE_SOURCE, source_artifacts), (ROLE_TARGET, target_artifacts)):
-            if side_sources[role] is None:
-                materialise_side(side, files, paths, workspace / role, budget)
+            materialise_side(side, files, paths, workspace / role, budget)
     except (HTTPException, UploadError):
         artifact_store.discard_upload(upload_id)
         raise
@@ -268,8 +178,6 @@ async def analyze_upload(
     plan = {
         "source_artifacts": source_artifacts,
         "target_artifacts": target_artifacts,
-        # Ids, not rows: the background half opens its own session.
-        "source_ids": {role: (s.source_id if s else None) for role, s in side_sources.items()},
         "source_preprocessor": source_preprocessor,
         "target_preprocessor": target_preprocessor,
         "source_output_level": source_output_level,
@@ -280,7 +188,7 @@ async def analyze_upload(
         "summarize_elements": summarize_elements,
         "chroma_path": chroma_path,
         "use_persistent_cache": use_persistent_cache,
-        "reset_vector_stores": reset_vector_stores,
+        "reset_vector_stores": True,
     }
 
     job = jobs.create_job(

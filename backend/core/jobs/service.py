@@ -29,10 +29,17 @@ KIND_SYNC = "sync"
 KIND_ANALYSIS = "analysis"
 
 
-def create_job(db: Session, user_id: int | None, project_id: int | None, kind: str) -> Job:
+def create_job(
+    db: Session,
+    user_id: int | None,
+    project_id: int | None,
+    kind: str,
+    config_id: int | None = None,
+) -> Job:
     job = Job(
         user_id=user_id,
         project_id=project_id,
+        config_id=config_id,
         kind=kind,
         state=QUEUED,
         # Unguessable, because the id beside it is not.
@@ -44,16 +51,16 @@ def create_job(db: Session, user_id: int | None, project_id: int | None, kind: s
     return job
 
 
-def active_job(db: Session, project_id: int, kind: str) -> Job | None:
-    """The job already working on this project, if there is one.
+def active_job(db: Session, config_id: int, kind: str) -> Job | None:
+    """The job already working on this analysis, if there is one.
 
-    Two syncs of one project would fetch into separate workspaces and then
-    write the same configuration's elements over each other, so the second is
-    refused rather than allowed to race the first.
+    Two updates of one analysis would fetch into separate workspaces and then
+    write the same graph over each other, so the second is refused rather
+    than allowed to race the first.
     """
     return db.execute(
         select(Job).where(
-            Job.project_id == project_id,
+            Job.config_id == config_id,
             Job.kind == kind,
             Job.state.in_(UNFINISHED),
         ).order_by(Job.job_id.desc()).limit(1)
@@ -114,8 +121,8 @@ def sweep_unfinished(db: Session) -> int:
     """Fail whatever was still running when the process last stopped.
 
     Nothing survives a restart, so a job left saying "running" is describing a
-    process that no longer exists. Left alone it would block its project's next
-    sync for ever, since that is exactly what an unfinished job is meant to do.
+    process that no longer exists. Left alone it would block its analysis's next
+    update for ever, since that is exactly what an unfinished job is meant to do.
     """
     result = db.execute(
         update(Job)

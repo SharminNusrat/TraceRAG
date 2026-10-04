@@ -14,60 +14,65 @@ export const deleteProject = (projectId) => httpClient(`/projects/${projectId}`,
   method: 'DELETE',
 });
 
-export const listAnalyses = (projectId) => httpClient(
-  projectId ? `/analyses?project_id=${projectId}` : '/analyses',
-);
-
 export const getAnalysis = (analysisId) => httpClient(`/analyses/${analysisId}`);
 
-/** Every way a project has been read. One graph belongs to each. */
-export const listConfigs = (projectId) => httpClient(`/projects/${projectId}/configs`);
+/**
+ * Every analysis in a project, or across all of them. An analysis is one
+ * relation between two sides with its own settings, versions and graph.
+ */
+export const listConfigs = (projectId) => httpClient(
+  projectId ? `/configs?project_id=${projectId}` : '/configs',
+);
 
-/** Every state a project's artifacts have been in, newest first. */
-export const listVersions = (projectId) => httpClient(`/projects/${projectId}/versions`);
+/** One changed file's text, earlier version against later, as unified diff lines. */
+export const getLineDiff = (projectId, configId, { base, head, role, path, oldPath }) => {
+  const query = new URLSearchParams({ base, head, role, path });
+  if (oldPath) query.set('old_path', oldPath);
+  return httpClient(`/projects/${projectId}/configs/${configId}/report/diff?${query}`);
+};
+
+/** One analysis, with both sides and the files each holds now. */
+export const getConfig = (projectId, configId) => httpClient(
+  `/projects/${projectId}/configs/${configId}`,
+);
+
+/** Deletes an analysis with its sides, versions, runs and pins. */
+export const deleteConfig = (projectId, configId) => httpClient(
+  `/projects/${projectId}/configs/${configId}`,
+  { method: 'DELETE' },
+);
+
+/** Every state an analysis's files have been in, newest first. */
+export const listVersions = (projectId, configId) => httpClient(
+  `/projects/${projectId}/configs/${configId}/versions`,
+);
 
 /**
- * One configuration's graph as it currently stands.
- *
- * `config_id` may be left out only when the project has a single configuration
- * - two of them read the artifacts into different elements, so there is no
- * single answer to give.
+ * What changed between two versions of an analysis. Left out, the later
+ * version is the newest and the earlier one the version before it.
  */
-export const getGraph = (projectId, { configId, linkStatus, limit, offset } = {}) => {
+export const getReport = (projectId, configId, { base, head } = {}) => {
   const query = new URLSearchParams();
-  if (configId) query.set('config_id', configId);
-  if (linkStatus) query.set('link_status', linkStatus);
-  if (limit) query.set('limit', limit);
-  if (offset) query.set('offset', offset);
+  if (base) query.set('base', base);
+  if (head) query.set('head', head);
   const suffix = query.toString();
-  return httpClient(`/projects/${projectId}/graph${suffix ? `?${suffix}` : ''}`);
+  return httpClient(`/projects/${projectId}/configs/${configId}/report${suffix ? `?${suffix}` : ''}`);
 };
 
 export const deleteAnalysis = (analysisId) => httpClient(`/analyses/${analysisId}`, {
   method: 'DELETE',
 });
 
-/** Diff two saved runs of the same project: base is the "before" side. */
-export const compareAnalyses = (baseId, headId) => httpClient(
-  `/analyses/${baseId}/compare/${headId}`,
-);
-
 /**
- * Run a saved analysis again over the files it already holds, storing the
- * outcome as a new analysis in the same project.
- *
- * `config` omitted repeats the original settings; supplying one answers "what
- * would this have found at a different granularity?". Runs the full pipeline,
- * so it can take minutes.
+ * Run an analysis again over the same files with the same settings, storing
+ * the outcome as another run in the same version. Runs the full pipeline, so
+ * it can take minutes.
  */
-export const rerunAnalysis = (analysisId, { note, config } = {}) => httpClient(
+export const rerunAnalysis = (analysisId, { note } = {}) => httpClient(
   `/analyses/${analysisId}/rerun`,
   {
     method: 'POST',
-    body: JSON.stringify({
-      note: note || null,
-      config: config ?? null,
-    }),
+    body: JSON.stringify({ note: note || null }),
   },
 );
 

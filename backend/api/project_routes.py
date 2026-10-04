@@ -1,9 +1,10 @@
-"""Projects and saved analyses.
+"""Projects, analyses and their saved runs.
 
 Every endpoint needs a signed-in user. Anything the caller does not own returns
 404 rather than 403, so responses cannot be used to map out which ids exist.
 """
 
+import json
 import logging
 import shutil
 import tempfile
@@ -16,7 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.capabilities import ROLE_SOURCE, ROLE_TARGET
-from api.pipeline_factory import build_pipeline_response, build_provider
+from api.changes import NOT_TEXT, FilesMissing, line_diff, net_changes, preprocessor_of
+from api.pipeline_factory import build_pipeline_response, build_provider, name_elements
 from api.workspace import get_chroma_path, relativize_response
 from api.schemas import (
     AnalysisConfig,
@@ -24,30 +26,36 @@ from api.schemas import (
     AnalysisSummaryResponse,
     AnalyzeResponse,
     ArtifactResponse,
-    ComparisonResponse,
+    ChangeReportResponse,
     ElementResponse,
-    GraphEdgeResponse,
-    GraphResponse,
-    GraphSummary,
+    LineDiffResponse,
+    NetSide,
     ProjectConfigResponse,
     ProjectDetailResponse,
     ProjectRequest,
     ProjectResponse,
     ProjectVersionResponse,
+    ReportVersion,
     RerunRequest,
+    VersionRun,
     SaveAnalysisRequest,
+    SideChangesResponse,
+    SourceResponse,
     TraceLinkResponse,
     VersionSourceRef,
 )
 from core.auth import get_current_user
 from core.db import Analysis, Artifact, Project, User, get_db
-from core.db.models import ProjectConfig
+from core.db.models import ProjectConfig, ProjectSource, ProjectVersion
 from core.projects import artifact_store, service
+from core.projects.diff import net_summary
+from core.projects.report import count_file_links
 
 router = APIRouter(tags=["projects"])
 logger = logging.getLogger(__name__)
 
 PROJECT_NOT_FOUND = "Project not found."
+CONFIG_NOT_FOUND = "Analysis not found."
 ANALYSIS_NOT_FOUND = "Analysis not found."
 ARTIFACT_NOT_FOUND = "Artifact not found."
 
@@ -80,6 +88,50 @@ def to_artifact_response(artifact: Artifact) -> ArtifactResponse:
     )
 
 
+def to_source_response(
+    source: ProjectSource, held: Artifact | None = None, with_files: bool = False
+) -> SourceResponse:
+    """A side as a client may see it, which is everything but the token.
+
+    `held` is the side's file set in the newest version, which is what the
+    side currently holds. Its paths are listed only when `with_files` asks.
+    """
+    return SourceResponse(
+        source_id=source.source_id,
+        config_id=source.config_id,
+        role=source.role,
+        kind=source.kind,
+        name=source.name,
+        origin=source.origin,
+        location=source.location,
+        branch=source.branch,
+        last_sync_ref=held.ref if held else None,
+        has_token=bool(source.access_token),
+        files=sorted(file.relative_path for file in held.files) if held and with_files else [],
+    )
+
+
+def stored_changes(version: ProjectVersion) -> list[SideChangesResponse]:
+    """What changed since the version before, as the version recorded it."""
+    if not version.changes_json:
+        return []
+    return [
+        SideChangesResponse(
+            role=side["role"],
+            files=side["files"],
+            elements=side["elements"],
+            changed=any(side["files"].values()),
+            meaningful=any(side["elements"].values()),
+        )
+        for side in json.loads(version.changes_json).values()
+    ]
+
+
+def held_by_role(version: ProjectVersion | None) -> dict[str, Artifact]:
+    """A version's file sets, by the side they belong to."""
+    return {artifact.role: artifact for artifact in version.artifacts} if version else {}
+
+
 def to_analysis_summary(
     analysis: Analysis,
     link_count: int,
@@ -91,11 +143,12 @@ def to_analysis_summary(
     return AnalysisSummaryResponse(
         analysis_id=analysis.analysis_id,
         project_id=analysis.project_id,
+        config_id=analysis.config_id,
         note=analysis.note,
         files_available=files_available,
-        classifier_type=analysis.classifier_type,
-        top_k=analysis.top_k,
-        dependency_expansion_depth=analysis.dependency_expansion_depth,
+        classifier_type=analysis.config.classifier_type,
+        top_k=analysis.config.top_k,
+        dependency_expansion_depth=analysis.config.dependency_expansion_depth,
         execution_duration=analysis.execution_duration,
         created_at=analysis.created_at,
         link_count=link_count,
@@ -105,17 +158,17 @@ def to_analysis_summary(
     )
 
 
-def config_of(analysis: Analysis) -> AnalysisConfig:
-    """The settings a stored analysis was run with."""
+def config_of(config: ProjectConfig) -> AnalysisConfig:
+    """The settings an analysis runs with."""
     return AnalysisConfig(
-        source_preprocessor=analysis.source_preprocessor,
-        target_preprocessor=analysis.target_preprocessor,
-        source_output_level=analysis.source_output_level,
-        target_output_level=analysis.target_output_level,
-        classifier=analysis.classifier_type,
-        n_results=analysis.top_k,
-        dependency_expansion_depth=analysis.dependency_expansion_depth,
-        summarize_elements=analysis.summarize_elements,
+        source_preprocessor=config.source_preprocessor,
+        target_preprocessor=config.target_preprocessor,
+        source_output_level=config.source_output_level,
+        target_output_level=config.target_output_level,
+        classifier=config.classifier_type,
+        n_results=config.top_k,
+        dependency_expansion_depth=config.dependency_expansion_depth,
+        summarize_elements=config.summarize_elements,
     )
 
 
@@ -142,12 +195,15 @@ def to_analysis_detail(analysis: Analysis) -> AnalysisDetailResponse:
         summary=snapshot.get("summary", {}),
     )
 
+    name_elements(result)
     return AnalysisDetailResponse(
         analysis_id=analysis.analysis_id,
         project_id=analysis.project_id,
+        config_id=analysis.config_id,
+        version_number=analysis.version.version_number,
         project_name=analysis.project.project_name,
         note=analysis.note,
-        config=config_of(analysis),
+        config=config_of(analysis.config),
         execution_duration=analysis.execution_duration,
         created_at=analysis.created_at,
         result=result,
@@ -156,7 +212,7 @@ def to_analysis_detail(analysis: Analysis) -> AnalysisDetailResponse:
 
 
 def summaries_for(db: Session, rows: list[tuple]) -> list[AnalysisSummaryResponse]:
-    """A page of analyses, each saying whether its files are still there."""
+    """A page of runs, each saying whether its files are still there."""
     # One query and one filesystem pass for the whole page, rather than per row.
     available = service.analyses_with_files(db, [row[0].analysis_id for row in rows])
     # One lookup for the page, in keeping with the two above it.
@@ -171,26 +227,30 @@ def summaries_for(db: Session, rows: list[tuple]) -> list[AnalysisSummaryRespons
     ]
 
 
-def update_graph(
-    db: Session, analysis: Analysis, result, renames: dict[str, str] | None = None
-) -> None:
-    """Fold a saved run into its configuration's graph.
-
-    Which kind sat on each side is read back off the stored artifacts, because
-    that is where a run records what it was actually pointed at. An analysis
-    whose files were never claimed has nothing to read, and is skipped.
-
-    `renames` is what a sync learned about files that moved. An upload knows
-    nothing of the sort and leaves it out.
-    """
-    kinds = {artifact.role: artifact.artifact_type for artifact in analysis.artifacts}
-    service.update_graph(
-        db,
-        analysis,
-        result,
-        source_kind=kinds.get(ROLE_SOURCE),
-        target_kind=kinds.get(ROLE_TARGET),
-        renames=renames,
+def to_config_response(
+    db: Session, config: ProjectConfig, with_files: bool = False
+) -> ProjectConfigResponse:
+    """An analysis, with where it stands now: its newest version and run."""
+    latest = service.latest_analysis(db, config)
+    version = service.latest_version(db, config)
+    held = held_by_role(version)
+    return ProjectConfigResponse(
+        config_id=config.config_id,
+        project_id=config.project_id,
+        project_name=config.project.project_name,
+        source_kind=config.source_kind,
+        target_kind=config.target_kind,
+        config=config_of(config),
+        analysis_count=service.count_runs(db, config),
+        version_number=version.version_number if version else None,
+        latest_analysis_id=latest.analysis_id if latest else None,
+        latest_run_at=latest.created_at if latest else None,
+        link_count=len(latest.trace_links) if latest else 0,
+        sides=[
+            to_source_response(side, held.get(side.role), with_files)
+            for side in service.list_sides(db, config)
+        ],
+        created_at=config.created_at,
     )
 
 
@@ -210,48 +270,19 @@ def upload_kinds(upload_id: str | None) -> dict[str, str]:
     }
 
 
-def resolve_config(db: Session, project: Project, config_id: int | None) -> ProjectConfig:
-    """Which configuration a request is asking about.
-
-    Left out when there is only one, because naming it would be ceremony. With
-    several it has to be said: guessing would answer a different question from
-    the one asked, and the answer would look perfectly reasonable.
-    """
-    configs = service.list_configs(db, project)
-    if not configs:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="This project has no saved configuration yet.",
-        )
-
-    if config_id is None:
-        if len(configs) == 1:
-            return configs[0]
-        default = next((config for config in configs if config.is_default), None)
-        if default is not None:
-            return default
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"This project has {len(configs)} configurations and no default. "
-                f"Name the one to read with config_id."
-            ),
-        )
-
-    chosen = next((config for config in configs if config.config_id == config_id), None)
-    if chosen is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Configuration not found in this project.",
-        )
-    return chosen
-
-
 def require_project(db: Session, user: User, project_id: int) -> Project:
     project = service.get_project(db, user.user_id, project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=PROJECT_NOT_FOUND)
     return project
+
+
+def require_config(db: Session, user: User, project_id: int, config_id: int) -> ProjectConfig:
+    """One analysis of one of this user's projects."""
+    config = service.get_config(db, user.user_id, config_id)
+    if config is None or config.project_id != project_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=CONFIG_NOT_FOUND)
+    return config
 
 
 def require_analysis(db: Session, user: User, analysis_id: int) -> Analysis:
@@ -291,7 +322,7 @@ def get_project(
     rows = service.list_analyses(db, user.user_id, project_id=project_id)
 
     return ProjectDetailResponse(
-        **to_project_response(project, len(rows)).model_dump(),
+        **to_project_response(project, len(service.list_configs(db, project))).model_dump(),
         analyses=summaries_for(db, rows),
     )
 
@@ -307,7 +338,7 @@ def delete_project(
     service.delete_project(db, project)
 
 
-# ----- Saved analyses -----
+# ----- Analyses -----
 
 @router.post(
     "/projects/{project_id}/analyses",
@@ -320,28 +351,42 @@ def save_analysis(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Save a New Analysis: a new analysis at version 1, holding this run."""
     project = require_project(db, user, project_id)
     kinds = upload_kinds(request.upload_id)
+    # Always a new analysis, whatever its settings: an earlier one with the
+    # same settings is a different relation with a history of its own.
+    config = service.create_config(
+        db, project, request.config, kinds.get(ROLE_SOURCE), kinds.get(ROLE_TARGET)
+    )
+    version = service.next_version(db, config)
     analysis = service.save_analysis(
-        db,
-        project,
+        db, config, version.version_id,
         note=request.note,
-        config=request.config,
         result=request.result,
         execution_duration=request.execution_duration,
-        # These artifacts were just uploaded, so they are a state of the
-        # project nothing has been run against before: a new version.
-        version_id=service.next_version(db, project).version_id,
-        source_kind=kinds.get(ROLE_SOURCE),
-        target_kind=kinds.get(ROLE_TARGET),
     )
-    artifact_count = service.claim_artifacts(db, analysis, request.upload_id)
-    update_graph(db, analysis, request.result)
+    artifact_count = service.claim_artifacts(db, version, request.upload_id)
+    service.keep_pins(db, analysis, request.result)
     return to_analysis_summary(
         analysis, len(analysis.trace_links), artifact_count, project.project_name,
         # Just written, so anything it claimed is on disk by definition.
         files_available=artifact_count > 0,
+        version_number=version.version_number,
     )
+
+
+@router.get("/configs", response_model=list[ProjectConfigResponse])
+def list_all_configs(
+    project_id: int | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every analysis this user has, newest first, across every project by default."""
+    return [
+        to_config_response(db, config)
+        for config in service.list_user_configs(db, user.user_id, project_id)
+    ]
 
 
 @router.get("/projects/{project_id}/configs", response_model=list[ProjectConfigResponse])
@@ -350,32 +395,50 @@ def list_configs(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Every way this project has been read, with how much each has been used."""
+    """Every analysis in this project, with where each one stands."""
     project = require_project(db, user, project_id)
-    counts = service.count_analyses_by_config(db, project)
-    return [
-        ProjectConfigResponse(
-            config_id=config.config_id,
-            config_key=config.config_key,
-            is_default=config.is_default,
-            source_kind=config.source_kind,
-            target_kind=config.target_kind,
-            config=config_of(config),
-            analysis_count=counts.get(config.config_id, 0),
-            created_at=config.created_at,
-        )
-        for config in service.list_configs(db, project)
-    ]
+    return [to_config_response(db, config) for config in service.list_configs(db, project)]
 
 
-@router.get("/projects/{project_id}/versions", response_model=list[ProjectVersionResponse])
-def list_versions(
+@router.get(
+    "/projects/{project_id}/configs/{config_id}", response_model=ProjectConfigResponse
+)
+def get_config(
     project_id: int,
+    config_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Every state this project's artifacts have been in, newest first."""
-    project = require_project(db, user, project_id)
+    """One analysis, with both sides and the files each holds now."""
+    return to_config_response(db, require_config(db, user, project_id, config_id), with_files=True)
+
+
+@router.delete(
+    "/projects/{project_id}/configs/{config_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_config(
+    project_id: int,
+    config_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Deletes an analysis with its sides, versions, runs and pins."""
+    service.delete_config(db, require_config(db, user, project_id, config_id))
+
+
+@router.get(
+    "/projects/{project_id}/configs/{config_id}/versions",
+    response_model=list[ProjectVersionResponse],
+)
+def list_versions(
+    project_id: int,
+    config_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Every state this analysis's files have been in, newest first."""
+    config = require_config(db, user, project_id, config_id)
+    sides = {side.role: side for side in service.list_sides(db, config)}
     return [
         ProjectVersionResponse(
             version_id=version.version_id,
@@ -385,65 +448,133 @@ def list_versions(
             analysis_count=runs,
             sources=[
                 VersionSourceRef(
-                    source_id=entry.source_id,
-                    # Read off the source itself, so a renamed source reads by
-                    # the name it has now rather than the one it had then.
-                    name=entry.source.name,
-                    kind=entry.source.kind,
-                    origin=entry.source.origin,
-                    ref=entry.ref,
+                    source_id=sides[artifact.role].source_id,
+                    role=artifact.role,
+                    name=artifact.name,
+                    kind=artifact.artifact_type,
+                    origin=artifact.origin,
+                    ref=artifact.ref or "",
                 )
-                for entry in version.sources
-                if entry.source is not None
+                for artifact in version.artifacts
+                if artifact.role in sides
+            ],
+            changes=stored_changes(version),
+            runs=[
+                VersionRun(
+                    analysis_id=run.analysis_id,
+                    note=run.note,
+                    created_at=run.created_at,
+                    link_count=len(run.trace_links),
+                )
+                for run in sorted(version.analyses, key=lambda run: run.created_at, reverse=True)
             ],
         )
-        for version, runs in service.list_versions(db, project)
+        for version, runs in service.list_versions(db, config)
     ]
 
 
-@router.get("/projects/{project_id}/graph", response_model=GraphResponse)
-def get_graph(
+@router.get(
+    "/projects/{project_id}/configs/{config_id}/report",
+    response_model=ChangeReportResponse,
+)
+def change_report(
     project_id: int,
-    config_id: int | None = Query(default=None, description="Omit when the project has one."),
-    link_status: str | None = Query(default=None, description="active, stale or broken."),
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
+    config_id: int,
+    base: int | None = Query(default=None, description="The earlier version. Defaults to the one before `head`."),
+    head: int | None = Query(default=None, description="The later version. Defaults to the newest."),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """A configuration's graph as it currently stands.
+    """What changed between two versions of an analysis: files, elements and every link.
 
-    One graph per configuration, so which one has to be named unless the
-    project only has the one - two configurations read the same artifacts into
-    different elements, and their graphs are not comparable.
+    Worked out on each request from the two versions' newest runs and the
+    changes stored on the versions in between.
     """
-    project = require_project(db, user, project_id)
-    config = resolve_config(db, project, config_id)
+    config = require_config(db, user, project_id, config_id)
+    try:
+        report = service.version_report(db, config, base, head)
+    except service.ReportError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
 
-    rows, total = service.list_graph_edges(db, config.config_id, link_status, limit, offset)
-    return GraphResponse(
-        config_id=config.config_id,
-        config_key=config.config_key,
-        summary=GraphSummary(**service.graph_summary(db, config.config_id)),
-        links=[
-            GraphEdgeResponse(
-                edge_id=edge.edge_id,
-                from_kind=edge.from_kind,
-                from_identifier=source.identifier,
-                from_present=source.is_active,
-                to_kind=edge.to_kind,
-                to_identifier=target.identifier,
-                to_present=target.is_active,
-                confidence=edge.confidence,
-                confidence_level=edge.confidence_level,
-                explanation=edge.explanation,
-                status=edge.status,
+    net, net_available = [], True
+    if report["base_version"] is not None:
+        by_number = {version.version_number: version for version in config.versions}
+        try:
+            sides = net_changes(
+                config, by_number[report["base_version"]], by_number[report["head_version"]],
+                report["versions"],
             )
-            for edge, source, target in rows
+        except FilesMissing:
+            net_available = False
+            sides = []
+        for changes in sides:
+            summary = net_summary(changes)
+            count_file_links(summary["files"], report["links"], changes.role)
+            net.append(NetSide(
+                **summary, whole_documents=preprocessor_of(config, changes.role) == "single",
+            ))
+
+    return ChangeReportResponse(
+        config_id=config.config_id,
+        **{key: value for key, value in report.items() if key != "versions"},
+        net=net,
+        net_available=net_available,
+        versions=[
+            ReportVersion(
+                version_number=version.version_number,
+                note=version.note,
+                created_at=version.created_at,
+                changes=stored_changes(version),
+            )
+            for version in report["versions"]
         ],
-        total=total,
     )
 
+
+@router.get(
+    "/projects/{project_id}/configs/{config_id}/report/diff",
+    response_model=LineDiffResponse,
+)
+def file_line_diff(
+    project_id: int,
+    config_id: int,
+    base: int = Query(description="The earlier version."),
+    head: int = Query(description="The later version."),
+    role: str = Query(description="source or target."),
+    path: str = Query(description="The file's path in the later version."),
+    old_path: str | None = Query(default=None, description="Its path in the earlier one, if renamed."),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """One changed file's text, earlier version against later, read from the stored files."""
+    config = require_config(db, user, project_id, config_id)
+    if path.lower().endswith(NOT_TEXT):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No line diff for this file type.")
+
+    by_number = {version.version_number: version for version in config.versions}
+
+    def stored(number: int, wanted: str) -> bytes:
+        """A file's bytes at one version; empty when it is not there."""
+        version = by_number.get(number)
+        artifact = next((a for a in version.artifacts if a.role == role), None) if version else None
+        file = next((f for f in artifact.files if f.relative_path == wanted), None) if artifact else None
+        if file is None:
+            return b""
+        content = artifact_store.open_blob(file.sha256)
+        if content is None:
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail="The stored file is no longer on disk.",
+            )
+        return content
+
+    if base not in by_number or head not in by_number:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found.")
+    lines, truncated = line_diff(stored(base, old_path or path), stored(head, path))
+    return LineDiffResponse(lines=lines, truncated=truncated)
+
+
+# ----- Runs -----
 
 @router.get("/analyses", response_model=list[AnalysisSummaryResponse])
 def list_analyses(
@@ -472,44 +603,18 @@ def delete_analysis(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Deletes the analysis, its links, and the artifacts it was run against."""
+    """Deletes one run and its links. Its analysis and versions stay.
+
+    A version's last run is kept: without it the version has no links, and
+    the change report has nothing to read it by.
+    """
     analysis = require_analysis(db, user, analysis_id)
-    service.delete_analysis(db, analysis)
-
-
-@router.get("/analyses/{base_id}/compare/{head_id}", response_model=ComparisonResponse)
-def compare_analyses(
-    base_id: int,
-    head_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Diff two saved runs of the same project."""
-    base = require_analysis(db, user, base_id)
-    head = require_analysis(db, user, head_id)
-
-    if base.analysis_id == head.analysis_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Pick two different analyses to compare.",
-        )
-    if base.project_id != head.project_id:
+    if service.run_count(db, analysis.version_id) == 1:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Analyses can only be compared within the same project.",
+            detail="This is the only run of this version.",
         )
-
-    diff = service.compare_analyses(db, base, head)
-    available = service.analyses_with_files(db, [base.analysis_id, head.analysis_id])
-    return ComparisonResponse(
-        base=to_analysis_summary(base, len(base.trace_links), len(base.artifacts),
-                                 base.project.project_name,
-                                 base.analysis_id in available),
-        head=to_analysis_summary(head, len(head.trace_links), len(head.artifacts),
-                                 head.project.project_name,
-                                 head.analysis_id in available),
-        **diff,
-    )
+    service.delete_analysis(db, analysis)
 
 
 @router.post(
@@ -523,10 +628,14 @@ def rerun_analysis(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Run a saved analysis again and store the result as a new one."""
-    # Artifacts are restored from the blob store rather than re-uploaded, and
-    # the new analysis shares the original's blobs - rows, not bytes.
+    """Run an analysis again over the same files, with the same settings.
+
+    The new run belongs to the same version: nothing about the files changed,
+    so the history must not say they did - and it reads that version's files
+    rather than storing another copy of the list.
+    """
     original = require_analysis(db, user, analysis_id)
+    config = original.config
 
     sides = {artifact.role: artifact for artifact in original.artifacts}
     if ROLE_SOURCE not in sides or ROLE_TARGET not in sides:
@@ -538,7 +647,7 @@ def rerun_analysis(
             ),
         )
 
-    config = request.config or config_of(original)
+    settings = config_of(config)
     workspace = Path(tempfile.mkdtemp(prefix="tracerag-rerun-"))
 
     try:
@@ -561,19 +670,18 @@ def rerun_analysis(
                                            directories[ROLE_TARGET]),
             source_kind=sides[ROLE_SOURCE].artifact_type,
             target_kind=sides[ROLE_TARGET].artifact_type,
-            source_preprocessor=config.source_preprocessor,
-            target_preprocessor=config.target_preprocessor,
-            classifier=config.classifier,
-            n_results=config.n_results,
-            source_output_level=config.source_output_level,
-            target_output_level=config.target_output_level,
-            dependency_expansion_depth=config.dependency_expansion_depth,
-            summarize_elements=config.summarize_elements,
-            chroma_path=get_chroma_path(f"project-{original.project_id}"),
+            source_preprocessor=settings.source_preprocessor,
+            target_preprocessor=settings.target_preprocessor,
+            classifier=settings.classifier,
+            n_results=settings.n_results,
+            source_output_level=settings.source_output_level,
+            target_output_level=settings.target_output_level,
+            dependency_expansion_depth=settings.dependency_expansion_depth,
+            summarize_elements=settings.summarize_elements,
+            chroma_path=get_chroma_path(f"analysis-{config.config_id}"),
             # The embedding cache is keyed by content, so unchanged text costs
-            # nothing to re-embed. The vector store is rebuilt, because a
-            # different preprocessor produces different elements and stale ones
-            # would otherwise stay retrievable.
+            # nothing to re-embed. The vector store is rebuilt so the index
+            # holds exactly these files' elements and nothing older.
             use_persistent_cache=True,
             reset_vector_stores=True,
         )
@@ -583,27 +691,16 @@ def rerun_analysis(
         result = relativize_response(result, list(directories.values()))
 
         analysis = service.save_analysis(
-            db,
-            original.project,
+            db, config, original.version_id,
             note=request.note,
-            config=config,
             result=result,
             execution_duration=duration,
-            # The same files the original ran against, so the same version.
-            # Trying a second configuration is not a change to the artifacts.
-            version_id=(
-                original.version_id
-                or service.next_version(db, original.project).version_id
-            ),
-            source_kind=sides[ROLE_SOURCE].artifact_type,
-            target_kind=sides[ROLE_TARGET].artifact_type,
         )
-        copied = service.copy_artifacts(db, original, analysis)
-        update_graph(db, analysis, result)
+        service.keep_pins(db, analysis, result)
 
         logger.info(
             f"Re-ran analysis {analysis_id} as {analysis.analysis_id} "
-            f"({len(result.trace_links)} links, {copied} artifacts reused) in {duration:.1f}s"
+            f"({len(result.trace_links)} links) in {duration:.1f}s"
         )
         return to_analysis_detail(analysis)
 
@@ -625,8 +722,9 @@ def download_artifact(
     """Stream one stored artifact back as a zip, folder structure intact."""
     artifact = db.scalar(
         select(Artifact)
-        .join(Analysis, Analysis.analysis_id == Artifact.analysis_id)
-        .join(Project, Project.project_id == Analysis.project_id)
+        .join(ProjectVersion, ProjectVersion.version_id == Artifact.version_id)
+        .join(ProjectConfig, ProjectConfig.config_id == ProjectVersion.config_id)
+        .join(Project, Project.project_id == ProjectConfig.project_id)
         .where(Artifact.artifact_id == artifact_id, Project.user_id == user.user_id)
     )
     if artifact is None:

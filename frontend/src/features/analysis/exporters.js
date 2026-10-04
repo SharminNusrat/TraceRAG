@@ -44,9 +44,17 @@ function csvCell(value) {
 }
 
 export function exportCsv(rows, summary, labels) {
-  const lines = [headersFor(labels), ...rows.map((row) => toCells(row).map((cell, index) => (
-    index === 3 ? formatSimilarity(row.similarity) : cell
-  )))];
+  // The identifiers as well as the names, in two extra columns at the end.
+  const sourceLabel = labels?.source.singular ?? 'Source';
+  const targetLabel = labels?.target.singular ?? 'Target';
+  const lines = [
+    [...headersFor(labels), `${sourceLabel} ID`, `${targetLabel} ID`],
+    ...rows.map((row) => [
+      ...toCells(row).map((cell, index) => (index === 3 ? formatSimilarity(row.similarity) : cell)),
+      row.requirementId,
+      row.codeId ?? '',
+    ]),
+  ];
   const csv = lines.map((line) => line.map(csvCell).join(',')).join('\r\n');
   // BOM so Excel opens UTF-8 accented text correctly on a double click.
   download(new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8' }), timestampedName('csv'));

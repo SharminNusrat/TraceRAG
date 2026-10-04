@@ -1,0 +1,4 @@
+# Needed to run the test suite, not to run the application.
+#   pip install -r requirements-dev.txt
+-r requirements.txt
+pytest>=8

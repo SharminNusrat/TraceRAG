@@ -9,8 +9,6 @@ import { ArtifactUploader } from '../features/analysis/components/ArtifactUpload
 import { ReviewStep } from '../features/analysis/components/ReviewStep';
 import { runAnalysisUpload } from '../features/analysis/api/analyzeApi';
 import { getProject, saveAnalysis, toAnalysisConfig } from '../features/projects/api/projectsApi';
-import { sourcesReplacedBy } from '../features/sync/api/syncApi';
-import { ReplaceSourcesDialog } from '../features/sync/components/ReplaceSourcesDialog';
 import {
   findKind,
   findPreprocessor,
@@ -33,14 +31,10 @@ export function AnalysisPage() {
   // The job as it last reported itself, so the wait has something to show.
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
-  // The project's sources this run's uploads would replace, while the user is
-  // being asked whether that is what they want.
-  const [replacing, setReplacing] = useState(null);
 
-  // Where this run belongs. Usually settled by starting from a project, but a
-  // run started anywhere else can still settle it - choosing a connected
-  // source means choosing the project that source belongs to.
-  const [projectId, setProjectId] = useState(params.get('project'));
+  // Where this run belongs, when it was started from a project. It is saved
+  // there as a new analysis of its own.
+  const projectId = params.get('project');
   const [project, setProject] = useState(null);
 
   useEffect(() => {
@@ -145,30 +139,8 @@ export function AnalysisPage() {
   const back = () => { if (currentStep > 0) setCurrentStep(currentStep - 1); };
   const goToStep = (step) => { if (step <= currentStep) setCurrentStep(step); };
 
-  // Files uploaded for this run, as opposed to a side taken from a source the
-  // project is already connected to.
-  const uploadedKinds = [...sides.selectedSources, ...sides.selectedTargets]
-    .filter((artifact) => artifact.sourceId === undefined)
-    .map((artifact) => artifact.kind);
-
-  const run = async (confirmed = false) => {
+  const run = async () => {
     setError(null);
-
-    // Saving this run would put the uploaded files in place of a source the
-    // project already has, so that is asked about before anything starts.
-    if (projectId && uploadedKinds.length && !confirmed) {
-      try {
-        const replaced = await sourcesReplacedBy(projectId, uploadedKinds);
-        if (replaced.length) {
-          setReplacing(replaced);
-          return;
-        }
-      } catch (requestError) {
-        setError(requestError.message);
-        return;
-      }
-    }
-
     setRunning(true);
     setProgress(null);
     try {
@@ -243,8 +215,6 @@ export function AnalysisPage() {
                 artifacts={artifacts}
                 onArtifactsChange={setArtifacts}
                 capabilities={capabilities}
-                projectId={projectId}
-                onProjectChange={setProjectId}
               />
             </>
           )}
@@ -306,14 +276,6 @@ export function AnalysisPage() {
           </div>
         </footer>
       </div>
-
-      {replacing && (
-        <ReplaceSourcesDialog
-          sources={replacing}
-          onConfirm={() => { setReplacing(null); run(true); }}
-          onCancel={() => setReplacing(null)}
-        />
-      )}
     </main>
   );
 }

@@ -1,27 +1,31 @@
 import { useEffect, useState } from 'react';
-import { listVersions, relativeTime } from '../../projects/api/projectsApi';
+import { Trash2 } from 'lucide-react';
+import { listVersions, relativeTime, runTimestamp } from '../../projects/api/projectsApi';
 import { shortRef } from '../api/syncApi';
 
 /**
- * Every state a project's artifacts have been in, and what moved between them.
+ * Every state an analysis's files have been in, and what moved between them.
  *
- * A version records what *every* source was, not only the ones that were
- * refreshed - so comparing two rows says which parts actually changed, without
- * reading a single file.
+ * A version records what *both* sides were, not only the one that was
+ * updated - so comparing two rows says which side actually changed, without
+ * reading a single file. Given `onOpenRun`, each version also lists its runs.
  */
-export function VersionHistory({ projectId }) {
+export function VersionHistory({ projectId, configId, onOpenRun, onDeleteRun }) {
   const [versions, setVersions] = useState(null);
   const [error, setError] = useState(null);
+  // The run whose delete was refused: a version keeps its last run.
+  const [refused, setRefused] = useState(null);
 
   useEffect(() => {
     let active = true;
-    listVersions(projectId)
+    setVersions(null);
+    listVersions(projectId, configId)
       .then((rows) => { if (active) setVersions(rows); })
       .catch((requestError) => {
         if (active) { setVersions([]); setError(requestError.message); }
       });
     return () => { active = false; };
-  }, [projectId]);
+  }, [projectId, configId]);
 
   if (versions === null) return <p className="dialog-note">Loading versions…</p>;
   if (error) return <p className="auth-error" role="alert">{error}</p>;
@@ -33,7 +37,7 @@ export function VersionHistory({ projectId }) {
     );
   }
 
-  /** Which sources differ from the version below this one in the list. */
+  /** Which sides differ from the version below this one in the list. */
   const movedIn = (index) => {
     // Newest first, so the previous state is the next row down. The oldest has
     // nothing before it: everything in it arrived at once.
@@ -75,9 +79,33 @@ export function VersionHistory({ projectId }) {
                   );
                 })}
                 {!version.sources.length && (
-                  <span className="version-source muted">No sources recorded</span>
+                  <span className="version-source muted">No files recorded</span>
                 )}
               </div>
+              {onOpenRun && version.runs.map((run) => (
+                <div className="version-run" key={run.analysis_id}>
+                  <span>{runTimestamp(run)} · {run.link_count} trace links</span>
+                  {run.note && <em>{run.note}</em>}
+                  <button type="button" className="row-open" onClick={() => onOpenRun(run.analysis_id)}>
+                    Open
+                  </button>
+                  {onDeleteRun && (
+                    <button
+                      type="button"
+                      className="card-delete"
+                      onClick={() => (version.runs.length === 1
+                        ? setRefused(run.analysis_id)
+                        : onDeleteRun(run))}
+                      aria-label={`Delete ${runTimestamp(run)}`}
+                    >
+                      <Trash2 size={13} strokeWidth={2} />
+                    </button>
+                  )}
+                  {refused === run.analysis_id && (
+                    <em className="sync-problem" role="alert">This is the only run of this version.</em>
+                  )}
+                </div>
+              ))}
             </div>
             <span className="version-runs">
               {version.analysis_count} run{version.analysis_count === 1 ? '' : 's'}

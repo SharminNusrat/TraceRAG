@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowRight, Link2, Network, Search } from 'lucide-react';
 import { ResizableColumns } from '../../../components/common/ResizableColumns';
-import { toLabel } from '../api/analyzeApi';
+import { elementName, sourceName, targetName, toLabel } from '../api/analyzeApi';
 import { isArchitecture } from '../sideLabels';
 import { ArchitectureGraph } from './ArchitectureGraph';
 
@@ -121,9 +121,9 @@ export function TracePanels({ view }) {
               onClick={() => toggle('link', key)}
             >
               <div className="link-item-row">
-                <code>{link.source_id}</code>
+                <code title={link.source_id}>{sourceName(link)}</code>
                 <ArrowRight size={12} strokeWidth={2.4} />
-                <code>{link.target_id}</code>
+                <code title={link.target_id}>{targetName(link)}</code>
               </div>
               <span className={`confidence ${link.confidence_level}`}>
                 {Math.round(link.confidence * 100)}%
@@ -263,7 +263,7 @@ function ElementPanel({ title, noun, elements, kind, selection, activeIds, linke
           >
             <div className="element-head">
               <span className="element-index">{index + 1}</span>
-              <code className="element-id">{element.identifier}</code>
+              <code className="element-id" title={element.identifier}>{elementName(element)}</code>
               <span className="element-level">{element.level}</span>
               {linkCount > 0 && (
                 <span className="element-links" title={`${linkCount} trace link${linkCount === 1 ? '' : 's'}`}>

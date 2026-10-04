@@ -12,10 +12,9 @@ from api.schemas import AnalyzeResponse
 from api.uploads import side_manifest
 from api.workspace import relativize_response
 from core import jobs
-from core.db.models import ProjectSource
 from core.db.session import SessionLocal
 from core.projects import artifact_store
-from core.sync import SyncError, fetch_source
+from core.sync import SyncError
 
 logger = logging.getLogger(__name__)
 
@@ -41,32 +40,16 @@ def progress_writer(db: Session, job_id: int):
 
 
 def perform_analysis(db: Session, upload_id: str, plan: dict, job_id: int) -> AnalyzeResponse:
-    """Fetch whatever was not uploaded, then run the pipeline over the lot."""
+    """Run the pipeline over the uploaded files."""
     workspace = artifact_store.upload_dir(upload_id)
     if workspace is None or not workspace.is_dir():
         raise SyncError("The uploaded files are no longer available.")
 
-    refs = {}
-    for role in (ROLE_SOURCE, ROLE_TARGET):
-        source_id = plan["source_ids"][role]
-        if source_id is None:
-            continue
-        source = db.get(ProjectSource, source_id)
-        if source is None:
-            raise SyncError("A connected source was removed before the run started.")
-        jobs.set_stage(db, job_id, f"Fetching {source.name}")
-        # The commit comes back so the saved run records what it analysed.
-        refs[role] = fetch_source(source, workspace / role)
-
     source_artifacts = plan["source_artifacts"]
     target_artifacts = plan["target_artifacts"]
     artifact_store.write_manifest(workspace, [
-        side_manifest(source_artifacts, ROLE_SOURCE,
-                      db.get(ProjectSource, plan["source_ids"][ROLE_SOURCE])
-                      if plan["source_ids"][ROLE_SOURCE] else None, refs.get(ROLE_SOURCE)),
-        side_manifest(target_artifacts, ROLE_TARGET,
-                      db.get(ProjectSource, plan["source_ids"][ROLE_TARGET])
-                      if plan["source_ids"][ROLE_TARGET] else None, refs.get(ROLE_TARGET)),
+        side_manifest(source_artifacts, ROLE_SOURCE),
+        side_manifest(target_artifacts, ROLE_TARGET),
     ])
 
     source_dir, target_dir = workspace / ROLE_SOURCE, workspace / ROLE_TARGET

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Minus, Plus, Maximize2 } from 'lucide-react';
+import { elementName } from '../api/analyzeApi';
 
 const NODE_WIDTH = 168;
 const NODE_HEIGHT = 60;
@@ -565,7 +566,7 @@ function layout(elements, viewport) {
     .filter((element) => element.model_units)
     .map((element) => ({
       id: element.identifier,
-      label: element.model_units.name ?? element.identifier,
+      label: elementName(element),
       provides: element.model_units.provides ?? [],
       requires: element.model_units.requires ?? [],
     }));

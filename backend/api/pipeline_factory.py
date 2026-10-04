@@ -1,7 +1,7 @@
 """Turning a run's settings into a configured pipeline, and running it.
 
-Every way of starting a run - an upload, a re-run, a sync - ends here, so the
-settings are read one way and the configuration is named one way.
+Every way of starting a run - an upload, a re-run, an update - ends here, so
+the settings are read one way.
 """
 
 from pathlib import Path
@@ -20,8 +20,11 @@ from core.dependency import CodeDependencyAnalyzer
 from core.embedding import OllamaEmbeddingCreator
 from core.ingestion import CodeProvider, DocumentProvider, ModelProvider, TextProvider
 from core.pipeline import TracePipeline
+from core.content import relative_identifier
+from core.output.names import display_names, model_name
 from core.preprocessing import ArtifactPreprocessor, SentencePreprocessor, SectionPreprocessor, SummarizePreprocessor, CodeChunkingPreprocessor, CodeMethodPreprocessor, CodeTreePreprocessor, ModelUmlPreprocessor
-from core.projects.run_config import config_key, expansion_depth
+from core.projects.diff import Item, items_from_elements
+from core.projects.run_config import expansion_depth
 from core.schemas import ElementLevel
 from core.summarization import ElementSummarizer
 
@@ -94,6 +97,47 @@ def get_preprocessor(preprocessor_type: PreprocessorType):
             return ModelUmlPreprocessor()
 
 
+def read_items(kind_key: str, preprocessor: PreprocessorType, directory: Path) -> list[Item]:
+    """One side's elements, split the way a run splits them, without any model.
+
+    What an update compares to say which elements changed. Identifiers are
+    made relative to `directory`, the form every stored identifier takes.
+    """
+    if not any(path.is_file() for path in directory.rglob("*")):
+        return []
+    elements = get_preprocessor(preprocessor).preprocess(build_provider(kind_key, directory).load())
+    roots = [directory]
+    for element in elements:
+        element.identifier = relative_identifier(element.identifier, roots)
+        if element.parent_id:
+            element.parent_id = relative_identifier(element.parent_id, roots)
+    return items_from_elements(elements)
+
+
+def name_elements(response: AnalyzeResponse) -> AnalyzeResponse:
+    """Give each element, and each link's two ends, the name a person reads it by.
+
+    Worked out from the elements a response already holds, so a stored run is
+    named exactly as it was when it ran.
+    """
+    names = {}
+    for elements in (response.source_elements, response.target_elements):
+        names.update(display_names([
+            (element.identifier, model_name(element.level, element.model_units))
+            for element in elements
+        ]))
+    def shown(identifier: str) -> str | None:
+        # Only a name that differs from the identifier is worth sending.
+        return names.get(identifier) if names.get(identifier) != identifier else None
+
+    for element in (*response.source_elements, *response.target_elements):
+        element.display_name = shown(element.identifier)
+    for link in response.trace_links:
+        link.source_name = shown(link.source_id)
+        link.target_name = shown(link.target_id)
+    return response
+
+
 def get_chat_provider():
     # provider = OllamaChatProvider()
     return GroqChatProvider(api_keys=settings.groq_api_keys_list)
@@ -138,7 +182,7 @@ def build_pipeline_response(
     use_persistent_cache: bool,
     reset_vector_stores: bool,
     summarize_elements: bool = request_default("summarize_elements"),
-    # Last run's links for this configuration, so the classifier is asked about
+    # Last run's links for this analysis, so the classifier is asked about
     # them again rather than losing them to a shifted top-k.
     pinned_links: dict[str, set[str]] | None = None,
     # The directories the providers read from, so pinned identifiers and this
@@ -148,22 +192,6 @@ def build_pipeline_response(
 ) -> AnalyzeResponse:
     dependency_expansion_depth = expansion_depth(target_kind, dependency_expansion_depth)
 
-    # Computed here rather than by each caller: every setting that goes into it
-    # is already a parameter of this function, so there is one spelling of the
-    # configuration and no way for two entry points to disagree about it.
-    key = config_key(
-        source_kind=source_kind,
-        target_kind=target_kind,
-        source_preprocessor=source_preprocessor,
-        target_preprocessor=target_preprocessor,
-        source_output_level=source_output_level,
-        target_output_level=target_output_level,
-        classifier=classifier,
-        n_results=n_results,
-        dependency_expansion_depth=dependency_expansion_depth,
-        summarize_elements=summarize_elements,
-    )
-
     pipeline = TracePipeline(
         source_provider=source_provider,
         target_provider=target_provider,
@@ -171,7 +199,6 @@ def build_pipeline_response(
         target_preprocessor=get_preprocessor(target_preprocessor),
         source_kind=source_kind,
         target_kind=target_kind,
-        config_key=key,
         # Only the sides whose artifacts are not prose; the rest get None.
         source_summarizer=get_summarizer(
             source_kind, summarize_elements, use_persistent_cache
@@ -198,11 +225,11 @@ def build_pipeline_response(
     )
     result = pipeline.run().to_dict()
 
-    return AnalyzeResponse(
+    return name_elements(AnalyzeResponse(
         trace_links=[TraceLinkResponse(**link) for link in result["trace_links"]],
         source_elements=[ElementResponse(**e) for e in result["source_elements"]],
         target_elements=[ElementResponse(**e) for e in result["target_elements"]],
         unimplemented=result["unimplemented"],
         summary=result["summary"],
         element_links=result["element_links"],
-    )
+    ))

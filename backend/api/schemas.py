@@ -71,6 +71,10 @@ class TraceLinkResponse(BaseModel):
     source_content: str | None = None
     target_id: str
     target_content: str | None = None
+    # What each end is called where a person reads it: a UML component's
+    # name. Absent when the identifier is the name.
+    source_name: str | None = None
+    target_name: str | None = None
     confidence: float
     confidence_level: str
     explanation: str | None = None
@@ -90,6 +94,9 @@ class ElementResponse(BaseModel):
     type: str
     parent_id: str | None = None
     model_units: ModelUnitsResponse | None = None
+    # What the element is called where a person reads it: a UML component's
+    # name. Absent when the identifier is the name.
+    display_name: str | None = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -104,10 +111,14 @@ class AnalyzeResponse(BaseModel):
     # run. Absent on the path-based endpoint, which analyses files it does not
     # own and therefore has nothing to keep.
     upload_id: str | None = None
-    # The pairs the classifier judged, before they were rolled up to the output
-    # level. Excluded from what goes over the wire: nobody viewing a run needs
-    # them, they only exist so the next run can offer the same pairs again.
-    element_links: list[tuple[str, str]] = Field(default_factory=list, exclude=True)
+    # The pairs the classifier confirmed, before they were rolled up to the
+    # output level. Nobody viewing a run needs them, but they travel with the
+    # result all the same: a new analysis is saved by the client posting this
+    # back, and the save is what keeps them for the next update to offer again.
+    # None rather than empty when a result does not carry them - an older
+    # result, or another client - so that saving it leaves the stored pairs
+    # alone instead of reading "nothing was said" as "nothing was linked".
+    element_links: list[tuple[str, str]] | None = None
 
 
 # ----- Capabilities (drives the frontend's option lists) -----
@@ -238,11 +249,10 @@ class SaveAnalysisRequest(BaseModel):
 
 
 class RerunRequest(BaseModel):
-    """Run a saved analysis again over the artifacts it already holds."""
+    """Run an analysis again over the same files, with the same settings."""
+    # Nothing else can be changed: other settings are another analysis, and
+    # other files are an update.
     note: str | None = Field(default=None, max_length=200)
-    # Omit to repeat the original settings; supply to answer "what would this
-    # have found at class granularity, or with dependency expansion on?".
-    config: AnalysisConfig | None = None
 
 
 class ArtifactResponse(BaseModel):
@@ -261,11 +271,13 @@ class ArtifactResponse(BaseModel):
 
 
 class AnalysisSummaryResponse(BaseModel):
-    """An analysis as it appears in a list - no links, no elements."""
+    """A run as it appears in a list - no links, no elements."""
     model_config = ConfigDict(from_attributes=True)
 
     analysis_id: int
     project_id: int
+    # The analysis this is a run of.
+    config_id: int
     note: str | None
     classifier_type: str
     top_k: int
@@ -275,10 +287,8 @@ class AnalysisSummaryResponse(BaseModel):
     link_count: int
     artifact_count: int
     project_name: str
-    # Which state of the artifacts this run analysed. Null for runs saved
-    # before versioning existed. Shown so a run in this list can be matched to
-    # a version in the history - otherwise the two lists describe the same
-    # events with nothing in common to line them up by.
+    # Which state of its analysis's files this run read. Shown so a run in
+    # this list can be matched to a version in the history.
     version_number: int | None = None
     # False when the run kept artifacts but their bytes are gone, which is what
     # decides whether it can be re-run or downloaded.
@@ -286,9 +296,11 @@ class AnalysisSummaryResponse(BaseModel):
 
 
 class AnalysisDetailResponse(BaseModel):
-    """A saved analysis reassembled into the shape the results view expects."""
+    """A saved run reassembled into the shape the results view expects."""
     analysis_id: int
     project_id: int
+    config_id: int
+    version_number: int
     project_name: str
     note: str | None
     config: AnalysisConfig
@@ -298,67 +310,7 @@ class AnalysisDetailResponse(BaseModel):
     artifacts: list[ArtifactResponse] = []
 
 
-# ----- Comparing two runs -----
-
-class ConfigDifference(BaseModel):
-    setting: str
-    base: str | None
-    head: str | None
-
-
-class ComparedLink(BaseModel):
-    """A link that exists in only one of the two runs."""
-    source_id: str
-    target_id: str
-    source_content: str | None = None
-    target_content: str | None = None
-    similarity_score: float
-    confidence_level: str
-    explanation: str | None = None
-
-
-class ModifiedLink(BaseModel):
-    """A link present in both runs whose score, band or reasoning moved."""
-    source_id: str
-    target_id: str
-    source_content: str | None = None
-    target_content: str | None = None
-    changed_fields: list[str]
-    base_similarity_score: float
-    head_similarity_score: float
-    base_confidence_level: str
-    head_confidence_level: str
-    base_explanation: str | None = None
-    head_explanation: str | None = None
-
-
-class ComparisonSummary(BaseModel):
-    base_total: int
-    head_total: int
-    added: int
-    removed: int
-    modified: int
-    unchanged: int
-
-
-class ComparisonResponse(BaseModel):
-    base: AnalysisSummaryResponse
-    head: AnalysisSummaryResponse
-    config_differences: list[ConfigDifference]
-    # False when the two runs report at different granularities. The diff is
-    # still returned, but every link will look added and removed, because the
-    # identifiers refer to different things on each side.
-    comparable: bool
-    summary: ComparisonSummary
-    added: list[ComparedLink]
-    removed: list[ComparedLink]
-    modified: list[ModifiedLink]
-    # Coverage moving either way - usually the reason for re-running at all.
-    newly_implemented: list[str]
-    newly_unimplemented: list[str]
-
-
-# ----- Sources: what a project holds, and where it came from -----
+# ----- GitHub, and the sides of an analysis -----
 
 class GitHubConnectionResponse(BaseModel):
     """Whether this user has connected their own GitHub account."""
@@ -369,6 +321,10 @@ class GitHubConnectionResponse(BaseModel):
     # False when the server has no OAuth app set up, in which case connecting
     # is not possible and a token has to be pasted per repository instead.
     configured: bool = False
+    # True when a connection was stored but GitHub has just rejected it, so
+    # it was dropped: what the user needs is to connect again, not for the
+    # first time.
+    needs_reconnect: bool = False
 
 
 class OAuthStartResponse(BaseModel):
@@ -395,44 +351,46 @@ class RepositoryLookupRequest(BaseModel):
     token: str | None = Field(default=None, max_length=500)
 
 
-class GitHubSourceRequest(BaseModel):
-    """Point one of a project's artifact sets at a repository."""
+class GitHubSideRequest(BaseModel):
+    """Take the code side of an analysis from a repository."""
 
-    # A key from the capabilities registry - "code", "requirements".
-    kind: str = Field(min_length=1, max_length=50)
     # Its URL, or "owner/name". Whatever GitHub put in front of the user.
     repository: str = Field(min_length=3, max_length=500)
     # Omit to take whichever branch the repository itself defaults to.
     branch: str | None = Field(default=None, max_length=255)
-    # Omit to name the source after the repository.
-    name: str | None = Field(default=None, max_length=255)
-    # Needed only for a repository the server's own token cannot read. Stored
-    # encrypted, and never sent back - it can be replaced, not retrieved.
+    # Needed only for a repository the user's own connection cannot read.
+    # Stored encrypted, and never sent back - it can be replaced, not read.
     token: str | None = Field(default=None, max_length=500)
 
 
 class SourceResponse(BaseModel):
-    """One artifact set the project holds, as the client sees it."""
+    """One side of an analysis, as the client sees it."""
     model_config = ConfigDict(from_attributes=True)
 
     source_id: int
+    config_id: int
+    # "source" or "target".
+    role: str
     kind: str
     name: str
     origin: str
     location: str | None
     branch: str | None
-    # Null until the first sync: connected, but nothing fetched yet.
+    # What the side's files are at the newest version: the commit they were
+    # fetched at, or a fingerprint of an upload.
     last_sync_ref: str | None
-    last_synced_at: UtcDatetime | None
-    is_active: bool
     # Whether a token of its own is held. The token itself is never returned.
     has_token: bool = False
+    # The side's current files - its file set at the newest version - by
+    # relative path. Only filled in when one analysis is asked for.
+    files: list[str] = []
 
 
 class SourceStatusResponse(BaseModel):
-    """Where one source stands against the place it comes from."""
+    """Where one side stands against the place it comes from."""
 
     source_id: int
+    role: str
     kind: str
     name: str
     origin: str
@@ -451,99 +409,114 @@ class SourceStatusResponse(BaseModel):
     # offer the one button that mends it, instead of describing the problem and
     # leaving the user to find the page.
     needs_reconnect: bool = False
-    # Whether the project already holds newer files for this source than the
-    # pair's last run read - another pair's sync, or a new upload, moved it on.
-    behind: bool = False
 
 
-class PairResponse(BaseModel):
-    """Two artifact kinds this project traces between, and where they stand."""
+class MovedName(BaseModel):
+    """Something that is called differently now: a renamed file, a moved element."""
 
-    source_kind: str
-    target_kind: str
-    # Where each side comes from now. None when its source was disconnected.
-    source: SourceResponse | None
-    target: SourceResponse | None
-    # Whether either side has moved on since this pair was last run.
-    out_of_date: bool
+    old: str
+    new: str
+
+
+class FileChangesResponse(BaseModel):
+    """Which files of a side differ, by path and content hash."""
+
+    added: list[str] = []
+    removed: list[str] = []
+    modified: list[str] = []
+    renamed: list[MovedName] = []
+
+
+class ElementChangesResponse(BaseModel):
+    """Which of a side's compared elements differ, worked out from the files that changed."""
+
+    added: list[str] = []
+    removed: list[str] = []
+    # By the identifier each one has now.
+    modified: list[str] = []
+    # Unchanged, but called something else: a sentence that slid down when
+    # another was inserted above it, or an element of a renamed file.
+    moved: list[MovedName] = []
+
+
+class SideChangesResponse(BaseModel):
+    """What changed on one side between its stored files and the given ones."""
+
+    role: str
+    files: FileChangesResponse
+    elements: ElementChangesResponse
+    # Whether any file differs at all.
+    changed: bool
+    # Whether any element the analysis compares differs. A whitespace-only
+    # change is changed but not meaningful, and makes no new version.
+    meaningful: bool
 
 
 class StagedUploadResponse(BaseModel):
-    """Files put aside for a source, waiting for the sync that will use them."""
+    """Files put aside for one side, waiting for the update that will use them."""
 
     source_id: int
     upload_id: str
     file_count: int
-    # How many of these files sit at a path the source already holds. Nothing
+    # How many of these files sit at a path the side already holds. Nothing
     # is wrong with a zero - the whole set may have been reorganised - but it
-    # means the sync will read every old file as gone, so it is worth saying.
+    # means the update will read every old file as gone, so it is worth saying.
     matched: int = 0
     # How many stored files nothing in this upload lands on.
     missing: int = 0
+    # What updating with these files would change, worked out before anything
+    # is run.
+    changes: SideChangesResponse | None = None
 
 
 class SyncRequest(BaseModel):
-    """Which pair of a project to bring up to date, and how much of it."""
+    """Update one side of an analysis, and re-run the analysis over it."""
 
-    # The pair being synced: the two artifact kinds a trace runs between. A
-    # project can hold several, and each is brought up to date on its own.
-    source_kind: str
-    target_kind: str
-    # Omit to take every source of the pair that has moved. Naming some limits
-    # it to those.
-    source_ids: list[int] | None = None
-    # Omit to re-run every configuration the pair has.
-    config_ids: list[int] | None = None
-    # Files supplied by hand for a source that cannot be fetched, as
-    # source_id -> the id of a staged upload. This is how the requirements side
-    # keeps up: it lives on someone's machine, so nothing can go and get it.
-    replacements: dict[int, str] = Field(default_factory=dict)
-    # Run even when nothing moved - for repeating a sync whose analysis failed.
-    force: bool = False
+    # The side being updated.
+    source_id: int
+    # The complete current file set, staged beforehand. Required for an
+    # uploaded side - nothing can go and fetch it. Left out for a side taken
+    # from GitHub, which is fetched instead.
+    upload_id: str | None = None
     note: str | None = Field(default=None, max_length=200)
 
 
 class SyncSourceResult(BaseModel):
-    """What one source contributed to a sync."""
+    """What one side contributed to an update."""
 
     source_id: int
+    role: str
     name: str
     kind: str
     origin: str
-    # Whether this source was refreshed, or carried over from the last version.
+    # Whether this side was refreshed, or carried over from the last version.
     refreshed: bool
     ref: str | None
 
 
-class SyncConfigResult(BaseModel):
-    """What one configuration found after the artifacts moved."""
-
-    config_id: int
-    config_key: str
-    analysis_id: int | None = None
-    trace_links: int = 0
-    # Against the same configuration's previous run, so the comparison is
-    # between two states of the artifacts rather than two ways of reading them.
-    added: int = 0
-    removed: int = 0
-    modified: int = 0
-    compared_with: int | None = None
-    error: str | None = None
-
-
 class SyncResponse(BaseModel):
-    """What a finished sync did. Read back from the job that ran it."""
+    """What a finished update did. Read back from the job that ran it."""
 
     synced: bool
     detail: str
     version_id: int | None = None
     version_number: int | None = None
+    # The run the update made, and how its links differ from the run before.
+    analysis_id: int | None = None
+    trace_links: int = 0
+    # Links the run found that the run before did not, and links it no
+    # longer found or that broke.
+    added: int = 0
+    removed: int = 0
+    compared_with: int | None = None
     sources: list[SyncSourceResult] = []
-    configs: list[SyncConfigResult] = []
+    # What changed on the updated side. Present even when nothing meaningful
+    # did, which is when no version is made.
+    changes: SideChangesResponse | None = None
 
 
 class SyncStartResponse(BaseModel):
-    """The answer to asking for a sync, which is not the sync itself."""
+    """The answer to asking for an update, which is not the update itself."""
 
     # False when there was nothing to do, and so no job was filed.
     started: bool
@@ -564,7 +537,7 @@ class JobResponse(BaseModel):
     started_at: UtcDatetime | None = None
     finished_at: UtcDatetime | None = None
     # Present once it succeeded: exactly what the request would have returned
-    # had it waited. Left untyped because its shape follows `kind` - a sync
+    # had it waited. Left untyped because its shape follows `kind` - an update
     # report for one, a whole analysis for the other.
     result: dict | None = None
     error: str | None = None
@@ -583,44 +556,52 @@ class AnalysisStartResponse(BaseModel):
     upload_id: str
 
 
-class SourceRemovalResponse(BaseModel):
-    """What disconnecting a source actually did to it."""
-
-    # False when the row was kept: versions recorded this source, and that
-    # record is the only thing saying the artifacts moved between them.
-    removed: bool
-    detail: str
-
-
-# ----- Configurations, versions, and the graph they produce -----
+# ----- Analyses, their versions, and what changed between them -----
 
 class ProjectConfigResponse(BaseModel):
-    """One way this project has been read."""
+    """One analysis: its two kinds, its settings, and where it stands."""
     model_config = ConfigDict(from_attributes=True)
 
     config_id: int
-    config_key: str
-    is_default: bool
-    # The two kinds this configuration links. None for one saved without files.
+    project_id: int
+    project_name: str
+    # The two kinds this analysis links. None for one saved without files.
     source_kind: str | None = None
     target_kind: str | None = None
     config: AnalysisConfig
+    # How many runs it has, across all its versions.
     analysis_count: int
+    # Its newest version, and the newest run in it - what opening it shows.
+    version_number: int | None = None
+    latest_analysis_id: int | None = None
+    latest_run_at: UtcDatetime | None = None
+    link_count: int = 0
+    sides: list[SourceResponse] = []
     created_at: UtcDatetime
 
 
 class VersionSourceRef(BaseModel):
-    """What one source was when a version was recorded."""
+    """What one side was when a version was recorded."""
 
     source_id: int
+    role: str
     name: str
     kind: str
     origin: str
     ref: str
 
 
+class VersionRun(BaseModel):
+    """One run of a version."""
+
+    analysis_id: int
+    note: str | None = None
+    created_at: UtcDatetime
+    link_count: int
+
+
 class ProjectVersionResponse(BaseModel):
-    """One state of a project's artifacts."""
+    """One state of an analysis's files."""
 
     version_id: int
     version_number: int
@@ -628,45 +609,140 @@ class ProjectVersionResponse(BaseModel):
     created_at: UtcDatetime
     analysis_count: int
     sources: list[VersionSourceRef] = []
+    # What changed since the version before. Empty for version 1.
+    changes: list[SideChangesResponse] = []
+    # Its runs, newest first: the first, and any re-run of the same files.
+    runs: list[VersionRun] = []
 
 
-class GraphSummary(BaseModel):
-    """A configuration's graph in counts."""
+class ReportLink(BaseModel):
+    """One link in a change report: its state, and whether either end changed."""
 
-    nodes_present: int = 0
-    # Elements that were there and are not any more. Their links are what a
-    # user is told about.
-    nodes_gone: int = 0
-    links_active: int = 0
-    # Still recovered before, not recovered now, but both ends still exist.
-    links_stale: int = 0
-    # One end is gone. The only count that always means something is wrong.
-    links_broken: int = 0
-
-
-class GraphEdgeResponse(BaseModel):
-    """One link, with both ends named."""
-
-    edge_id: int
-    from_kind: str
-    from_identifier: str
-    from_present: bool
-    to_kind: str
-    to_identifier: str
-    to_present: bool
+    # "valid", "new", "no_longer_found" or "broken".
+    state: str
+    # Named as the later version names them, where the element still exists.
+    source_id: str
+    target_id: str
+    source_present: bool
+    target_present: bool
+    # Whether the element at each end is new, edited or gone. Neither, for a
+    # link that moved, means the files are not why: the classifier, or a
+    # top-k that shifted, is.
+    source_changed: bool
+    target_changed: bool
     confidence: float
     confidence_level: str
     explanation: str | None = None
-    status: str
+    source_content: str | None = None
+    target_content: str | None = None
+    # What each end is called where a person reads it, as the run named it.
+    source_name: str | None = None
+    target_name: str | None = None
 
 
-class GraphResponse(BaseModel):
+class ReportSummary(BaseModel):
+    valid: int = 0
+    no_longer_found: int = 0
+    broken: int = 0
+    new: int = 0
+    uncovered: int = 0
+
+
+class ReportVersion(BaseModel):
+    """One version a change report spans, with what changed in its files."""
+
+    version_number: int
+    note: str | None = None
+    created_at: UtcDatetime
+    changes: list[SideChangesResponse] = []
+
+
+class NetElement(BaseModel):
+    """One element that changed between the two versions."""
+
+    # "added", "removed", "modified", or "moved" to another file.
+    change: str
+    # Its identifier before and after; one is null when it was added or removed.
+    old: str | None = None
+    new: str | None = None
+    # A name a reader recognises: class and method, or a sentence's first words.
+    label: str
+
+
+class NetFile(BaseModel):
+    """One file that changed between the two versions, with its elements."""
+
+    path: str
+    # Its earlier path, when it was renamed.
+    old_path: str | None = None
+    # "added", "removed", "modified" or "renamed".
+    change: str
+    # How many of the report's links have their end on this side in this file,
+    # and how many of those say that end changed.
+    links: int = 0
+    changed: int = 0
+    elements: list[NetElement] = []
+
+
+class NetCounts(BaseModel):
+    files_added: int = 0
+    files_removed: int = 0
+    files_modified: int = 0
+    files_renamed: int = 0
+    elements_added: int = 0
+    elements_removed: int = 0
+    elements_modified: int = 0
+    # Every element that moved - most only changed position in their file.
+    elements_moved: int = 0
+
+
+class NetSide(BaseModel):
+    """One side's net change between the two versions."""
+
+    role: str
+    # Whether this side's elements are whole files, so its element list would
+    # only repeat its files.
+    whole_documents: bool
+    counts: NetCounts
+    files: list[NetFile] = []
+
+
+class LineDiffResponse(BaseModel):
+    """One file's text, earlier version against later, as unified diff lines."""
+
+    lines: list[str] = []
+    # True when the diff was longer than it is allowed to be, and cut short.
+    truncated: bool = False
+
+
+class ChangeReportResponse(BaseModel):
+    """What changed between two versions of one analysis."""
+
     config_id: int
-    config_key: str
-    summary: GraphSummary
-    # One page of links, most in need of a look first.
-    links: list[GraphEdgeResponse] = []
-    total: int = 0
+    # None when the later version is the first: there is nothing before it.
+    base_version: int | None = None
+    head_version: int
+    # The runs each version was read through - its newest.
+    base_analysis_id: int | None = None
+    head_analysis_id: int | None = None
+    # A version of the two that has no run. Its links cannot be compared, so
+    # the later version's links are given as they are, or none if it is the
+    # later one.
+    no_run_version: int | None = None
+    summary: ReportSummary
+    links: list[ReportLink] = []
+    # Source elements the later version links to nothing.
+    uncovered: list[str] = []
+    # What those of them that have a name of their own are called.
+    uncovered_names: dict[str, str] = {}
+    # The versions after the earlier one, up to the later one, each with what
+    # it recorded: the step by step view.
+    versions: list[ReportVersion] = []
+    # The net change from the earlier version to the later one, side by side.
+    net: list[NetSide] = []
+    # False when a stored file of either version is gone, so no net change
+    # could be worked out; the versions' own lists above still stand.
+    net_available: bool = True
 
 
 class ProjectResponse(BaseModel):
@@ -677,8 +753,10 @@ class ProjectResponse(BaseModel):
     description: str | None
     created_at: UtcDatetime
     updated_at: UtcDatetime
+    # How many analyses it holds - not runs: an analysis may have many.
     analysis_count: int
 
 
 class ProjectDetailResponse(ProjectResponse):
+    # Every run of every analysis in it, newest first.
     analyses: list[AnalysisSummaryResponse] = []

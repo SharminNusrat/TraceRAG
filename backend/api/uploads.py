@@ -15,7 +15,6 @@ from fastapi.responses import JSONResponse
 
 from api.capabilities import ARTIFACT_KINDS_BY_KEY
 from api.workspace import sanitize_project_id
-from core.db.models import ProjectSource
 from core.projects.uploads import (
     UploadBudget, UploadError, UploadTooLarge, extract_archive, safe_relative_path, save_upload,
 )
@@ -174,26 +173,14 @@ def materialise_side(
     return side_dir
 
 
-def side_manifest(
-    artifacts: list[dict],
-    role: str,
-    source: ProjectSource | None = None,
-    ref: str | None = None,
-) -> dict:
+def side_manifest(artifacts: list[dict], role: str) -> dict:
     """Describe one side of the trace for later storage."""
     # The stored unit is the side, not the artifact: materialise_side writes a
     # whole side into one directory, which is what makes it a single corpus.
     names = [artifact.get("name") or artifact.get("id") or "artifact" for artifact in artifacts]
-    entry = {
+    return {
         "role": role,
         "artifact_type": artifacts[0]["kind"],
-        "name": source.name if source else ", ".join(names)[:255],
+        "name": ", ".join(names)[:255],
         "directory": role,
     }
-    if source is not None:
-        # Names the row these files came from, so the run updates that source
-        # rather than being filed as a new upload beside it - and records the
-        # commit, which is what the next check compares against.
-        entry["source_id"] = source.source_id
-        entry["ref"] = ref
-    return entry

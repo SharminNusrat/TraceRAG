@@ -2,22 +2,23 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/common/Button';
 import { PageHeader } from '../../components/common/PageHeader';
+import { findKind, useCapabilities } from '../../features/analysis/api/capabilitiesApi';
 import {
-  listAnalyses,
+  listConfigs,
   listProjects,
   relativeTime,
-  runTimestamp,
 } from '../../features/projects/api/projectsApi';
 
 const RECENT_SHOWN = 5;
 
 export function DashboardPage() {
+  const { capabilities } = useCapabilities();
   const [projects, setProjects] = useState(null);
   const [analyses, setAnalyses] = useState(null);
 
   useEffect(() => {
     let active = true;
-    Promise.all([listProjects(), listAnalyses()])
+    Promise.all([listProjects(), listConfigs()])
       .then(([projectRows, analysisRows]) => {
         if (!active) return;
         setProjects(projectRows);
@@ -32,8 +33,11 @@ export function DashboardPage() {
   }, []);
 
   const loading = projects === null || analyses === null;
+  // Each analysis's links as they stand in its newest run, so re-running one
+  // does not count its links twice.
   const totalLinks = (analyses ?? []).reduce((sum, a) => sum + a.link_count, 0);
   const recent = (analyses ?? []).slice(0, RECENT_SHOWN);
+  const kindLabel = (key) => findKind(capabilities, key)?.label ?? key ?? 'Unknown';
 
   return (
     <>
@@ -67,17 +71,17 @@ export function DashboardPage() {
         {recent.map((analysis, index) => (
           <Link
             className="analysis-row"
-            to="/app/history"
-            key={analysis.analysis_id}
+            to={`/app/analyses/${analysis.config_id}?project=${analysis.project_id}`}
+            key={analysis.config_id}
           >
             <span>{index + 1}</span>
             <div>
-              {/* The project is what identifies the row; when the run happened
-                  is the detail underneath it. */}
+              {/* The project is what identifies the row; which two kinds the
+                  analysis traces is the detail underneath it. */}
               <b>{analysis.project_name} · {analysis.link_count} trace links</b>
-              <small>{runTimestamp(analysis)}</small>
+              <small>{kindLabel(analysis.source_kind)} → {kindLabel(analysis.target_kind)}</small>
             </div>
-            <time>{relativeTime(analysis.created_at)}</time>
+            <time>{relativeTime(analysis.latest_run_at ?? analysis.created_at)}</time>
           </Link>
         ))}
       </section>

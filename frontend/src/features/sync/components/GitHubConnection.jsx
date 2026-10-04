@@ -51,7 +51,7 @@ export function GitHubConnection() {
   };
 
   const disconnect = async () => {
-    if (!window.confirm('Disconnect GitHub? Connected repositories will stop syncing.')) return;
+    if (!window.confirm('Disconnect GitHub? Connected repositories can no longer be fetched.')) return;
     setError(null);
     setPending(true);
     try {
