@@ -119,12 +119,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4944,
+                  "duration": 6304,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-04T18:47:59.017Z",
+                  "startTime": "2026-10-08T13:13:02.364Z",
                   "annotations": [
                     {
                       "type": "case",
@@ -227,12 +227,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3673,
+                  "duration": 4895,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-04T18:48:04.077Z",
+                  "startTime": "2026-10-08T13:13:08.878Z",
                   "annotations": [
                     {
                       "type": "case",
@@ -339,12 +339,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2074,
+                  "duration": 3361,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-04T18:48:07.762Z",
+                  "startTime": "2026-10-08T13:13:13.792Z",
                   "annotations": [
                     {
                       "type": "case",
@@ -431,12 +431,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3266,
+                  "duration": 4430,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-04T18:48:09.849Z",
+                  "startTime": "2026-10-08T13:13:17.172Z",
                   "annotations": [
                     {
                       "type": "case",
@@ -516,11 +516,11 @@
                 },
                 {
                   "type": "actual",
-                  "description": "after saving: \"Saved to Demo 93404\""
+                  "description": "after saving: \"Saved to Demo 2094\""
                 },
                 {
                   "type": "actual",
-                  "description": "project lists: \"Demo 93404v1\" - Requirements → Code · 3 trace links · reasoning classifier · 1 run"
+                  "description": "project lists: \"Demo 2094v1\" - Requirements → Code · 3 trace links · reasoning classifier · 1 run"
                 },
                 {
                   "type": "screenshot",
@@ -535,12 +535,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3369,
+                  "duration": 5388,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-04T18:48:13.144Z",
+                  "startTime": "2026-10-08T13:13:21.631Z",
                   "annotations": [
                     {
                       "type": "case",
@@ -572,11 +572,11 @@
                     },
                     {
                       "type": "actual",
-                      "description": "after saving: \"Saved to Demo 93404\""
+                      "description": "after saving: \"Saved to Demo 2094\""
                     },
                     {
                       "type": "actual",
-                      "description": "project lists: \"Demo 93404v1\" - Requirements → Code · 3 trace links · reasoning classifier · 1 run"
+                      "description": "project lists: \"Demo 2094v1\" - Requirements → Code · 3 trace links · reasoning classifier · 1 run"
                     },
                     {
                       "type": "screenshot",
@@ -639,12 +639,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3464,
+                  "duration": 4940,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-04T18:48:16.535Z",
+                  "startTime": "2026-10-08T13:13:27.058Z",
                   "annotations": [
                     {
                       "type": "case",
@@ -723,12 +723,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4074,
+                  "duration": 7491,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-04T18:48:20.011Z",
+                  "startTime": "2026-10-08T13:13:32.015Z",
                   "annotations": [
                     {
                       "type": "case",
@@ -807,12 +807,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3390,
+                  "duration": 4370,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-04T18:48:24.096Z",
+                  "startTime": "2026-10-08T13:13:39.521Z",
                   "annotations": [
                     {
                       "type": "case",
@@ -887,12 +887,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1871,
+                  "duration": 2240,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-04T18:48:27.508Z",
+                  "startTime": "2026-10-08T13:13:43.929Z",
                   "annotations": [
                     {
                       "type": "case",
@@ -940,7 +940,7 @@
                 },
                 {
                   "type": "actual",
-                  "description": "CSV traceability-matrix-2026-10-05-00-48.csv: 479 bytes; header Document,Description,Component,Similarity,Status,Document ID,Component ID"
+                  "description": "CSV traceability-matrix-2026-10-08-19-13.csv: 479 bytes; header Document,Description,Component,Similarity,Status,Document ID,Component ID"
                 },
                 {
                   "type": "actual",
@@ -948,7 +948,7 @@
                 },
                 {
                   "type": "actual",
-                  "description": "PDF traceability-matrix-2026-10-05-00-48.pdf: 8699 bytes; names in it: Authentication,Lending"
+                  "description": "PDF traceability-matrix-2026-10-08-19-13.pdf: 8698 bytes; names in it: Authentication,Lending"
                 }
               ],
               "expectedStatus": "passed",
@@ -959,12 +959,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2075,
+                  "duration": 2931,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-04T18:48:29.390Z",
+                  "startTime": "2026-10-08T13:13:46.189Z",
                   "annotations": [
                     {
                       "type": "case",
@@ -976,7 +976,7 @@
                     },
                     {
                       "type": "actual",
-                      "description": "CSV traceability-matrix-2026-10-05-00-48.csv: 479 bytes; header Document,Description,Component,Similarity,Status,Document ID,Component ID"
+                      "description": "CSV traceability-matrix-2026-10-08-19-13.csv: 479 bytes; header Document,Description,Component,Similarity,Status,Document ID,Component ID"
                     },
                     {
                       "type": "actual",
@@ -984,7 +984,7 @@
                     },
                     {
                       "type": "actual",
-                      "description": "PDF traceability-matrix-2026-10-05-00-48.pdf: 8699 bytes; names in it: Authentication,Lending"
+                      "description": "PDF traceability-matrix-2026-10-08-19-13.pdf: 8698 bytes; names in it: Authentication,Lending"
                     }
                   ],
                   "attachments": []
@@ -1003,8 +1003,8 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-10-04T18:47:48.469Z",
-    "duration": 44207.732,
+    "startTime": "2026-10-08T13:12:43.166Z",
+    "duration": 67994.458,
     "expected": 10,
     "skipped": 0,
     "unexpected": 0,

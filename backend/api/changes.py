@@ -1,9 +1,4 @@
-"""What changed between two file sets of one side, read from disk or from the blob store.
-
-The comparison itself is pure (core.projects.diff). This lays the files out
-for it: the old ones are always restored from their blobs, the new ones come
-from a staged upload or from the blobs of a later version.
-"""
+"""What changed between two file sets of one side, read from disk or from the blob store."""
 
 import json
 import shutil
@@ -44,14 +39,7 @@ def compare_file_sets(
     renames: dict[str, str] | None = None,
     strict: bool = False,
 ) -> SideChanges:
-    """Compare two file sets of one side, each given as relative path -> content hash.
-
-    Files are compared by path and hash. Only the files that differ are then
-    split into elements, so a large side with one edited file costs one file's
-    worth of work, and no model is asked anything. `place_new(paths, directory)`
-    writes the new files that are needed. With `strict`, an old file whose
-    bytes are gone raises FilesMissing rather than being left out.
-    """
+    """Compare two file sets of one side, each given as relative path -> content hash."""
     # Only the files this kind is read from: a repository's .gitignore or
     # README is no change to its code.
     readable = tuple(ARTIFACT_KINDS_BY_KEY[kind].extensions)
@@ -80,11 +68,8 @@ def compare_file_sets(
 
 
 def same_text_moved(files, old: dict[str, str], place_new) -> dict[str, str]:
-    """Removed files that reappear at a new path differing only in whitespace.
-
-    A file checked out with CRLF line endings has other bytes than the same
-    file uploaded with LF, so its hash cannot pair it with its old path.
-    """
+    """Removed files that reappear at a new path differing only in whitespace."""
+    
     with tempfile.TemporaryDirectory(prefix="tracerag-moved-") as scratch:
         before, after = Path(scratch) / "old", Path(scratch) / "new"
         artifact_store.materialise([(path, old[path]) for path in files.removed], before)
@@ -102,14 +87,7 @@ def same_text_moved(files, old: dict[str, str], place_new) -> dict[str, str]:
 def net_changes(
     config: ProjectConfig, base: ProjectVersion, head: ProjectVersion, between: list[ProjectVersion],
 ) -> list[SideChanges]:
-    """The net change of each side from one version to a later one.
-
-    Worked out again from the two versions' stored files rather than added up
-    from what each version in between recorded: one comparison, and nothing
-    in between to get wrong. The renames those versions recorded are still
-    passed on, so a file renamed and then edited is recognised as renamed.
-    `between` is every version after `base` up to `head`.
-    """
+    """The net change of each side from one version to a later one."""
     sides = []
     for role in (ROLE_SOURCE, ROLE_TARGET):
         old = next((a for a in base.artifacts if a.role == role), None)

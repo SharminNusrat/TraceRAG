@@ -52,12 +52,7 @@ def list_sides(
 def write_staged_files(
     kind_key: str, files: list[UploadFile], paths: list, destination: Path
 ) -> None:
-    """Write uploaded files into a directory, as this kind of artifact.
-
-    Each file keeps the relative path the browser reported, so identifiers stay
-    the ones the analysis already holds - a requirement re-uploaded at the same
-    path is recognised as that requirement rather than as a new one.
-    """
+    """Write uploaded files into a directory, as this kind of artifact."""
     kind = ARTIFACT_KINDS_BY_KEY[kind_key]
     budget = UploadBudget()
 
@@ -98,14 +93,7 @@ async def stage_side_files(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Put a side's complete current file set aside for the update that uses it.
-
-    Nothing can go and fetch requirements: they sit on someone's machine, and
-    the only way they change here is if that someone hands them over. So the
-    files are staged first and named in the update afterwards, which keeps the
-    update itself a plain JSON call and lets the upload be redone without
-    re-running anything.
-    """
+    """Put a side's complete current file set aside for the update that uses it."""
     config = require_config(db, user, project_id, config_id)
     side = require_side(db, config, source_id)
     if not files:
@@ -118,8 +106,6 @@ async def stage_side_files(
     try:
         write_staged_files(side.kind, files, parse_json_field(file_paths, "file_paths", []), staged)
     except Exception:
-        # Half a set of requirements is worse than none: an update would read
-        # the gap as files deleted and break every link that used them.
         artifact_store.discard_upload(upload_id)
         raise
 
@@ -127,7 +113,6 @@ async def stage_side_files(
     held = service.latest_artifact(db, side)
     stored = {file.relative_path for file in held.files} if held else set()
     matched = len(uploaded & stored)
-    # Said now, before anything is run: what these files would change.
     changes = side_changes(config, held, staged) if held else None
 
     logger.info(
@@ -178,14 +163,9 @@ def connect_github_side(
     try:
         repository = GitHubRepository(
             parse_repository(request.repository),
-            # Checked with whatever will actually read it later, so a
-            # repository that connects is one that can still be updated from.
             token=request.token or user_github_token(user),
         )
         branch = request.branch or repository.default_branch()
-        # Read the branch before storing anything, so a repository that cannot
-        # be reached - or a token that cannot reach it - is refused now rather
-        # than at the first update.
         repository.head_commit(branch)
     except GitHubError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))

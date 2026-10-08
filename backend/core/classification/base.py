@@ -12,12 +12,7 @@ Verdict = tuple[bool, str | None]
 
 
 def untagged_verdict(reply: str) -> bool:
-    """Whether a reply that left out the <trace> tag still says yes.
-
-    Read as whole words: searching for the letters instead finds a yes inside
-    "eyes" and "yesterday", which turns a plain no into a link. A reply that
-    says both is not an answer, and is read as no link.
-    """
+    """Whether a reply that left out the <trace> tag still says yes."""
     words = set(re.findall(r"[a-z]+", reply.lower()))
     return "yes" in words and "no" not in words
 
@@ -30,16 +25,9 @@ class ClassificationResult(BaseModel):
 
 
 class Classifier(ABC):
-    """Decides which retrieved candidates a source element actually traces to.
-
-    Asking the model is the subclass's job. Deciding what is still worth
-    asking is this class's, because both classifiers ask the same question of
-    the same pairs and pay the same price for the answer.
-    """
+    """Decides which retrieved candidates a source element actually traces to."""
 
     def __init__(self, cache_namespace: str | None = None):
-        # Given a namespace only when answers should outlive the run. Without
-        # one the classifier behaves exactly as it did before: every pair asked.
         self._cache = (
             PersistentClassificationCache(cache_namespace) if cache_namespace else None
         )
@@ -85,8 +73,6 @@ class Classifier(ABC):
                 fresh[text] = self._ask(source, target)
             verdicts[target.identifier] = fresh[text]
 
-        # The model call is the expensive step, so say how many were actually
-        # made rather than leaving a cached run and a paid one looking alike.
         logger.info(
             f"  classifier: {len(distinct) - len(fresh)}/{len(distinct)} cached, "
             f"{len(fresh)} model call(s)"

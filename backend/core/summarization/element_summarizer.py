@@ -9,11 +9,9 @@ from core.schemas import Element
 
 logger = logging.getLogger(__name__)
 
-# Several elements per request: one call each would be hundreds of round trips
-# for a codebase, and the prompt overhead would be paid every time.
+
 DEFAULT_BATCH_SIZE = 8
-# Enough of an element to describe it. A long method is recognisable from its
-# opening; sending all of it would cost more than the summary saves.
+
 MAX_CONTENT_CHARS = 1200
 MAX_SUMMARY_CHARS = 200
 
@@ -43,17 +41,12 @@ class ElementSummarizer:
 
     def summarize(self, elements: list[Element]) -> None:
         """Attach a summary to each element that will be compared, in place."""
-        # Only the elements that are actually matched against: summarising a
-        # whole file that exists to be a parent costs tokens nothing reads.
         pending = [e for e in elements if e.compare and e.content.strip()]
         if not pending:
             return
 
         known = self.cache.get_many([e.content for e in pending]) if self.cache else {}
 
-        # One request per distinct text. A helper repeated across files reads
-        # the same either way, and describing it twice is exactly the cost a
-        # one-line summary exists to avoid.
         unsummarised: dict[str, Element] = {}
         for element in pending:
             if element.content not in known:
@@ -85,8 +78,6 @@ class ElementSummarizer:
         try:
             reply = self.provider.chat(prompt, system_message=SYSTEM_MESSAGE)
         except Exception as error:
-            # A summary is an enrichment. Without it an element still embeds on
-            # its own text, so a failed batch must not fail the analysis.
             logger.warning(f"Could not summarise {len(batch)} elements: {error}")
             return {}
 

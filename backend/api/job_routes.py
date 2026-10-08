@@ -24,11 +24,7 @@ def get_job(
     user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """Where a job has got to, and its result once it is done.
-
-    Readable by its owner, or by whoever holds the token it was started with -
-    which is how a run made without an account is followed to the end.
-    """
+    """Where a job has got to, and its result once it is done."""
     job = jobs.get_job(db, job_id, user.user_id if user else None, token)
     if job is None:
         # Someone else's job is not theirs to find, so it reads as missing.

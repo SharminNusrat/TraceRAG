@@ -50,12 +50,7 @@ def user_github_token(user: User) -> str | None:
 @router.get("/github/connection", response_model=GitHubConnectionResponse)
 def github_connection(user: User = Depends(get_current_user)):
     """Whether this user's GitHub connection actually works.
-
-    Asked of GitHub rather than answered from the database. A stored token says
-    a connection was made once, not that it still stands - GitHub can end one
-    without telling anybody, and reporting "connected" from the presence of a
-    dead token is how someone ends up staring at a working-looking connection
-    that fails every request.
+    Asked of GitHub rather than answered from the database.
     """
     rejected = False
     if user.github_token:
@@ -79,9 +74,6 @@ def github_connection(user: User = Depends(get_current_user)):
 @router.get("/github/oauth/start", response_model=OAuthStartResponse)
 def github_oauth_start(
     request: Request,
-    # Where the browser should land afterwards. Sent by whichever screen asked,
-    # so reconnecting from a project returns to that project rather than
-    # stranding the user on a settings page they never meant to visit.
     return_to: str | None = Query(default=None),
     user: User = Depends(get_current_user),
 ):
@@ -112,12 +104,7 @@ def github_oauth_callback(
     error_description: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    """Where GitHub sends the browser once the user has answered.
-
-    Reached by a redirect, not by the app, so it cannot return JSON to anyone -
-    it stores the result and sends the browser back where it came from, saying
-    what happened in the address.
-    """
+    """Where GitHub sends the browser once the user has answered."""
     # Where to land. Only known once the state has been read, so a failure
     # before that falls back to the default rather than guessing.
     destination = DEFAULT_RETURN
@@ -135,8 +122,6 @@ def github_oauth_callback(
         return home(github="error", message="GitHub did not complete the sign-in.")
 
     try:
-        # The state says whose account this belongs to, that we started it, and
-        # where the person was when they did.
         user_id, destination = user_from_state(state)
         token, login = exchange_code(code, oauth_redirect_uri(request))
     except GitHubError as error:
@@ -196,8 +181,6 @@ def github_branches(
     try:
         return GitHubRepository(
             parse_repository(request.repository),
-            # A token typed in for this one repository wins; otherwise whatever
-            # this user connected their account with.
             token=request.token or user_github_token(user),
         ).branches()
     except GitHubError as error:

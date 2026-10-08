@@ -1,7 +1,4 @@
-"""Updating one side of an analysis: assembling its files, re-running it, keeping the result.
-
-The background half of an update, and the checks the update routes share with it.
-"""
+"""Updating one side of an analysis: assembling its files, re-running it, keeping the result."""
 
 import json
 import logging
@@ -32,11 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 def require_files(db: Session, config: ProjectConfig) -> ProjectVersion:
-    """The analysis's newest version, which is what an update starts from.
-
-    It holds the files the side nobody touched is restored from, so an
-    analysis saved without its files cannot be updated.
-    """
+    """The analysis's newest version, which is what an update starts from."""
     latest = service.latest_version(db, config)
     if latest is None or not latest.artifacts:
         raise HTTPException(
@@ -119,18 +112,12 @@ def prepare_workspace(
 ) -> tuple[str, Path, list[dict], list[SyncSourceResult], dict[str, str]]:
     """Assemble the files this update will analyse.
 
-    Both sides are filled, not only the one being updated: the pipeline
-    compares two complete corpora, so the other side is restored from the
-    blobs already stored rather than fetched again.
-
     Built as an ordinary pending upload, so saving it afterwards goes through
     exactly the path a hand-made upload does.
     """
     upload_id_out, workspace = artifact_store.create_upload_dir()
     manifest: list[dict] = []
     reported: list[SyncSourceResult] = []
-    # Files that moved, so the graph can follow their elements instead of
-    # declaring them lost.
     renames: dict[str, str] = {}
     sides = {s.role: s for s in latest.config.sources}
 
@@ -218,11 +205,6 @@ def run_pipeline(
         # The analysis's own collections, holding the previous version's
         # elements. Replacing them is what makes the new state current.
         reset_vector_stores=False,
-        # An update is where the corpus changes, so it is the only place a
-        # link can be pushed out of the top-k by code that has nothing to do
-        # with it. Offering last run's links back means one can only end on a
-        # verdict. Rebased onto this run's workspace first: they are stored as
-        # relative paths, and the pipeline names its elements absolutely.
         pinned_links=pinned,
         workspace_roots=list(directories.values()),
     )
@@ -237,17 +219,12 @@ def perform_sync(
     head: str | None,
     job_id: int | None = None,
 ) -> SyncResponse:
-    """Do the work for one side: fetch or take the files, re-run, keep the result.
-
-    Minutes long, so it is called from a background job rather than from the
-    request. `job_id` is only for saying where it has got to.
-    """
+    """Do the work for one side: fetch or take the files, re-run, keep the result."""
     def stage(text: str) -> None:
         if job_id is not None:
             jobs.set_stage(db, job_id, text)
 
     latest = require_files(db, config)
-    # The run the new one is compared with, to say what changed in the links.
     previous = service.latest_analysis(db, config)
     side = service.get_side(db, config, request.source_id)
 
@@ -259,21 +236,14 @@ def perform_sync(
     try:
         stage("Comparing files")
         changes = side_changes(config, held_files(latest, side), workspace / side.role, renames)
-        # The commit just fetched, if this side was fetched. Recorded as seen
-        # once the update has an outcome, whatever it is - but not before: a
-        # run that fails must leave the commit still waiting to be taken in.
         fetched = next((s.ref for s in sources if s.refreshed and s.origin == ORIGIN_GITHUB), None)
         detail = no_change_detail(changes)
         if detail:
-            # Nothing the analysis reads is different, so there is nothing to
-            # run and no new state of the files to record.
             if fetched:
                 side.checked_ref = fetched
                 db.commit()
             return SyncResponse(synced=False, detail=detail, changes=changes_response(changes))
 
-        # Last run's pins, under the names the new files give their elements:
-        # a sentence that slid down when another was inserted keeps its pins.
         maps = {side.role: changes.elements.id_map}
         source_map, target_map = maps.get(ROLE_SOURCE, IdMap()), maps.get(ROLE_TARGET, IdMap())
         pinned = translate_pins(service.pinned_links(db, config.config_id), source_map, target_map)
@@ -281,9 +251,6 @@ def perform_sync(
         stage("Analysing")
         result, duration = run_pipeline(config, manifest, workspace, pinned)
 
-        # Only now, once the run has succeeded: a version is a state of the
-        # files something was actually run against. A failed update leaves
-        # the analysis exactly as it was.
         version = service.next_version(db, config)
         version.note = (request.note or "").strip() or None
         version.changes_json = json.dumps({side.role: changes.to_dict()})
@@ -327,11 +294,7 @@ def perform_sync(
 def run_sync_job(
     job_id: int, config_id: int, user_id: int, request: SyncRequest, head: str | None,
 ) -> None:
-    """The background half of an update. Owns its own session.
-
-    The request's session is closed by the time this runs - the response has
-    already gone out - so nothing from it can be carried in here.
-    """
+    """The background half of an update. Owns its own session."""
     with SessionLocal() as db:
         jobs.start(db, job_id)
         try:
@@ -342,8 +305,6 @@ def run_sync_job(
             jobs.succeed(db, job_id, response.model_dump(mode="json"))
             logger.info(f"Update job {job_id} finished: {response.detail}")
         except Exception as error:
-            # Whatever the run left half-written is not kept: a version only
-            # exists once its run has been saved.
             db.rollback()
             logger.error(f"Update job {job_id} failed: {error}", exc_info=True)
             detail = error.detail if isinstance(error, HTTPException) else str(error)

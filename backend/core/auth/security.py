@@ -1,8 +1,4 @@
-"""Password hashing and access tokens.
-
-bcrypt directly, not passlib: passlib is unmaintained and its bcrypt backend
-breaks against bcrypt 4.1+.
-"""
+"""Password hashing and access tokens."""
 
 import logging
 import secrets
@@ -17,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 ALGORITHM = "HS256"
 # bcrypt hashes at most 72 bytes and raises on anything longer, so passwords
-# are trimmed to that boundary. Hashing and verification trim identically, so
-# the trim never changes whether a password matches.
+# are trimmed to that boundary. 
 MAX_PASSWORD_BYTES = 72
 
 # PyJWT warns on every encode and decode below this, so it is checked once here.
@@ -56,7 +51,6 @@ def verify_password(password: str, password_hash: str) -> bool:
     try:
         return bcrypt.checkpw(_password_bytes(password), password_hash.encode("utf-8"))
     except ValueError:
-        # Malformed hash in the database - treat as a failed login, not a 500.
         return False
 
 

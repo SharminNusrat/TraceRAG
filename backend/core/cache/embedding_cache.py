@@ -1,8 +1,4 @@
-"""Persistent embedding cache, backed by the application database.
-
-Batch-only: a project means thousands of lookups, and one at a time would be
-thousands of round trips where two will do.
-"""
+"""Persistent embedding cache, backed by the application database."""
 
 import logging
 from hashlib import sha256

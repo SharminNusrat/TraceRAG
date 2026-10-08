@@ -20,12 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 def progress_writer(db: Session, job_id: int):
-    """A progress callback that does not write to the database on every element.
+    """A progress callback that does not write to the database on every element."""
 
-    One row update per element would be a hundred commits for a run nobody is
-    reading that fast. A second apart is more than enough to watch, and the
-    final step of each stage always lands so the bar does not stop short.
-    """
     last_written = 0.0
 
     def report(stage: str, current: int = 0, total: int = 0) -> None:
@@ -41,6 +37,7 @@ def progress_writer(db: Session, job_id: int):
 
 def perform_analysis(db: Session, upload_id: str, plan: dict, job_id: int) -> AnalyzeResponse:
     """Run the pipeline over the uploaded files."""
+
     workspace = artifact_store.upload_dir(upload_id)
     if workspace is None or not workspace.is_dir():
         raise SyncError("The uploaded files are no longer available.")
@@ -76,11 +73,8 @@ def perform_analysis(db: Session, upload_id: str, plan: dict, job_id: int) -> An
 
 
 def run_analysis_job(job_id: int, upload_id: str, plan: dict) -> None:
-    """The background half of a run. Owns its own session.
+    """The background half of a run. Owns its own session"""
 
-    The request's session is closed by the time this runs - the response has
-    already gone out - so nothing from it can be carried in here.
-    """
     with SessionLocal() as db:
         jobs.start(db, job_id)
         try:
@@ -90,8 +84,6 @@ def run_analysis_job(job_id: int, upload_id: str, plan: dict) -> None:
                 f"Analysis job {job_id} finished: {len(response.trace_links)} trace links"
             )
         except Exception as error:
-            # The files go with it: nothing produced a result, so there is
-            # nothing to save and nothing worth keeping on disk.
             artifact_store.discard_upload(upload_id)
             logger.error(f"Analysis job {job_id} failed: {error}", exc_info=True)
             detail = error.detail if isinstance(error, HTTPException) else str(error)

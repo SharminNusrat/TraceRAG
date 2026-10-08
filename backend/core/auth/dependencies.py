@@ -9,8 +9,6 @@ from core.auth.service import get_user_by_id
 from core.db.session import get_db
 from core.db.models import User
 
-# auto_error=False: a missing Authorization header has to reach the optional
-# dependency as None rather than being turned into a 403 by HTTPBearer.
 bearer_scheme = HTTPBearer(auto_error=False)
 
 

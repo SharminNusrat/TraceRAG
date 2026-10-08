@@ -7,14 +7,6 @@ logger = logging.getLogger(__name__)
 
 # llama-3.1-8b-instant and llama-3.3-70b-versatile were both decommissioned on
 # 16 August 2026; this is Groq's like-for-like replacement for the 70b.
-#
-# It suits this pipeline for a reason beyond size: nothing here reads prose. The
-# classifiers read a <trace> tag and the summariser reads numbered lines, and
-# gpt-oss keeps its reasoning in a separate field rather than in the reply, so
-# what arrives is the answer and nothing else. The other model on offer,
-# qwen3.6-27b, writes its thinking into the reply, where the summariser picks up
-# the model's own numbered notes as if they were summaries.
-#
 # openai/gpt-oss-20b is the same shape and faster, if throughput matters more.
 DEFAULT_MODEL = "openai/gpt-oss-120b"
 DEFAULT_TEMPERATURE = 0.0

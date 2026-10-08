@@ -1,24 +1,30 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, GitBranch, Search, ShieldCheck } from 'lucide-react';
+import { ArrowRight, GitCompareArrows, Network, ShieldCheck, Table2 } from 'lucide-react';
 import { Brand } from '../components/common/Brand';
 import { Button } from '../components/common/Button';
 import { useAuth } from '../features/auth/AuthContext';
 
+// What the tool does today, in the order a first visit would ask about it.
 const features = [
   {
-    icon: Search,
-    title: 'Trace discovery',
-    desc: 'Automatically recover links between requirements and source code using RAG-powered analysis.',
-  },
-  {
-    icon: GitBranch,
-    title: 'Gap detection',
-    desc: 'Identify unimplemented requirements and code without traceability coverage.',
+    icon: Network,
+    title: 'Links across artifacts',
+    desc: 'Trace requirements, architecture models and source code to each other with retrieval and an LLM classifier.',
   },
   {
     icon: ShieldCheck,
-    title: 'Evidence-backed',
-    desc: 'Every link comes with an explanation so you can review and trust the results.',
+    title: 'Evidence for every link',
+    desc: 'Each link carries a confidence score and the reasoning behind it, so it can be reviewed, not just trusted.',
+  },
+  {
+    icon: GitCompareArrows,
+    title: 'Change-aware versions',
+    desc: 'Update a side by upload or from GitHub and see which links stay valid, are new, stop being found, or break.',
+  },
+  {
+    icon: Table2,
+    title: 'Matrix, gaps and export',
+    desc: 'Read coverage in a traceability matrix, spot elements with no link, and export to CSV, Excel or PDF.',
   },
 ];
 
@@ -51,9 +57,9 @@ export function LandingPage() {
         <div className="hero-badge">Traceability made visible</div>
         <h1>Trace<span>RAG</span></h1>
         <p>
-          Recover meaningful links between your requirements and source code. Review the
-          evidence behind each match, identify implementation gaps, and make traceability
-          work easier to trust.
+          Recover trace links between requirements, architecture models and source code.
+          Review the evidence behind every link, and see exactly what changed when your
+          artifacts do.
         </p>
         <button className="button button-primary start-button pill" onClick={() => navigate('/analysis')}>
           Start analysis <ArrowRight size={17} strokeWidth={2.4} />

@@ -1,12 +1,4 @@
-"""Persistent classification cache, backed by the application database.
-
-The only step that costs a model call per pair, and the only one that was not
-cached: embeddings and summaries were already free to repeat, so re-running an
-unchanged project paid for the classifier and nothing else.
-
-Batch-only, like the embedding cache: one query per source element rather than
-one per candidate.
-"""
+"""Persistent classification cache, backed by the application database."""
 
 import logging
 from hashlib import sha256
@@ -24,27 +16,13 @@ Verdict = tuple[bool, str | None]
 
 
 def namespace_for(model: str, classifier: str, *templates: str) -> str:
-    """A namespace that changes whenever the question would change.
-
-    The prompts are hashed rather than versioned by hand, so editing one
-    invalidates its answers instead of relying on someone remembering to bump
-    a number.
-    """
+    """A namespace that changes whenever the question would change."""
     prompt_hash = sha256("\x00".join(templates).encode("utf-8")).hexdigest()[:8]
     return f"{classifier}:{model}:{prompt_hash}"
 
 
 def question(source_type: str, source_content: str, target_type: str, target_content: str) -> str:
-    """The pair reduced to what decides the model's answer.
-
-    Everything the prompt interpolates and nothing else. Identifiers are
-    absent because the prompt never mentions them, which is what lets a
-    renamed but otherwise untouched element keep its answer.
-
-    Each part is normalised on its own, so a reformatted file asks the same
-    question as before rather than paying for every answer again. Only the
-    question is reduced - the model is still shown the real content.
-    """
+    """The pair reduced to what decides the model's answer."""
     parts = (source_type, source_content, target_type, target_content)
     return "\x00".join(normalise(part) for part in parts)
 

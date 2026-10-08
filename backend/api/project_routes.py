@@ -1,8 +1,4 @@
-"""Projects, analyses and their saved runs.
-
-Every endpoint needs a signed-in user. Anything the caller does not own returns
-404 rather than 403, so responses cannot be used to map out which ids exist.
-"""
+"""Projects, analyses and their saved runs."""
 
 import json
 import logging
@@ -94,7 +90,7 @@ def to_source_response(
     """A side as a client may see it, which is everything but the token.
 
     `held` is the side's file set in the newest version, which is what the
-    side currently holds. Its paths are listed only when `with_files` asks.
+    side currently holds.
     """
     return SourceResponse(
         source_id=source.source_id,
@@ -485,11 +481,7 @@ def change_report(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """What changed between two versions of an analysis: files, elements and every link.
-
-    Worked out on each request from the two versions' newest runs and the
-    changes stored on the versions in between.
-    """
+    """What changed between two versions of an analysis: files, elements and every link."""
     config = require_config(db, user, project_id, config_id)
     try:
         report = service.version_report(db, config, base, head)
@@ -603,11 +595,7 @@ def delete_analysis(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Deletes one run and its links. Its analysis and versions stay.
-
-    A version's last run is kept: without it the version has no links, and
-    the change report has nothing to read it by.
-    """
+    """Deletes one run and its links. Its analysis and versions stay."""
     analysis = require_analysis(db, user, analysis_id)
     if service.run_count(db, analysis.version_id) == 1:
         raise HTTPException(
@@ -628,12 +616,7 @@ def rerun_analysis(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Run an analysis again over the same files, with the same settings.
-
-    The new run belongs to the same version: nothing about the files changed,
-    so the history must not say they did - and it reads that version's files
-    rather than storing another copy of the list.
-    """
+    """Run an analysis again over the same files, with the same settings."""
     original = require_analysis(db, user, analysis_id)
     config = original.config
 

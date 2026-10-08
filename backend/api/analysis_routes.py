@@ -1,9 +1,5 @@
-"""Starting an analysis: from paths on the server, or from uploaded files.
+"""Starting an analysis: from uploaded files."""
 
-The routes only check the request and hand it on. Building the pipeline is in
-pipeline_factory, laying the files out in uploads, and the run itself happens
-in the background, in analysis_jobs.
-"""
 
 import logging
 
@@ -12,15 +8,15 @@ from sqlalchemy.orm import Session
 
 from api.analysis_jobs import run_analysis_job
 from api.capabilities import ROLE_SOURCE, ROLE_TARGET, get_capabilities
-from api.pipeline_factory import build_pipeline_response, provider_for, request_default
+from api.pipeline_factory import request_default
 from api.schemas import (
-    AnalysisMode, AnalysisStartResponse, AnalyzeRequest, AnalyzeResponse,
+    AnalysisMode, AnalysisStartResponse,
     CapabilitiesResponse, PreprocessorType, ClassifierType,
 )
 from api.uploads import materialise_side, parse_id_list, parse_json_field, resolve_side
-from api.workspace import get_chroma_path, get_project_id
+from api.workspace import get_chroma_path
 from core import jobs
-from core.auth import get_current_user, get_current_user_optional
+from core.auth import get_current_user_optional
 from core.db.models import User
 from core.db.session import get_db
 from core.projects import artifact_store
@@ -31,59 +27,10 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def run_analysis(request: AnalyzeRequest) -> AnalyzeResponse:
-    chroma_path = "./chroma_data/session"
-    use_persistent_cache = False
-    reset_vector_stores = True
-
-    if request.analysis_mode == AnalysisMode.PROJECT:
-        project_id = get_project_id(request)
-        chroma_path = get_chroma_path(project_id)
-        use_persistent_cache = True
-        reset_vector_stores = False
-        logger.info(f"Using project mode with project_id={project_id}")
-    else:
-        logger.info("Using session mode")
-
-    return build_pipeline_response(
-        source_provider=provider_for(request.source, ROLE_SOURCE),
-        target_provider=provider_for(request.target, ROLE_TARGET),
-        source_kind=request.source.kind,
-        target_kind=request.target.kind,
-        source_preprocessor=request.source_preprocessor,
-        target_preprocessor=request.target_preprocessor,
-        classifier=request.classifier,
-        n_results=request.n_results,
-        source_output_level=request.source_output_level,
-        target_output_level=request.target_output_level,
-        dependency_expansion_depth=request.dependency_expansion_depth,
-        summarize_elements=request.summarize_elements,
-        chroma_path=chroma_path,
-        use_persistent_cache=use_persistent_cache,
-        reset_vector_stores=reset_vector_stores,
-    )
-
-
 @router.get("/capabilities", response_model=CapabilitiesResponse)
 def capabilities():
     """What the pipeline can ingest. Drives the frontend's option lists."""
     return get_capabilities()
-
-
-@router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze(request: AnalyzeRequest, user: User = Depends(get_current_user)):
-    # Signed-in callers only: this reads a folder on the server by its path,
-    # so left open it would hand any visitor whatever the server can read.
-    try:
-        return run_analysis(request)
-    except HTTPException:
-        # A rejected request is the caller's problem, not a server fault.
-        raise
-    except Exception as e:
-        import traceback
-        logger.error(f"Pipeline failed: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/analyze/upload", response_model=AnalysisStartResponse)
@@ -108,24 +55,8 @@ async def analyze_upload(
     db: Session = Depends(get_db),
 ):
     """Start a run over browser-uploaded artifacts, and return a job to watch.
-
-    The uploaded bytes are read here - an upload is a stream belonging to this
-    request - and everything after that happens in the background, because a
+    Everything after an upload happens in the background, because a
     real run takes minutes and no browser waits that long.
-
-
-    `artifacts` is a JSON array describing each side's material:
-        [{"id","name","kind","file_indexes":[...]},   uploaded files
-         {"id","name","kind","text"}]                 pasted text
-
-    `file_indexes` point into `files`, and `file_paths` carries each file's
-    relative path so folder uploads keep their structure.
-
-    Each side takes a list of artifact ids. Several artifacts on one side are
-    analysed together as a single corpus - that is how a set of loose code
-    files becomes one codebase. Only the referenced artifacts are written to
-    disk.
-
     Anonymous callers may upload.
     """
     artifact_list = parse_json_field(artifacts, "artifacts", [])
@@ -148,8 +79,6 @@ async def analyze_upload(
     source_artifacts = resolve_side(artifact_list, source_ids, ROLE_SOURCE)
     target_artifacts = resolve_side(artifact_list, target_ids, ROLE_TARGET)
 
-    # Project mode keeps the model caches - embeddings, summaries, verdicts -
-    # between runs, so re-running the same files pays for nothing twice.
     use_persistent_cache = analysis_mode == AnalysisMode.PROJECT
     logger.info(f"Using {analysis_mode.value} mode")
 
@@ -159,10 +88,7 @@ async def analyze_upload(
     artifact_store.purge_expired_uploads()
     upload_id, workspace = artifact_store.create_upload_dir()
 
-    # Every run indexes into a directory of its own: two runs sharing one
-    # would replace each other's elements, and a New Analysis is not yet any
-    # analysis whose index it could reuse. The embeddings themselves are
-    # cached by content, so a fresh index costs no model calls.
+    # # Isolated index per run prevents data overwrites; cached embeddings keep it fast and free.
     chroma_path = get_chroma_path(f"run-{upload_id}")
 
     budget = UploadBudget()

@@ -1,9 +1,4 @@
-"""Asking a source what it is now, and getting its contents.
-
-Two separate questions on purpose. Checking is cheap - one small request per
-side - and is what a user is shown before deciding to update. Fetching costs a
-download, and is only worth doing for a side that actually moved.
-"""
+"""Asking a source what it is now, and getting its contents."""
 
 import logging
 from dataclasses import dataclass
@@ -29,18 +24,10 @@ class SourceStatus:
     """Where one source stands against the place it comes from."""
 
     source: ProjectSource
-    # What the side's files are at the analysis's newest version: a commit, or
-    # a fingerprint of an upload. None before anything was stored.
     last_ref: str | None
-    # What the side is at its origin right now. None when there is nothing to
-    # ask - an uploaded folder has no address to check - or when asking failed.
     latest_ref: str | None
     changed: bool
-    # Why it could not be checked, when that is the reason latest_ref is None.
     error: str | None = None
-    # Whether the fix is to grant GitHub access again. Distinguishes a dead
-    # connection, which one button mends, from a repository problem, which no
-    # amount of reconnecting will.
     needs_reconnect: bool = False
 
 
@@ -50,13 +37,7 @@ def owner_of(source: ProjectSource) -> User | None:
 
 
 def token_for(source: ProjectSource) -> str | None:
-    """The credential to read this side with, most specific first.
-
-    A token given for this one repository beats the owner's account-wide one,
-    because it was chosen deliberately for it. Neither means the repository is
-    read anonymously - and the server's own token is never substituted here,
-    since it can reach things this user never granted.
-    """
+    """The credential to read this side with, most specific first."""
     if source.access_token:
         return secrets.decrypt(source.access_token)
 
@@ -68,13 +49,8 @@ def token_for(source: ProjectSource) -> str | None:
 
 
 def forget_account_token(user: User | None) -> bool:
-    """Drop an account credential GitHub has rejected. Says whether it did.
+    """Drop an account credential GitHub has rejected. Says whether it did."""
 
-    Keeping it would be worse than useless: everything reading the connection
-    asks only whether a token is stored, so a dead one left in place makes the
-    app report a working GitHub connection while every request behind it fails.
-    Removing it is what lets "connected" mean connected.
-    """
     if user is None or not user.github_token:
         return False
 
@@ -98,8 +74,6 @@ def repository_for(source: ProjectSource) -> GitHubRepository:
 def check_source(source: ProjectSource, last_ref: str | None) -> SourceStatus:
     """Whether one side has moved since `last_ref`, what it last took in."""
     if source.origin != ORIGIN_GITHUB:
-        # Only the person holding the files knows whether an upload has
-        # changed, so it is never reported as moved on its own.
         return SourceStatus(source=source, last_ref=last_ref, latest_ref=None, changed=False)
 
     try:
@@ -114,9 +88,6 @@ def check_source(source: ProjectSource, last_ref: str | None) -> SourceStatus:
         repository = GitHubRepository(source.location, token=token)
         latest = repository.head_commit(source.branch or repository.default_branch())
     except GitHubCredentialError as error:
-        # Nothing is wrong with the repository, so say what is: the credential
-        # is dead. A source carrying its own token keeps the account connection
-        # out of it - that token is the one that failed, not this one.
         if not source.access_token:
             forget_account_token(owner_of(source))
         logger.warning(f"Could not check {source.location}: {error}")
@@ -127,9 +98,6 @@ def check_source(source: ProjectSource, last_ref: str | None) -> SourceStatus:
     except GitHubError as error:
         logger.warning(f"Could not check {source.location}: {error}")
         if not token:
-            # With nothing to authenticate as, GitHub answers 404 for a private
-            # repository rather than admitting it exists - so its own message
-            # would send the user off checking a branch name that is fine.
             return SourceStatus(
                 source=source, last_ref=last_ref, latest_ref=None, changed=False,
                 needs_reconnect=True,
@@ -168,15 +136,7 @@ def last_ref(db: Session, side: ProjectSource) -> str | None:
 
 
 def renames_since(source: ProjectSource, base: str, head: str) -> dict[str, str]:
-    """Files that moved between commit `base` and commit `head`.
-
-    Returned as old path -> new path. Without this a renamed file reads as one
-    deleted and another created, and every link that pointed at it is reported
-    broken - which is what makes an ordinary refactor look like damage.
-
-    Best effort: a repository that cannot answer leaves the update to carry on
-    without the mapping.
-    """
+    """Files that moved between commit `base` and commit `head`."""
     try:
         renames = repository_for(source).renames_between(base, head)
     except (GitHubError, SecretError) as error:
@@ -189,13 +149,7 @@ def renames_since(source: ProjectSource, base: str, head: str) -> dict[str, str]
 
 
 def fetch_source(source: ProjectSource, destination: Path) -> str:
-    """Write a source's current contents into `destination`.
-
-    Returns the ref those contents are at. The caller records it only once the
-    files are safely stored - moving it forward any earlier would leave the
-    source claiming to be up to date with work that never finished, and the
-    next sync would see nothing to do.
-    """
+    """Write a source's current contents into `destination`."""
     if source.origin != ORIGIN_GITHUB:
         raise SyncError(
             f"'{source.name}' is an uploaded source. Its files have to be "

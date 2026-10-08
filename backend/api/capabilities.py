@@ -1,9 +1,4 @@
-"""Declarative catalogue of what the pipeline can ingest and how.
-
-This is the single place to edit when a new artifact type is supported: add an
-entry here and the frontend picks up the new kind, its accepted file types, its
-preprocessors and its output levels with no frontend change.
-"""
+"""Declarative catalogue of what the pipeline can ingest and how."""
 
 from core.projects.uploads import MAX_TOTAL_UPLOAD_BYTES, MAX_UPLOAD_BYTES
 from core.schemas import ElementLevel
@@ -30,8 +25,7 @@ KIND_ARCHITECTURE = "architecture"
 KIND_ARCHITECTURE_DOCUMENT = "architecture_document"
 
 # Any artifact kind can sit on either side: the point is to link any two kinds,
-# not requirements to code specifically. Kinds keep a `roles` list so a future
-# one-directional type stays expressible.
+# not requirements to code specifically. 
 BOTH_SIDES = [ROLE_SOURCE, ROLE_TARGET]
 
 # Human wording for each semantic level, reused across preprocessors.
@@ -55,12 +49,6 @@ def _levels(*levels: ElementLevel) -> list[OutputLevelOption]:
     ]
 
 
-# `tree` is intentionally absent: it exists to give the dependency analyzer a
-# folder/file/class hierarchy, not to produce comparable chunks. `summarize`
-# is also omitted - it needs a local LLM pass over every artifact. `section` is
-# not offered either: documents arrive one item per file, so there are no
-# numbered headings to split on. The preprocessor itself is still there, and
-# saved runs that used it can still be re-run and updated.
 REQUIREMENT_PREPROCESSORS = [
     PreprocessorOption(
         key=PreprocessorType.SENTENCE,
@@ -109,16 +97,12 @@ ARTIFACT_KINDS: list[ArtifactKindOption] = [
         accepts_archive=False,
         accepts_folder=True,
         accepts_text=True,
-        # Already prose: an LLM summary of a requirement restates it.
         summarize=False,
         roles=BOTH_SIDES,
         preprocessors=REQUIREMENT_PREPROCESSORS,
         default_preprocessor=PreprocessorType.SINGLE,
         default_output_level=ElementLevel.ARTIFACT,
     ),
-    # Listed after requirements on purpose: both accept the same file types, and
-    # a file is given the first kind that claims its extension, so a document
-    # starts as requirements and is switched to this by hand.
     ArtifactKindOption(
         key=KIND_ARCHITECTURE_DOCUMENT,
         label="Architecture document",
@@ -127,7 +111,6 @@ ARTIFACT_KINDS: list[ArtifactKindOption] = [
         accepts_archive=False,
         accepts_folder=True,
         accepts_text=True,
-        # Already prose, like requirements.
         summarize=False,
         roles=BOTH_SIDES,
         preprocessors=REQUIREMENT_PREPROCESSORS,

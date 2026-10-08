@@ -1,11 +1,4 @@
-"""Reading an analysis request's artifacts and writing each side to disk.
-
-The request describes its artifacts as JSON beside the uploaded files; this
-checks that description and lays the files out one directory per side. The
-filesystem work itself - safe names, size limits, archives - is in
-core.projects.uploads, which answers in its own errors. upload_error_response
-is how the API turns those into HTTP.
-"""
+"""Reading an analysis request's artifacts and writing each side to disk."""
 
 import json
 from pathlib import Path
@@ -47,12 +40,7 @@ def parse_id_list(raw: str, field: str) -> list[str]:
 
 
 def resolve_side(artifacts: list[dict], artifact_ids: list[str], role: str) -> list[dict]:
-    """Validate the artifacts chosen for one side of the trace.
-
-    A side may hold several artifacts - they are analysed together as one
-    corpus - but they must all be of the same kind so that a single
-    preprocessor and provider apply to the whole side.
-    """
+    """Validate the artifacts chosen for one side of the trace."""
     if not artifact_ids:
         raise HTTPException(status_code=400, detail=f"Select at least one {role} artifact.")
 
@@ -96,13 +84,7 @@ def materialise_side(
     side_dir: Path,
     budget: UploadBudget,
 ) -> Path:
-    """Write every artifact on one side into a single directory.
-
-    Files normally land at their own relative path, which keeps identifiers
-    readable (`services/auth.js`). Folder uploads already carry their folder
-    name so they rarely clash; only when two artifacts would actually overwrite
-    each other is the colliding file nested under its artifact name.
-    """
+    """Write every artifact on one side into a single directory."""
     side_dir.mkdir(parents=True, exist_ok=True)
     written: set[str] = set()
 
@@ -118,8 +100,6 @@ def materialise_side(
                     status_code=400,
                     detail=f"'{kind.label}' artifacts cannot be provided as pasted text.",
                 )
-            # Persist pasted text as a real document so one side can mix typed
-            # text with uploaded files behind a single provider.
             destination = side_dir / f"{sanitize_project_id(artifact_name)}.txt"
             destination.write_text(text, encoding="utf-8")
             written.add(destination.name)
@@ -175,8 +155,6 @@ def materialise_side(
 
 def side_manifest(artifacts: list[dict], role: str) -> dict:
     """Describe one side of the trace for later storage."""
-    # The stored unit is the side, not the artifact: materialise_side writes a
-    # whole side into one directory, which is what makes it a single corpus.
     names = [artifact.get("name") or artifact.get("id") or "artifact" for artifact in artifacts]
     return {
         "role": role,

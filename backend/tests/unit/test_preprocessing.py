@@ -198,3 +198,48 @@ def test_each_side_gets_its_own_collection(record):
 
     assert different == ("requirements_elements", "code_elements")
     assert same[0] != same[1] and all(name.startswith("requirements") for name in same)
+
+
+# Two plugins in one file, each with its own Plugin(option) - the shape of
+# bootstrap.js, which is where this was found.
+SAME_NAME_TWICE = """
+(function () {
+  function Plugin(option) { return option + 1; }
+  window.alert = Plugin;
+})();
+(function () {
+  function Plugin(option) { return option + 2; }
+  window.modal = Plugin;
+})();
+function unique(value) { return value; }
+"""
+
+
+@case(
+    id="U-58",
+    feature="Preprocessing / functions that share a name",
+    level="unit",
+    priority="High",
+    why="An identifier names exactly one element. Two functions with one name and one parameter list in a file - in different scopes, or in minified code - got the same identifier, and the vector index refused the whole run.",
+    preconditions="None",
+    input="A JavaScript file with Plugin(option) defined twice, in two scopes, and one function defined once; then a full pipeline run with that file among the code",
+    expected="Every identifier is unique: the first keeps its name, the second ends '#2', and the function defined once is unchanged. The pipeline run finishes",
+)
+def test_functions_sharing_a_name_get_their_own_identifiers(tmp_path, record):
+    """A second function with the same name and parameters is numbered instead of repeating an identifier."""
+    elements = CodeMethodPreprocessor().preprocess(
+        [Artifact(identifier="app.js", type="source code", content=SAME_NAME_TWICE)]
+    )
+    functions = [e.identifier for e in elements if e.level == ElementLevel.FUNCTION]
+    record(f"functions: {functions}")
+
+    from tests.helpers import build_pipeline, copy_corpus
+    source, target = copy_corpus(tmp_path)
+    (target / "app.js").write_text(SAME_NAME_TWICE, encoding="utf-8")
+    result = build_pipeline(source, target, tmp_path / "chroma").run()
+    stored = [e for e in result.target_elements if "app.js::" in e.identifier]
+    record(f"pipeline run finished with {len(result.trace_links)} links; app.js functions indexed: {len(stored)}")
+
+    assert functions == ["app.js::Plugin(option)", "app.js::Plugin(option)#2", "app.js::unique(value)"]
+    assert len({e.identifier for e in elements}) == len(elements)
+    assert len(stored) == 3

@@ -1,9 +1,4 @@
-"""Persistent summary cache, backed by the application database.
-
-The same shape as the embedding cache, and for the same reason: a summary is
-derived from the element's text and nothing else, so unchanged code never has
-to be sent to the model twice.
-"""
+"""Persistent summary cache, backed by the application database."""
 
 import logging
 from hashlib import sha256

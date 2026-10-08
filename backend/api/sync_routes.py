@@ -32,12 +32,7 @@ def sync_status(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Where each side of an analysis stands, without fetching anything.
-
-    One small request per connected side, so this is cheap enough to open a
-    dialog with. A side that cannot be reached is reported with its reason
-    rather than failing the whole answer.
-    """
+    """Where each side of an analysis stands, without fetching anything."""
     config = require_config(db, user, project_id, config_id)
     return [
         SourceStatusResponse(
@@ -71,12 +66,7 @@ def sync_side(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Update one side of an analysis and re-run that analysis over it.
-
-    Everything cheap happens here, so an answer that can be given now is given
-    now: nothing to fetch, nothing saved to update, an update already running.
-    Only once there is real work does it become a job to watch.
-    """
+    """Update one side of an analysis and re-run that analysis over it."""
     config = require_config(db, user, project_id, config_id)
 
     running = jobs.active_job(db, config_id, jobs.KIND_SYNC)
@@ -91,16 +81,11 @@ def sync_side(
 
     head = None
     if request.upload_id:
-        # Handed over by hand: checked now, so a lapsed upload is refused
-        # before a job is filed for it - and compared now, because "nothing
-        # has changed" is an answer worth giving immediately.
         changes = side_changes(config, held_files(latest, side), staged_dir(request.upload_id))
         detail = no_change_detail(changes)
         if detail:
             return SyncStartResponse(started=False, detail=detail)
     elif side.origin == ORIGIN_GITHUB:
-        # Asked here rather than in the job: it is one small request, and
-        # "nothing has changed" is an answer worth giving immediately.
         checked = check_source(side, last_ref(db, side))
         if checked.error:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=checked.error)

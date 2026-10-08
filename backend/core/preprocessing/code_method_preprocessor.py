@@ -38,13 +38,22 @@ class CodeMethodPreprocessor(Preprocessor):
         )
         elements.append(file_element)
 
+        # A file can hold two functions with one name and one parameter list -
+        # in different scopes, or in minified code. The first keeps the name;
+        # each later one is numbered, because an identifier names one element.
+        seen: dict[str, int] = {}
+
+        def unique(identifier: str) -> str:
+            seen[identifier] = seen.get(identifier, 0) + 1
+            return identifier if seen[identifier] == 1 else f"{identifier}#{seen[identifier]}"
+
         classes = parser.find_classes(tree.root_node)
 
         if classes:
             for class_node in classes:
                 class_name = parser.extract_name(class_node)
                 class_content = content[class_node.start_byte:class_node.end_byte].decode('utf-8')
-                class_id = f"{artifact.identifier}::{class_name}"
+                class_id = unique(f"{artifact.identifier}::{class_name}")
                 class_semantic_units = parser.extract_semantic_units(class_node, class_node=class_node)
 
                 class_element = Element(
@@ -65,7 +74,7 @@ class CodeMethodPreprocessor(Preprocessor):
                     method_semantic_units = parser.extract_semantic_units(method_node, class_node=class_node)
 
                     method_element = Element(
-                        identifier=f"{class_id}::{method_name}{method_params}",
+                        identifier=unique(f"{class_id}::{method_name}{method_params}"),
                         type=f"source code method",
                         content=method_content,
                         granularity=2,
@@ -82,7 +91,7 @@ class CodeMethodPreprocessor(Preprocessor):
             function_semantic_units = parser.extract_semantic_units(function_node, class_node=None)
 
             function_element = Element(
-                identifier=f"{artifact.identifier}::{function_name}{function_params}",
+                identifier=unique(f"{artifact.identifier}::{function_name}{function_params}"),
                 type='source code method',
                 content=function_content,
                 granularity=1,

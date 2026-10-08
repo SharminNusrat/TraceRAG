@@ -4,7 +4,6 @@ import os
 import re
 from hashlib import sha256
 from pathlib import Path
-
 from api.schemas import AnalyzeRequest, AnalyzeResponse
 from core.content import relative_identifier
 
@@ -33,18 +32,11 @@ def get_chroma_path(project_id: str) -> str:
 
 def relativize(identifier: str, roots: list[Path]) -> str:
     """Strip the temp workspace prefix so identifiers read as project paths."""
-    # The pipeline reduces identifiers the same way when matching pinned links,
-    # so both go through one implementation - two that drifted apart is what
-    # made pinning silently match nothing.
     return relative_identifier(identifier, roots)
 
 
 def relativize_text(text: str, roots: list[Path]) -> str:
-    """Strip workspace prefixes anywhere inside free text.
-
-    Dependency-expansion explanations quote element identifiers, which would
-    otherwise surface the temp upload path to the user.
-    """
+    """Strip workspace prefixes anywhere inside free text."""
     for root in roots:
         for prefix in (f"{root}{os.sep}", f"{root}/"):
             text = text.replace(prefix, "")
@@ -64,9 +56,6 @@ def relativize_response(response: AnalyzeResponse, roots: list[Path]) -> Analyze
     for item in response.unimplemented:
         if "identifier" in item:
             item["identifier"] = relativize(item["identifier"], roots)
-    # Stored to be matched against a later run's elements, and every run works
-    # in a differently named temp directory - so an absolute path here would
-    # never match again, and pinning would quietly do nothing forever.
     response.element_links = [
         (relativize(source, roots), relativize(target, roots))
         for source, target in response.element_links

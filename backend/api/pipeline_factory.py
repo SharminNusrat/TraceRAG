@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 from api.capabilities import ARTIFACT_KINDS_BY_KEY
 from api.schemas import (
-    AnalyzeRequest, AnalyzeResponse, ArtifactInput, ClassifierType, ElementResponse,
+    AnalyzeRequest, AnalyzeResponse, ClassifierType, ElementResponse,
     PreprocessorType, TraceLinkResponse,
 )
 from config import settings
@@ -18,7 +18,7 @@ from core.cache import PersistentSummaryCache
 from core.classification import SimpleClassifier, ReasoningClassifier, OllamaChatProvider, GroqChatProvider
 from core.dependency import CodeDependencyAnalyzer
 from core.embedding import OllamaEmbeddingCreator
-from core.ingestion import CodeProvider, DocumentProvider, ModelProvider, TextProvider
+from core.ingestion import CodeProvider, DocumentProvider, ModelProvider
 from core.pipeline import TracePipeline
 from core.content import relative_identifier
 from core.output.names import display_names, model_name
@@ -35,36 +35,10 @@ def request_default(field: str):
     return AnalyzeRequest.model_fields[field].default
 
 
-def provider_for(side: ArtifactInput, role: str):
-    """Provider for one side of a path-based request."""
-    kind = ARTIFACT_KINDS_BY_KEY.get(side.kind)
-    if kind is None:
-        raise HTTPException(status_code=400, detail=f"Unknown artifact kind '{side.kind}'.")
-    if role not in kind.roles:
-        raise HTTPException(
-            status_code=400,
-            detail=f"'{kind.label}' artifacts cannot be the {role} of a trace.",
-        )
-
-    if side.text.strip():
-        if not kind.accepts_text:
-            raise HTTPException(
-                status_code=400,
-                detail=f"'{kind.label}' artifacts cannot be provided as pasted text.",
-            )
-        return TextProvider(side.text)
-
-    if not side.path:
-        raise HTTPException(
-            status_code=400, detail=f"Give a path or text for the {role} artifact."
-        )
-    return build_provider(side.kind, side.path)
-
-
 def build_provider(kind_key: str, path):
     """Reads a directory of artifacts of one kind.
 
-    Extend this alongside the ARTIFACT_KINDS registry when adding a new type.
+    This will be extended alongside the ARTIFACT_KINDS registry when adding a new type.
     """
     match kind_key:
         case "requirements" | "architecture_document":
@@ -100,8 +74,7 @@ def get_preprocessor(preprocessor_type: PreprocessorType):
 def read_items(kind_key: str, preprocessor: PreprocessorType, directory: Path) -> list[Item]:
     """One side's elements, split the way a run splits them, without any model.
 
-    What an update compares to say which elements changed. Identifiers are
-    made relative to `directory`, the form every stored identifier takes.
+    What an update compares to say which elements changed. 
     """
     if not any(path.is_file() for path in directory.rglob("*")):
         return []
@@ -115,11 +88,8 @@ def read_items(kind_key: str, preprocessor: PreprocessorType, directory: Path) -
 
 
 def name_elements(response: AnalyzeResponse) -> AnalyzeResponse:
-    """Give each element, and each link's two ends, the name a person reads it by.
-
-    Worked out from the elements a response already holds, so a stored run is
-    named exactly as it was when it ran.
-    """
+    """Give each element, and each link's two ends, the name a person reads it by."""
+    
     names = {}
     for elements in (response.source_elements, response.target_elements):
         names.update(display_names([

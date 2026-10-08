@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Sora:wght@700;800&display=swap');
 
 :root{
   /* -- Canvas & surfaces (light) -- */
@@ -17,15 +17,15 @@
   --muted-2:#646a85;
 
   /* -- Accent (indigo/violet) -- */
-  --accent:#4f42d8;
-  --accent-strong:#3b2db5;
-  --accent-soft:#e9e4fb;
-  --shadow-accent:rgba(79,66,216,.22);
+  --accent:#3f34a6;
+  --accent-strong:#2e2580;
+  --accent-soft:#e8e5f6;
+  --shadow-accent:rgba(63,52,166,.24);
 
   /* -- Dark frame (header / sidebar / nav bands) -- */
   --frame-1:#1a1745;
-  --frame-2:#33297a;
-  --frame-3:#5b21b6;
+  --frame-2:#241d5a;
+  --frame-3:#322a7a;
   --frame-text:#ede9fc;
   --frame-text-muted:#a7a0d6;
   --frame-border:rgba(255,255,255,.09);
@@ -105,32 +105,47 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .topbar .text-link:hover{color:var(--ink)}
 .topbar .compact{font-size:var(--fs-md);padding:13px 19px}
 .pill{border-radius:999px}
-.hero{position:relative;z-index:1;max-width:720px;padding:90px 24px 60px;margin:auto;text-align:center}
+/* Sized so the feature cards below are on screen without scrolling. */
+.hero{position:relative;z-index:1;max-width:780px;padding:30px 24px 36px;margin:auto;text-align:center}
 .hero-badge{
   display:inline-block;padding:7px 18px;border-radius:999px;
   font-size:var(--fs-xs);font-weight:700;letter-spacing:.6px;text-transform:uppercase;
   color:var(--accent);background:var(--accent-soft);
-  border:1px solid rgba(91,79,224,.15);margin-bottom:28px;
+  border:1px solid rgba(91,79,224,.15);margin-bottom:18px;
 }
-.hero h1{font-size:clamp(72px,11vw,130px);line-height:.9;letter-spacing:-8px;margin:0 0 28px;color:var(--ink)}
+.hero h1{font-family:Sora,Manrope,Arial,sans-serif;font-weight:800;font-size:clamp(46px,6.2vw,78px);line-height:1;letter-spacing:-2.5px;margin:0 0 16px;color:var(--ink)}
 .hero h1 span{color:var(--frame-1)}
-.hero>p{max-width:610px;margin:0 auto;color:var(--muted);font-size:var(--fs-lg);line-height:1.75}
+.hero>p{max-width:720px;margin:0 auto;color:var(--muted);font-size:var(--fs-lg);line-height:1.65;text-wrap:balance}
 .start-button{
   display:inline-flex;align-items:center;gap:10px;
-  font-size:var(--fs-md);padding:16px 30px;margin:32px 0 0;
+  font-size:var(--fs-md);padding:15px 30px;margin:24px 0 0;
   box-shadow:0 12px 36px var(--shadow-accent);
 }
 .start-button:hover{transform:translateY(-2px);box-shadow:0 16px 44px var(--shadow-accent)}
-.hero .hero-note{color:var(--muted-2);font-size:var(--fs-sm);margin-top:18px}
+.hero .hero-note{color:var(--muted-2);font-size:var(--fs-sm);margin-top:14px}
 
 /* -- Feature cards -- */
 .features-section{
   position:relative;z-index:1;
-  display:grid;grid-template-columns:repeat(3,1fr);gap:18px;
-  max-width:860px;margin:0 auto;padding:0 24px 80px;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:16px;
+  max-width:1120px;margin:0 auto;padding:0 24px 48px;
+}
+@media(max-width:1000px){.features-section{grid-template-columns:repeat(2,1fr);max-width:640px}}
+/* A short laptop screen: tighter, so the cards still fit under the hero. */
+@media(min-width:1001px) and (max-height:760px){
+  .topbar{height:60px}
+  .hero{padding-top:10px;padding-bottom:22px}
+  .hero-badge{margin-bottom:12px}
+  .hero h1{font-size:56px;margin-bottom:12px}
+  .hero>p{font-size:var(--fs-md)}
+  .start-button{margin-top:18px;padding:13px 28px}
+  .hero .hero-note{margin-top:10px}
+  .features-section{padding-bottom:24px}
+  .feature-card{padding:16px 18px}
+  .feature-icon{width:36px;height:36px;margin-bottom:10px}
 }
 .feature-card{
-  padding:28px 24px;border-radius:14px;
+  padding:22px 20px;border-radius:14px;
   background:rgba(255,255,255,.65);
   border:1px solid var(--border-soft);
   backdrop-filter:blur(12px);
@@ -141,12 +156,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   box-shadow:0 16px 48px rgba(30,27,75,.08);
 }
 .feature-icon{
-  display:grid;place-items:center;width:44px;height:44px;border-radius:11px;
+  display:grid;place-items:center;width:40px;height:40px;border-radius:11px;
   background:linear-gradient(135deg,var(--accent-soft),rgba(91,79,224,.12));
-  color:var(--accent);margin-bottom:18px;
+  color:var(--accent);margin-bottom:14px;
 }
-.feature-card h3{font-size:var(--fs-lg);margin:0 0 8px;color:var(--ink);letter-spacing:-.3px}
-.feature-card p{font-size:var(--fs-sm);color:var(--muted);line-height:1.7;margin:0}
+.feature-card h3{font-size:var(--fs-md);font-weight:800;margin:0 0 7px;color:var(--ink);letter-spacing:-.2px}
+.feature-card p{font-size:var(--fs-xs);color:var(--muted);line-height:1.6;margin:0}
 
 .landing-glow-bottom{
   position:absolute;bottom:-120px;left:50%;transform:translateX(-50%);
@@ -1292,8 +1307,8 @@ a.analysis-row:hover{background:var(--surface-alt)}
   .matrix-filters select{flex:1;min-width:0}
   .matrix-desc{max-width:180px}
   .matrix-code{max-width:170px}
-  .hero{padding-top:70px;padding-bottom:40px}
-  .hero h1{letter-spacing:-5px}
+  .hero{padding-top:26px;padding-bottom:32px}
+  .hero h1{letter-spacing:-1.5px}
   .features-section{grid-template-columns:1fr;gap:14px;padding-bottom:50px}
   .workflow-nav{gap:13px}
   .workflow-nav>span{display:none}

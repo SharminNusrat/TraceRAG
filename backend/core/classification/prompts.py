@@ -1,10 +1,6 @@
 from enum import Enum
 
 class SimplePromptTemplate(str, Enum):
-    # Asks for the same tagged verdict the reasoning prompt does: free prose
-    # cannot be read reliably, since a hedged "No, though arguably yes..."
-    # contains the word yes.
-
     # "or any part of it" is doing real work. A requirement usually names
     # several capabilities and an element delivers one of them, so asking
     # whether it implements *the requirement* invites a literal reader to say

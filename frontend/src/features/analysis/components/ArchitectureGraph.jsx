@@ -31,6 +31,33 @@ const NAME_CHARS = Math.floor((NODE_WIDTH - 26) / 8.4);
 const INTERFACE_CHARS = 18;
 const clip = (text, limit) => (text.length <= limit ? text : `${text.slice(0, limit - 1)}…`);
 
+const NAME_SIZE = 15;
+const NAME_SIZE_MIN = 10;
+
+/**
+ * A component's name laid out to fit its box in full: on two lines when it is
+ * too long for one, split at the word boundary nearest its middle, and set
+ * smaller when a line is still too long. Only a name that would need type
+ * below the smallest size is cut.
+ */
+function fitName(name) {
+  let lines = [name];
+  if (name.length > NAME_CHARS) {
+    // Between words where there are any; inside a camelCase name otherwise.
+    const between = (pattern) => [...name.matchAll(pattern)].map((match) => match.index);
+    const spaces = between(/(?<=[\s_.-])(?=\S)/g);
+    const boundaries = (spaces.length ? spaces : between(/(?<=[a-z0-9])(?=[A-Z])/g))
+      .sort((a, b) => Math.abs(a - name.length / 2) - Math.abs(b - name.length / 2));
+    if (boundaries.length) {
+      lines = [name.slice(0, boundaries[0]).trim(), name.slice(boundaries[0]).trim()];
+    }
+  }
+  const longest = Math.max(...lines.map((line) => line.length));
+  const size = Math.max(NAME_SIZE_MIN, Math.min(NAME_SIZE, (NAME_SIZE * NAME_CHARS) / longest));
+  const limit = Math.floor((NAME_CHARS * NAME_SIZE) / size);
+  return { size, lines: lines.map((line) => clip(line, limit)) };
+}
+
 // Force settling. Fixed counts rather than an animation: the drawing is the
 // same every time, and it is done before the first paint.
 const SETTLE_PASSES = 320;
@@ -293,9 +320,20 @@ export function ArchitectureGraph({
                   <rect x="0" y="7" width="6" height="3" />
                 </g>
                 <text x={NODE_WIDTH / 2} y={25} className="arch-stereotype">«component»</text>
-                <text x={NODE_WIDTH / 2} y={45} className="arch-name">
-                  {clip(node.label, NAME_CHARS)}
-                </text>
+                {(() => {
+                  const { size, lines } = fitName(node.label);
+                  return lines.map((line, index) => (
+                    <text
+                      key={line}
+                      x={NODE_WIDTH / 2}
+                      y={(lines.length === 1 ? 45 : 40) + index * (size + 1)}
+                      className="arch-name"
+                      style={{ fontSize: size }}
+                    >
+                      {line}
+                    </text>
+                  ));
+                })()}
                 <title>{node.tooltip}</title>
               </g>
             );
