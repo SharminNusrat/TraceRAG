@@ -30,14 +30,7 @@ class DocumentProvider(ArtifactProvider):
         return artifacts
 
     def _make_identifier(self, file_path: str, base: str) -> str:
-        """Path relative to the load root, extension included.
-
-        The extension is part of the identity: preprocessors select a parser by
-        reading the extension off the identifier, so stripping it would break
-        anything that has to re-derive an element's file type. Relative (rather
-        than absolute) keeps temp upload paths out of the results and separates
-        same-named files living in different subfolders.
-        """
+        """Path relative to the load root, extension included."""
         try:
             relative = os.path.relpath(file_path, base) if base else os.path.basename(file_path)
         except ValueError:  # different drive on Windows

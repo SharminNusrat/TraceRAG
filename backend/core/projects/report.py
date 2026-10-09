@@ -1,10 +1,4 @@
 """The change report between two versions of one analysis.
-
-Worked out when it is asked for, never stored: a re-run inside a version
-replaces that version's links, so a report kept from before would describe
-links nobody can see any more. What a version cannot lose - which files and
-elements changed, and the id map - is stored on the version and passed in.
-
 Every link from either run is given one state:
 
     valid            in both runs
@@ -50,12 +44,7 @@ def change_report(
     source_map: IdMap,
     target_map: IdMap,
 ) -> dict:
-    """Compare two runs of one analysis, link by link.
-
-    `source_map` and `target_map` say what each of `base`'s identifiers is
-    called in `head`. With no `base` - an analysis never updated - every link
-    is reported as it stands, valid and unchanged.
-    """
+    """Compare two runs of one analysis, link by link."""
     base = base or RunView(links=dict(head.links), source_hashes=dict(head.source_hashes),
                            target_hashes=dict(head.target_hashes), uncovered=[])
 
@@ -139,12 +128,7 @@ def _reverse(hashes: dict[str, str], id_map: IdMap) -> dict[str, str]:
 
 
 def count_file_links(rows: list[dict], links: list[dict], role: str) -> None:
-    """How many of a report's links touch each changed file of one side.
-
-    A link touches a file when the end on this side - its source for the
-    source side - lives in it, under the file's new name or its old one.
-    Counted in one pass, together with how many of them say that end changed.
-    """
+    """How many of a report's links touch each changed file of one side."""
     end = "source" if role == "source" else "target"
     by_path = {}
     for row in rows:

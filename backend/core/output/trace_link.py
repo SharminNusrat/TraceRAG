@@ -15,9 +15,9 @@ class TraceLink(BaseModel):
 
     @staticmethod
     def confidence_to_level(confidence: float) -> ConfidenceLevel:
-        if confidence >= 0.85:
+        if confidence >= 0.80:
             return ConfidenceLevel.HIGH
-        elif confidence >= 0.70:
+        elif confidence >= 0.65:
             return ConfidenceLevel.MEDIUM
         else:
             return ConfidenceLevel.LOW

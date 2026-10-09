@@ -112,7 +112,7 @@ def result_of(sources, targets, links, unimplemented=()) -> AnalyzeResponse:
         trace_links=[
             TraceLinkResponse(
                 source_id=source, target_id=target, confidence=score,
-                confidence_level="high" if score >= 0.85 else "medium" if score >= 0.7 else "low",
+                confidence_level="high" if score >= 0.80 else "medium" if score >= 0.65 else "low",
             )
             for source, target, score in links
         ],

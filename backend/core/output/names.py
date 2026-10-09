@@ -1,11 +1,4 @@
-"""What an element is called where a person reads it.
-
-Most identifiers already read well enough - a file path, a method, a sentence's
-place. A UML component's does not: it is the model file, a counter and an XMI id
-(`bbb.uml$9$_0e5u8Fk...`). So a component is shown by the name the model gives
-it, and everything else by its identifier. The identifier stays what is stored,
-compared and tracked; this is only ever a label.
-"""
+"""What an element is called where a person reads it."""
 
 from collections import Counter
 
@@ -27,12 +20,7 @@ def file_of(identifier: str) -> str:
 
 
 def display_names(elements: list[tuple[str, str | None]]) -> dict[str, str]:
-    """Each element's display name, from (identifier, name) pairs of one side.
-
-    An element with a name is shown by it. Two with the same name - the same
-    component in two models - get their file added to tell them apart. One with
-    no name is shown by its identifier.
-    """
+    """Each element's display name, from (identifier, name) pairs of one side."""
     taken = Counter(name for _, name in elements if name)
     return {
         identifier: (

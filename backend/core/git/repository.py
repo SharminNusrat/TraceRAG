@@ -1,11 +1,4 @@
-"""Read-only access to a GitHub repository.
-
-Enough to answer the two questions an update asks: what is the branch pointing at
-now, and give me the files at that commit. Nothing here writes to GitHub.
-
-The archive endpoint is used rather than `git clone`, so no git binary has to
-exist on the machine and no .git directory has to be cleaned up afterwards.
-"""
+"""Read-only access to a GitHub repository."""
 
 import logging
 import re
@@ -22,10 +15,7 @@ logger = logging.getLogger(__name__)
 
 API_ROOT = "https://api.github.com"
 # Not out of date: GitHub names its API versions by the day they were
-# published, and this is still the only one it has ever published - send no
-# header at all and GitHub selects exactly this. Pinned rather than left to the
-# default so that the day a newer version becomes the default, the responses
-# read here keep the shape this code was written against until it is updated.
+# published
 API_VERSION = "2022-11-28"
 
 TIMEOUT_SECONDS = 30
@@ -40,13 +30,7 @@ class GitHubError(RuntimeError):
 
 
 class GitHubCredentialError(GitHubError):
-    """GitHub rejected the credential itself, whatever it was asked for.
-
-    Separate from its parent because it is the one failure that says something
-    about the connection rather than about the repository: nothing else will
-    work either until a new credential is granted, so a caller can stop
-    treating the stored one as usable.
-    """
+    """GitHub rejected the credential itself, whatever it was asked for."""
 
 
 # Everything GitHub itself puts in front of a user: the address bar, the green
@@ -59,11 +43,7 @@ REPOSITORY_PATTERNS = (
 
 
 def parse_repository(value: str) -> str:
-    """Turn whatever the user pasted into "owner/name".
-
-    Asking someone to retype a repository as "owner/name" when they have its
-    URL on the clipboard is a needless way to collect typos.
-    """
+    """Turn whatever the user pasted into "owner/name"."""
     text = (value or "").strip().rstrip("/")
     for pattern in REPOSITORY_PATTERNS:
         match = pattern.match(text)
@@ -89,17 +69,7 @@ class GitHubRepository:
         self._public: bool | None = None
 
     def _effective_token(self) -> str | None:
-        """The token this request should be made with.
-
-        The caller's own, when they have one. Otherwise the server's - but
-        **only for a repository anyone can already read**, where it does
-        nothing except raise the rate limit.
-
-        Never for a private one. The server's token belongs to whoever
-        installed TraceRAG, and letting it stand in for a user's would hand
-        every signed-in person read access to every private repository that
-        token can reach, just by knowing its name.
-        """
+        """The token this request should be made with."""
         if self.token:
             return self.token
         if not settings.github_token:
@@ -118,8 +88,6 @@ class GitHubRepository:
                 timeout=TIMEOUT_SECONDS,
             )
         except requests.RequestException:
-            # Unreachable is not the same as private, but the safe reading of
-            # "I could not confirm this is public" is to withhold the token.
             return False
         return response.ok
 
@@ -147,14 +115,7 @@ class GitHubRepository:
         return self._get_json(f"/repos/{self.full_name}").get("default_branch") or "main"
 
     def changed_files(self, base: str, head: str) -> list[dict]:
-        """What happened to each file between two commits.
-
-        Each entry carries a `status` - added, modified, removed, renamed - and
-        a renamed one also carries the name it had before. That last part is
-        the valuable bit: a moved or renamed file is otherwise indistinguishable
-        from one deleted and another created, which makes every link on it look
-        broken when nothing was actually lost.
-        """
+        """What happened to each file between two commits."""
         data = self._get_json(
             f"/repos/{self.full_name}/compare/{base}...{head}",
             # 300 files is the endpoint's ceiling. Beyond that the list comes
@@ -220,17 +181,11 @@ class GitHubRepository:
         if response.ok:
             return
         if response.status_code == 404:
-            # A branch that does not exist and a repository the token cannot
-            # see both answer 404, so the caller says which it asked for and
-            # neither message promises more than GitHub actually told us.
             raise GitHubError(missing or (
                 f"'{self.full_name}' was not found. Check the name, and that the "
                 f"token can read it if the repository is private."
             ))
         if response.status_code == 401:
-            # The credential itself was rejected, whatever it was asked for.
-            # Naming the repository here sends people to check its permissions
-            # when nothing about the repository is wrong.
             raise GitHubCredentialError(
                 "GitHub rejected the credential. The connection has expired or "
                 "been revoked, so it needs granting again."
@@ -259,9 +214,6 @@ class GitHubRepository:
         handle = tempfile.NamedTemporaryFile(prefix="tracerag-repo-", suffix=".tar.gz", delete=False)
         path = Path(handle.name)
         try:
-            # The handle is closed on the way out of this block, before any
-            # except clause below runs: Windows will not delete a file that is
-            # still open, so a failed download could not clean up after itself.
             with handle:
                 written = 0
                 with requests.get(

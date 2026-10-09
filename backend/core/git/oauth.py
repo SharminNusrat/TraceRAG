@@ -1,10 +1,4 @@
-"""Letting a person connect their own GitHub account.
-
-The alternative was asking everyone to make a personal access token by hand and
-paste it in. This is better for two reasons that matter: the user grants access
-themselves and can withdraw it from GitHub at any time, and TraceRAG never has
-to hold a credential wider than what they agreed to.
-"""
+"""Letting a person connect their own GitHub account."""
 
 import logging
 from datetime import datetime, timedelta, timezone
@@ -24,13 +18,8 @@ logger = logging.getLogger(__name__)
 AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 TOKEN_URL = "https://github.com/login/oauth/access_token"
 
-# `repo` is what lets private repositories be read - but it is not read-only:
-# it grants write access to them as well. GitHub OAuth apps have no read-only
-# repository scope; TraceRAG itself only ever reads.
 SCOPES = "repo:status read:org repo"
 
-# Long enough to sign in to GitHub and click Authorize, short enough that a
-# link left lying around stops working.
 STATE_MINUTES = 10
 # Marks this token as an OAuth handshake, so a login token cannot be presented
 # as one, or the other way round.
@@ -41,13 +30,7 @@ DEFAULT_RETURN = "/app/profile"
 
 
 def safe_return_path(value: str | None) -> str:
-    """A path inside the app to come back to, or the default.
-
-    Only ever a path, never a whole address. The value survives a round trip
-    through GitHub and comes back as somewhere to send a browser, so anything
-    that could name another host would turn this into an open redirect - a
-    link that looks like ours and lands somewhere else.
-    """
+    """A path inside the app to come back to, or the default."""
     if not value or not value.startswith("/"):
         return DEFAULT_RETURN
     # "//host" is protocol-relative and "/\host" is treated the same way by
@@ -126,16 +109,7 @@ def exchange_code(code: str, redirect_uri: str) -> tuple[str, str]:
 
 
 def verify_token(token: str) -> str:
-    """Ask GitHub whether this credential still works. Returns the username.
-
-    The only way to know. A stored token tells you a connection was made once,
-    not that it still stands - GitHub can end one at any time, and says so
-    nowhere except in the answer to a request.
-
-    Raises GitHubCredentialError when the token is dead. Anything else - a
-    network fault, GitHub being down - is not the token's fault and leaves the
-    connection alone rather than throwing away a credential that may be fine.
-    """
+    """Ask GitHub whether this credential still works. Returns the username."""
     try:
         response = requests.get(
             f"{API_ROOT}/user",

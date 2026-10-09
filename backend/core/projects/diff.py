@@ -1,23 +1,4 @@
-"""What changed between two file sets of one side, and where each element went.
-
-Two questions, answered without a model:
-
-    diff_files     which files were added, removed, modified or renamed,
-                   by path and content hash
-    diff_elements  for the files that changed, which elements were added,
-                   removed, modified or moved - and the id map that says
-                   what each old identifier is called now
-
-The id map is the part everything else leans on. Sentences, chunks and UML
-components are named by their position, so inserting one sentence renames
-every sentence after it. Compared by identifier, that reads as every later
-element removed and an identical one added; translated through the map, it
-reads as what happened - one new sentence, and the rest moved down.
-
-So elements are matched by their content, in order: the ordered lists of
-element hashes on each side are aligned, and an element whose hash appears in
-the same place in the alignment is the same element whatever it is called now.
-"""
+"""What changed between two file sets of one side, and where each element went."""
 
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
@@ -37,12 +18,7 @@ MAX_SIMILARITY_PAIRS = 2500
 
 
 def element_hash(text: str) -> str:
-    """A name for an element's content that ignores how it is laid out.
-
-    Every run of whitespace counts as one space, so re-indenting a method or
-    re-flowing a paragraph changes nothing - which is what makes a
-    whitespace-only change "no meaningful change".
-    """
+    """A name for an element's content that ignores how it is laid out."""
     return sha256(" ".join(text.split()).encode("utf-8")).hexdigest()
 
 
@@ -54,8 +30,6 @@ class Item:
     # The file it lives in: the identifier of its top-most ancestor.
     file: str
     level: str
-    # Whether the classifier judges this element. Only these are reported as
-    # changed; the id map covers every level.
     compare: bool
     content: str
     # A UML component's name from its model; None for anything else.
@@ -118,13 +92,7 @@ def diff_files(
     new: dict[str, str],
     renames: dict[str, str] | None = None,
 ) -> FileChanges:
-    """Compare two file sets, each given as relative path -> content hash.
-
-    `renames` is what the origin knows about files that moved - GitHub's list
-    for a commit range. An upload knows nothing of the sort, so a file whose
-    exact content disappears from one path and appears at another is taken to
-    have moved as well.
-    """
+    """Compare two file sets, each given as relative path -> content hash."""
     gone = sorted(set(old) - set(new))
     arrived = sorted(set(new) - set(old))
     renamed: dict[str, str] = {}
@@ -134,8 +102,6 @@ def diff_files(
         if before in gone and after in arrived:
             renamed[before] = after
 
-    # Then content: one removed file and one added file with the same hash.
-    # Ambiguous matches - the same content at several paths - are left alone.
     by_hash: dict[str, list[str]] = {}
     for path in arrived:
         if path not in renamed.values():
@@ -159,11 +125,7 @@ def diff_files(
 
 @dataclass
 class IdMap:
-    """What each old identifier is called now.
-
-    Identifiers in neither field are unchanged. A removed one has no new name,
-    so whatever pointed at it is broken rather than redirected.
-    """
+    """What each old identifier is called now."""
 
     moved: dict[str, str] = field(default_factory=dict)
     removed: set[str] = field(default_factory=set)
@@ -213,11 +175,7 @@ class IdMap:
 def translate_pins(
     pins: dict[str, set[str]], source: IdMap, target: IdMap
 ) -> dict[str, set[str]]:
-    """Last run's pinned pairs, under the identifiers the new files use.
-
-    A pair loses its pin when either end was removed: there is nothing left to
-    ask the classifier about, and the link is broken rather than rejected.
-    """
+    """Last run's pinned pairs, under the identifiers the new files use."""
     translated: dict[str, set[str]] = {}
     for old_source, targets in pins.items():
         new_source = source.translate(old_source)
@@ -265,11 +223,7 @@ LABEL_WORDS = 8
 
 
 def label_of(item: Item) -> str:
-    """A name for an element a reader recognises, rather than its identifier.
-
-    A method or class by its class and method name; anything else - a
-    sentence, a component - by its first words.
-    """
+    """A name for an element a reader recognises, rather than its identifier."""
     if item.level in ("function", "class"):
         member = item.identifier.partition("::")[2] or item.identifier
         return member.split("(")[0].replace("::", ".")
@@ -302,16 +256,7 @@ def _ratio(old: Item, new: Item) -> float:
 
 
 def _pair_changed(olds: list[Item], news: list[Item], rename) -> tuple[list, list, list]:
-    """Pair the elements of a stretch that changed between two versions.
-
-    An old element is the same as a new one when its text is close enough to
-    count as reworded, or failing that, when it is still called the same. What
-    is left is removed and added. Returns (pairs, removed, added).
-
-    Text is only compared for elements the classifier judges. The others - a
-    whole file, a class - are long, which makes comparing their text slow, and
-    are named by path or class, so their names already pair them.
-    """
+    """Pair the elements of a stretch that changed between two versions."""
     pairs: list[tuple[Item, Item]] = []
     free = list(news)
 
@@ -341,13 +286,7 @@ def diff_elements(
     new: list[Item],
     renames: dict[str, str] | None = None,
 ) -> ElementChanges:
-    """Compare the elements of two file sets of one side.
-
-    Only the files that changed need to be given: anything not mentioned is
-    taken to be unchanged and keeps its identifier. `renames` maps an old file
-    path to its new one, so a moved file's elements are compared with the
-    elements of the file it became.
-    """
+    """Compare the elements of two file sets of one side."""
     renames = renames or {}
 
     def rename(identifier: str) -> str:
@@ -458,14 +397,7 @@ class SideChanges:
 
 
 def net_summary(changes: SideChanges) -> dict:
-    """One side's net change between two versions, grouped by file.
-
-    An element that only moved because others were inserted or removed in its
-    own file is counted, not listed: it is the same element with the same
-    text, and listing it would bury what actually changed. One that moved to
-    another file is listed, old -> new, and so is a modified one whose
-    identifier changed - a renamed method.
-    """
+    """One side's net change between two versions, grouped by file."""
     files, elements = changes.files, changes.elements
     renamed = files.renamed
     rows = {path: {"path": path, "old_path": None, "change": change, "elements": []}

@@ -34,9 +34,6 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
         self.batch_size = batch_size
         self._cache: dict[str, list[float]] = {}
         self._tokenizer = AutoTokenizer.from_pretrained(self.TOKENIZER_NAME)
-        # The namespace pins the embedding space: change the model, tokenizer
-        # or token limit and lookups miss instead of returning vectors that are
-        # no longer comparable.
         namespace = cache_namespace or f"{self.model}:{self.TOKENIZER_NAME}:{self.MAX_TOKENS}"
         self._persistent_cache = (
             PersistentEmbeddingCache(namespace) if use_persistent_cache else None
@@ -64,9 +61,6 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
             )
 
         uncached_texts = [text for text in missing if text not in self._cache]
-        # Said plainly, because "did that re-embed or not?" is otherwise only
-        # answerable by timing it. Silent when there is nothing to do, so the
-        # per-element lookups the classifier makes do not drown the log.
         if not uncached_texts:
             return [self._cache[text] for text in contents]
 
@@ -84,8 +78,6 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
             response = ollama.embed(model=self.model, input=texts)
             fresh = dict(zip(texts, response["embeddings"]))
             self._cache.update(fresh)
-            # Written per batch, so a run interrupted halfway keeps the work it
-            # has already paid for.
             if self._persistent_cache:
                 self._persistent_cache.set_many(fresh)
 
@@ -93,10 +85,6 @@ class OllamaEmbeddingCreator(EmbeddingCreator):
 
     def _build_embedding_text(self, element: Element) -> str:
         """What actually gets embedded: the element, plus what is known about it.
-
-        An artifact that is not prose - a method body, a UML component - embeds
-        poorly on its own text. Whatever describes it in words goes in first,
-        and the element's own text follows as the evidence behind it.
         """
         described = []
         if element.summary:

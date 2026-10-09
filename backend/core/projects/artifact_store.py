@@ -1,13 +1,4 @@
-"""On-disk home for uploaded artifacts.
-
-    <storage>/uploads/<upload_id>/     a real tree, because the pipeline reads
-                                       real files; reaped if nobody saves it
-    <storage>/blobs/<ab>/<abcdef...>   claimed files, named by content hash so
-                                       the same file is never stored twice
-
-Which bytes belong to which artifact is a database question, answered by the
-ArtifactFile rows - so there is no directory per analysis.
-"""
+"""On-disk home for uploaded artifacts."""
 
 import hashlib
 import io
@@ -30,25 +21,16 @@ BLOB_ROOT = STORAGE_ROOT / "blobs"
 TRASH_ROOT = STORAGE_ROOT / "trash"
 MANIFEST_NAME = "manifest.json"
 
-# Upload ids come from the client, so they are matched against this before
-# ever reaching the filesystem.
 UPLOAD_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 READ_CHUNK = 1024 * 1024
 
-# A blob is written before the row referencing it is committed, so only sweep
-# what has been unreferenced for a while.
 GC_GRACE_SECONDS = 3600
 
-# Retired blobs wait here before being deleted for good. The collector decides
-# what is garbage by asking the database, so a database that is empty, freshly
-# migrated, or simply not the right one makes every blob look unreferenced -
-# which is how an analysis lost its files once already. Retiring instead of
-# deleting makes that recoverable rather than final.
+# Retired blobs wait here before being deleted for good. 
 TRASH_RETENTION_DAYS = 7
 # A sweep that would take most of the store is not garbage collection, it is a
-# symptom. Refuse it and say so rather than acting on an answer that cannot be
-# right.
+# symptom. 
 MAX_SWEEP_FRACTION = 0.5
 
 
@@ -65,7 +47,6 @@ def upload_dir(upload_id: str) -> Path | None:
         return None
 
     candidate = (UPLOAD_ROOT / upload_id).resolve()
-    # Belt and braces: the pattern already excludes separators and dots.
     if not candidate.is_relative_to(UPLOAD_ROOT.resolve()):
         return None
     return candidate
@@ -117,8 +98,6 @@ def purge_expired_uploads() -> int:
                 shutil.rmtree(entry, ignore_errors=True)
                 removed += 1
         except OSError:
-            # A directory being written by another request; leave it for the
-            # next sweep rather than failing the one that triggered this.
             continue
 
     if removed:
@@ -240,14 +219,7 @@ def build_zip(entries: list[tuple[str, str]]) -> io.BytesIO:
 
 
 def collect_garbage(referenced: set[str]) -> int:
-    """Retire blobs no artifact points at any more. Returns how many.
-
-    Mark and sweep, not reference counting: the database already knows every
-    digest in use, and a separate count could drift out of step with it. But
-    that makes the sweep only as trustworthy as the answer it is given, so an
-    answer that cannot be right is refused rather than acted on, and what is
-    swept is retired rather than deleted.
-    """
+    """Retire blobs no artifact points at any more. Returns how many."""
     if not BLOB_ROOT.is_dir():
         return 0
 

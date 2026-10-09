@@ -8,13 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class ResultAggregator:
-    """Rolls classified links up to the level the user asked to see.
-
-    Levels are semantic (`ElementLevel`), not depth numbers: a link found on a
-    method can be reported on its enclosing class or file by walking the parent
-    chain until an ancestor with the requested level is found. `None` means
-    "leave the link where the classifier found it".
-    """
+    """Rolls classified links up to the level the user asked to see."""
 
     def __init__(
         self,

@@ -1,16 +1,16 @@
 {
  "environment": {
-  "date": "2026-10-08 19:04",
+  "date": "2026-10-09 22:28",
   "os": "Windows 11 (build 10.0.26200)",
   "python": "3.11.15",
   "pytest": "9.1.1",
   "database": "PostgreSQL 18.3, database 'tracerag_test'",
   "command": "python -m pytest -q --no-header -p no:cacheprovider",
   "blocked_at_import": [
-   "185.199.109.133:443",
+   "185.199.111.133:443",
    "185.199.110.133:443",
-   "185.199.108.133:443",
-   "185.199.111.133:443"
+   "185.199.109.133:443",
+   "185.199.108.133:443"
   ]
  },
  "tests": [
@@ -29,9 +29,9 @@
    "description": "Claiming an upload stores its files by content as the version's file sets, and creates the analysis's sides.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.479793599806726,
+   "duration": 0.42904230020940304,
    "observed": [
-    "version 1 artifacts: [('source', 'requirements', 2, 'upload', '6a00ae555728f1d1'), ('target', 'code', 1, 'upload', '583dd901e630cf80')]",
+    "version 1 artifacts: [('source', 'requirements', 2, 'upload', '723131610d9fe2b3'), ('target', 'code', 1, 'upload', '41d4b35abf631ec5')]",
     "blobs on disk: 3 of 3",
     "sides: [('source', 'requirements', 'reqs', 'upload'), ('target', 'code', 'code', 'upload')]",
     "working folder left: False"
@@ -52,7 +52,7 @@
    "description": "Runs of one version share that version's files: a re-run adds a run, not files.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.3636662997305393,
+   "duration": 0.3358242001850158,
    "observed": [
     "artifacts: first run [3, 4], re-run [3, 4]",
     "file rows before 6, after 6; blobs before 6, after 6"
@@ -73,10 +73,10 @@
    "description": "A second analysis's upload leaves the first analysis's sides and files exactly as they were.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.41499179997481406,
+   "duration": 0.40576160000637174,
    "observed": [
-    "first analysis (sides, files) before: ([(5, 'reqs'), (6, 'code')], [('source', 'fea6603a548ca758'), ('target', 'a694c030dcd59eb7')])",
-    "first analysis (sides, files) after the second upload: ([(5, 'reqs'), (6, 'code')], [('source', 'fea6603a548ca758'), ('target', 'a694c030dcd59eb7')])",
+    "first analysis (sides, files) before: ([(5, 'reqs'), (6, 'code')], [('source', '0a09aa2a47eb2398'), ('target', '8dc0169fe2b57661')])",
+    "first analysis (sides, files) after the second upload: ([(5, 'reqs'), (6, 'code')], [('source', '0a09aa2a47eb2398'), ('target', '8dc0169fe2b57661')])",
     "second analysis's sides: [(7, 'second draft'), (8, 'code')]"
    ]
   },
@@ -95,7 +95,7 @@
    "description": "A pair that was judged once is not asked about again, and gets the same verdict.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.011934799840673804,
+   "duration": 0.012696199817582965,
    "observed": [
     "first run: 2 model calls, links ['login', 'login-copy']",
     "second run: 0 model calls, links ['login', 'login-copy']"
@@ -116,7 +116,7 @@
    "description": "A job is visible to its owner or its token holder only, and is failed if the server stopped under it.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.6168034998700023,
+   "duration": 0.5664622997865081,
    "observed": [
     "can read the job: {'owner': True, 'other user': False, 'right token': True, 'wrong token': False, 'nobody': False}",
     "swept 1 unfinished job(s); state now 'failed': The server stopped before this finished. Start it again."
@@ -137,7 +137,7 @@
    "description": "Embeddings are stored per text and per model namespace.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.02062120009213686,
+   "duration": 0.01779460022225976,
    "observed": [
     "own namespace: 2 of 2 found; other namespace: 0 found",
     "after overwriting: [0.9, 0.9]"
@@ -158,7 +158,7 @@
    "description": "An element whose text has a stored summary is not sent to the model again.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.014896099921315908,
+   "duration": 0.015357800060883164,
    "observed": [
     "chat calls: first 1, second 0, third 1",
     "summaries: ['Summary of item 1.', 'Summary of item 1.', 'Summary of item 2.']"
@@ -179,7 +179,7 @@
    "description": "One unbroken migration chain produces every table and column the code uses.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.152716200100258,
+   "duration": 0.1707573002204299,
    "observed": [
     "heads: ['a1f0c7d3e5b9']; database is at: a1f0c7d3e5b9",
     "model tables: 14; columns missing from the database: none"
@@ -200,7 +200,7 @@
    "description": "What is stored is always the latest run's pairs; 'no list' and 'empty list' mean different things.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.3407333998475224,
+   "duration": 0.29443949996493757,
    "observed": [
     "rows stored after each step: {'2 pairs + 1 duplicate': 2, 'None': 2, '1 new pair': 1, 'empty list': 0}"
    ]
@@ -220,7 +220,7 @@
    "description": "Identical settings do not make two New Analyses one analysis.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.342547100270167,
+   "duration": 0.29666499979794025,
    "observed": [
     "analysis ids: first 8, again 9, documents 10",
     "version numbers: [1, 1, 1]",
@@ -242,7 +242,7 @@
    "description": "An analysis's stored pairs come back as source -> set of targets, and only its own.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.641455999808386,
+   "duration": 0.5471200998872519,
    "observed": [
     "pins: {'UC1.txt': ['Auth.java::Auth::login()', 'Auth.java::Auth::logout()']}",
     "another project's analysis: {}"
@@ -263,7 +263,7 @@
    "description": "The depth that is saved is the depth that was actually used.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.3202031999826431,
+   "duration": 0.27951630018651485,
    "observed": [
     "stored depth per target: {'code': 1, 'architecture': 0}"
    ]
@@ -283,7 +283,7 @@
    "description": "Each analysis counts its own versions from 1.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.330963599961251,
+   "duration": 0.2742448002099991,
    "observed": [
     "analysis A: [1, 2, 3, 4]; analysis B: [1]"
    ]
@@ -303,7 +303,7 @@
    "description": "Stored files outlive the runs that read them, and are collected once their analysis is gone.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8283651999663562,
+   "duration": 0.7566583000589162,
    "observed": [
     "after deleting both runs: 3 of 3 files still stored, version lists 3",
     "after deleting the analysis: 0 still stored, 3 retired to trash"
@@ -324,7 +324,7 @@
    "description": "A sweep that would take most of the store, or that no database row justifies, is refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.02849409985356033,
+   "duration": 0.02322420012205839,
    "observed": [
     "files swept: {'nothing referenced': 0, '1 of 4 referenced': 0, '3 of 4 referenced': 1}",
     "left in the store: ['a', 'b', 'c', 'fresh']; in trash: ['d']"
@@ -345,7 +345,7 @@
    "description": "A project's rows cascade away with it; files another project also holds stay.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.4106573001481593,
+   "duration": 1.1189810002688318,
    "observed": [
     "rows left for the deleted project: {'runs': 0, 'sides': 0, 'analyses': 0, 'versions': 0, 'file sets': 0, 'pins': 0}",
     "survivor: 1 analysis, pins 1, files stored 2 of 2"
@@ -366,7 +366,7 @@
    "description": "Accounts and caches survive the reset migration; project tables come back empty in the new shape.",
    "outcome": "passed",
    "failure": null,
-   "duration": 2.2202099000569433,
+   "duration": 2.18681070022285,
    "observed": [
     "migrated e92b6d4a8c35 -> a1f0c7d3e5b9 (head a1f0c7d3e5b9)",
     "kept: {'users': [['old@example.com']], 'embedding_cache': [[[0.25, 0.5]]], 'summary_cache': [['a summary']], 'classification_cache': [[True]]}",
@@ -389,7 +389,7 @@
    "description": "Another signed-in user is refused on every endpoint that takes an id belonging to someone else.",
    "outcome": "passed",
    "failure": null,
-   "duration": 2.497109900228679,
+   "duration": 2.3048148995731026,
    "observed": [
     "19 requests as another user; status codes seen: [404]",
     "requests that were NOT refused: none",
@@ -412,7 +412,7 @@
    "description": "An anonymous run's job and result can be read by the token holder and nobody else.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.9896178997587413,
+   "duration": 0.6886386000551283,
    "observed": [
     "{'right token': 200, 'wrong token': 404, 'no token': 404, 'another signed-in user': 404}"
    ]
@@ -432,7 +432,7 @@
    "description": "An anonymous caller must not be able to make the server read a folder of its choosing.",
    "outcome": "failed",
    "failure": "AssertionError: anonymous request was answered with 404\nassert 404 in (401, 403)\n +  where 404 = <Response [404 Not Found]>.status_code",
-   "duration": 0.017511599930003285,
+   "duration": 0.013001899933442473,
    "observed": [
     "status without login: 404",
     "file contents returned in the response: False"
@@ -454,7 +454,7 @@
    "description": "An account is created once, signs in only with its password, and is identified by its token.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.1090949999634176,
+   "duration": 1.0864065999630839,
    "observed": [
     "{'register': 201, 'same email in capitals': 409, 'login': 200, 'wrong password': 401, '7-character password': 422, 'me, valid token': 200, 'me, no token': 401, 'me, garbage token': 401}",
     "/auth/me returns: ['created_at', 'email', 'full_name', 'user_id']"
@@ -475,7 +475,7 @@
    "description": "A New Analysis goes from uploaded files to a new analysis with its version, sides and report.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.7530547997448593,
+   "duration": 0.7868931998964399,
    "observed": [
     "links: [('UC1.txt', 'Auth.java::Auth::login'), ('UC2.txt', 'Auth.java::Auth::logout'), ('UC3.txt', 'Loans.java::Loans::borrow')]",
     "unimplemented: ['UC4.txt']",
@@ -501,7 +501,7 @@
    "description": "A re-run is a second run of the same version of the same analysis.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8690671003423631,
+   "duration": 1.092208300018683,
    "observed": [
     "status 201; links: [('UC1.txt', 'Auth.java::Auth::login'), ('UC2.txt', 'Auth.java::Auth::logout'), ('UC3.txt', 'Loans.java::Loans::borrow')]",
     "versions (number, runs): [(1, 2)]",
@@ -525,7 +525,7 @@
    "description": "Whatever a re-run request carries, the run uses its analysis's settings.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8819136000238359,
+   "duration": 1.1802015001885593,
    "observed": [
     "status 201; links: [('UC1.txt', 'Auth.java::Auth::login'), ('UC2.txt', 'Auth.java::Auth::logout'), ('UC3.txt', 'Loans.java::Loans::borrow')]",
     "reported target level: function; analyses: 1"
@@ -546,7 +546,7 @@
    "description": "A run made without an account keeps its files long enough to be saved once the user signs in.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.5644149996805936,
+   "duration": 0.7323450001422316,
    "observed": [
     "anonymous run: 3 links, upload id present: True",
     "save: 201, artifacts claimed: 2, sides: 2"
@@ -567,7 +567,7 @@
    "description": "An architecture document traced to code is a separate analysis from requirements traced to code.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.0080012001562864,
+   "duration": 1.3094540000893176,
    "observed": [
     "document links: [('arch.txt', 'Auth.java::Auth::login'), ('arch.txt', 'Auth.java::Auth::logout'), ('arch.txt', 'Loans.java::Loans::borrow')]",
     "analyses: [(27, 'requirements', 'code'), (28, 'architecture_document', 'code')]",
@@ -589,7 +589,7 @@
    "description": "A depth sent for a target that cannot be expanded is saved as 0.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.7953244999516755,
+   "duration": 0.7953683000523597,
    "observed": [
     "sent depth 1; analysis stores 0, save response says 0"
    ]
@@ -609,7 +609,7 @@
    "description": "The answer to saving a run names the version the run was saved into.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.7637149000074714,
+   "duration": 0.7309634000994265,
    "observed": [
     "save response version_number: 1; list endpoint: 1"
    ]
@@ -629,7 +629,7 @@
    "description": "The options the frontend offers come from the backend's registry.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.009152800077572465,
+   "duration": 0.009814999997615814,
    "observed": [
     "kinds and their preprocessors: {'requirements': ['sentence', 'single'], 'architecture_document': ['sentence', 'single'], 'code': ['method', 'line'], 'architecture': ['model_uml']}",
     "defaults: {'requirements': 'single', 'architecture_document': 'single', 'code': 'method', 'architecture': 'model_uml'}"
@@ -650,7 +650,7 @@
    "description": "One analysis reads back with each side's current files, and each version with its runs.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.4870889000594616,
+   "duration": 1.180019099963829,
    "observed": [
     "sides: [('source', ['UC1.txt', 'UC2.txt', 'UC3.txt', 'UC4.txt', 'UC5.txt']), ('target', ['Auth.java', 'Loans.java'])]",
     "versions (number, runs): [(2, 1), (1, 2)]",
@@ -672,7 +672,7 @@
    "description": "A UML analysis sends component names with its elements and links, live, saved and in the report.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8508151997812092,
+   "duration": 0.7358939999248832,
    "observed": [
     "live links (xmi id, target name, source name): [('_auth', 'Authentication', None), ('_lend', 'Lending', None)]",
     "stored elements: [('model.uml$0$_auth', 'Authentication'), ('model.uml$1$_lend', 'Lending')]",
@@ -694,7 +694,7 @@
    "description": "A code side taken from GitHub is fetched when it moves, and a renamed file keeps its links.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.3205982001964003,
+   "duration": 1.0612249001860619,
    "observed": [
     "connect: 200, location owner/library, branch main",
     "sides (kind, origin): {'source': ('requirements', 'upload'), 'target': ('code', 'github')}",
@@ -723,7 +723,7 @@
    "description": "Connecting GitHub stores the token encrypted and only ever sends the browser back into the app.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.5086335998494178,
+   "duration": 0.4250199997331947,
    "observed": [
     "redirect after connecting: http://localhost:5173/app/history?github=connected&login=octocat",
     "stored token is plain text: False; decrypts to the token: True",
@@ -747,7 +747,7 @@
    "description": "When GitHub rejects the stored token, the app drops it and says the account must be reconnected.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8602592998649925,
+   "duration": 0.7808752998244017,
    "observed": [
     "code side status: changed=False, needs_reconnect=True, error=GitHub rejected the access token.",
     "account token still stored: False",
@@ -769,7 +769,7 @@
    "description": "The connection check reports a token GitHub has just rejected as needing a reconnect.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.4456911999732256,
+   "duration": 0.39739769976586103,
    "observed": [
     "first read: {'connected': False, 'login': None, 'configured': True, 'needs_reconnect': True}",
     "second read: {'connected': False, 'login': None, 'configured': True, 'needs_reconnect': False}"
@@ -790,7 +790,7 @@
    "description": "A side without a token is fetched with the account connection; a side with one uses its own.",
    "outcome": "passed",
    "failure": null,
-   "duration": 2.0524681999813765,
+   "duration": 1.8517311997711658,
    "observed": [
     "account side: has_token=False; own-token side: has_token=True",
     "tokens the two fetches used: ['gho_token_for_abc', 'side-token']"
@@ -811,7 +811,7 @@
    "description": "A New Analysis and three requirement updates give four versions and a report that explains each link.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.945205399999395,
+   "duration": 1.8221944002434611,
    "observed": [
     "v2: Version 2: source side updated, 3 trace links.",
     "v3: Version 3: source side updated, 3 trace links.",
@@ -836,7 +836,7 @@
    "description": "Files moved into a folder, some with CRLF, are recognised as renamed and keep their links.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.3437546999193728,
+   "duration": 1.0960612001363188,
    "observed": [
     "update: Version 2: target side updated, 3 trace links.",
     "files: {'added': [], 'removed': [], 'modified': [], 'renamed': [{'old': 'Auth.java', 'new': 'code/Auth.java'}, {'old': 'Loans.java', 'new': 'code/Loans.java'}]}",
@@ -858,7 +858,7 @@
    "description": "An update and a fresh analysis of the same new files find exactly the same links.",
    "outcome": "passed",
    "failure": null,
-   "duration": 5.010578399989754,
+   "duration": 4.51305940002203,
    "observed": [
     "modified sentence: update v2 has 3 links, fresh has 3; differing: none",
     "inserted sentence: update v2 has 3 links, fresh has 3; differing: none",
@@ -881,7 +881,7 @@
    "description": "A classifier that dies in the middle of an update leaves the analysis exactly as it was.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.312578200129792,
+   "duration": 1.1647340999916196,
    "observed": [
     "job: failed - the classifier stopped answering",
     "versions (number, runs): [(1, 1)]",
@@ -904,7 +904,7 @@
    "description": "Bad files for an update are refused, make no version and leave nothing behind.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8692315998487175,
+   "duration": 0.9079683001618832,
    "observed": [
     "no files: 400 - Choose at least one file.",
     "wrong extension: 400 - 'notes.md' is not a supported requirements file. Accepted: .docx, .pdf, .txt.",
@@ -928,7 +928,7 @@
    "description": "The line diff, the analysis itself and every update endpoint refuse other users and anonymous callers.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.7521000998094678,
+   "duration": 1.7215414999518543,
    "observed": [
     "as another user: {'GET /projects/35/configs/49': 404, 'GET /projects/35/configs/49/report/diff': 404, 'DELETE /projects/35/configs/49': 404}",
     "anonymous: [401] over 11 requests",
@@ -950,7 +950,7 @@
    "description": "No version without a run, no file row without its blob, and a deleted run takes no shared files.",
    "outcome": "passed",
    "failure": null,
-   "duration": 2.271113900002092,
+   "duration": 2.1376390997320414,
    "observed": [
     "versions [(4, 1), (3, 1), (2, 1), (1, 1)]; file rows 23",
     "before delete: versions without a run [], rows without a blob []",
@@ -973,7 +973,7 @@
    "description": "Inserting one UML component renumbers the others but keeps their links, shown by name.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.4236975000239909,
+   "duration": 1.144732200074941,
    "observed": [
     "update: Version 2: target side updated, 3 trace links.; elements {'added': ['model.uml$0$_audit'], 'removed': [], 'modified': [], 'moved': [{'old': 'model.uml$0$_auth', 'new': 'model.uml$1$_auth'}, {'old': 'model.uml$1$_lend', 'new': 'model.uml$2$_lend'}]}",
     "component ids before ['model.uml$0$_auth', 'model.uml$1$_lend'], after ['model.uml$1$_auth', 'model.uml$2$_lend']",
@@ -995,7 +995,7 @@
    "description": "A reformatting commit makes no version and is then no longer reported as new.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.1095563997514546,
+   "duration": 1.0482695000246167,
    "observed": [
     "status after the reformatting push: (True, 'commit-1', 'commit-2')",
     "update: 'No meaningful change: 2 file(s) differ, but no element the analysis compares changed. No new version was made.'",
@@ -1018,7 +1018,7 @@
    "description": "Deleting a version's last run is refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8217696999199688,
+   "duration": 0.8095174001064152,
    "observed": [
     "delete: 409 - This is the only run of this version.; run afterwards: 200; versions [(1, 1)]"
    ]
@@ -1038,7 +1038,7 @@
    "description": "A version with two runs can lose one of them, not both.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.0400947998277843,
+   "duration": 1.0282610999420285,
    "observed": [
     "delete the re-run: 204; versions [(1, 1)]; delete the last run: 409"
    ]
@@ -1058,7 +1058,7 @@
    "description": "A run-less earlier version gives the later version's links, uncompared, instead of an error.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.2856753000523895,
+   "duration": 1.2507158000953496,
    "observed": [
     "1 -> 2: 200; no_run_version 1; links 3; net files ['UC1.txt']",
     "with v2's run gone too: no_run_version 2; links 0"
@@ -1079,7 +1079,7 @@
    "description": "By default the report compares against the nearest earlier version with a run.",
    "outcome": "passed",
    "failure": null,
-   "duration": 2.314743400318548,
+   "duration": 2.2761481998022646,
    "observed": [
     "v3 with a run-less v2: 1 -> 3, no_run_version None, {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 1}",
     "v2 with a run-less v1: 1 -> 2, no_run_version 1, links 3"
@@ -1100,7 +1100,7 @@
    "description": "Each kind of bad upload is refused with its own message and cleaned up.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.19514280022121966,
+   "duration": 0.10802909987978637,
    "observed": [
     "no artifacts: 400 - Upload at least one artifact.",
     "invalid JSON: 400 - 'artifacts' is not valid JSON: Expecting property name enclosed in double quotes",
@@ -1131,7 +1131,7 @@
    "description": "Deleting one analysis does not take away files another analysis still uses.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.434489100240171,
+   "duration": 1.4116195999085903,
    "observed": [
     "{'delete': 204, 'original afterwards': 404, 'download re-run artifact': 200, 'run it again': 201}",
     "re-run's files still stored: 6 of 6; files_available: [True, True]"
@@ -1152,7 +1152,7 @@
    "description": "An analysis lists its two sides, and requests that make no sense are refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8584549997467548,
+   "duration": 0.7954768999479711,
    "observed": [
     "sides: [('source', 'requirements', 'reqs'), ('target', 'code', 'code')]",
     "bad requests: {'stage for unknown': 404, 'stage no files': 400, 'GitHub for requirements': 400, 'unknown analysis': 404}"
@@ -1173,7 +1173,7 @@
    "description": "An artifact downloads as a zip holding the same files, byte for byte.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.7514977001119405,
+   "duration": 0.7096632998436689,
    "observed": [
     "status 200; attachment; filename=\"target-code-138.zip\"",
     "files in the zip: ['Auth.java', 'Loans.java']; identical to the upload: True"
@@ -1194,7 +1194,7 @@
    "description": "New requirement files handed over for an update become the analysis's requirements, and the report follows.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.1239885999821126,
+   "duration": 1.1784332999959588,
    "observed": [
     "staged: 4 files, 3 matched, 1 missing",
     "update: Version 2: source side updated, 4 trace links.",
@@ -1220,7 +1220,7 @@
    "description": "The first update after a New Analysis re-offers that analysis's links, so none is lost to a shifted top-k.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8063493999652565,
+   "duration": 0.9899782999418676,
    "observed": [
     "links after the New Analysis: [('UC9.txt', 'Auth.java::Auth::login'), ('UC9.txt', 'Auth.java::Auth::logout')]",
     "'element_links' present in the result the client is given: True",
@@ -1245,7 +1245,7 @@
    "description": "After a re-run, the next update re-offers that run's links and none is lost.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8534379000775516,
+   "duration": 1.0753786000423133,
    "observed": [
     "pins stored after one re-run: 2",
     "links after adding Pager.java and updating: [('UC9.txt', 'Auth.java::Auth::login'), ('UC9.txt', 'Auth.java::Auth::logout')]",
@@ -1268,7 +1268,7 @@
    "description": "A result that does not carry pairs is saved without any, and every other analysis keeps its own.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.9992674002423882,
+   "duration": 1.1639794998336583,
    "observed": [
     "pins of the first analysis: 2 before, 2 after",
     "saved with no 'element_links' field: status and own pins (201, 0)",
@@ -1291,7 +1291,7 @@
    "description": "Pairs sent with a save are stored for the saver's own project and nowhere else.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.0617704002652317,
+   "duration": 1.2453040999826044,
    "observed": [
     "A's pins before: 2; after B's own save and B's post to A's project: 2",
     "B's own analysis (a different one): 2 pins",
@@ -1313,7 +1313,7 @@
    "description": "Updating one analysis's side changes nothing about another analysis in the same project.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.1215904001146555,
+   "duration": 1.4459232001099735,
    "observed": [
     "code analysis: Version 2: source side updated, 4 trace links.",
     "versions: code [(2, 1), (1, 1)], document [(1, 1)]",
@@ -1335,7 +1335,7 @@
    "description": "An unchanged side is left alone, and an uploaded side cannot be updated without its files.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.783684799913317,
+   "duration": 0.9637189002241939,
    "observed": [
     "first update: synced=False, 'Nothing has changed: the target side already holds exactly these files.'",
     "unchanged repository: started=False, 'Nothing has changed since this side was last fetched. Nothing was fetched.'",
@@ -1358,7 +1358,7 @@
    "description": "Identical files are recognised as identical, and no version is made.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.7743835998699069,
+   "duration": 0.752826499985531,
    "observed": [
     "staged changes: {'role': 'source', 'files': {'added': [], 'removed': [], 'modified': [], 'renamed': []}, 'elements': {'added': [], 'removed': [], 'modified': [], 'moved': []}, 'changed': False, 'meaningful': False}",
     "update: started=False, 'Nothing has changed: the source side already holds exactly these files.'"
@@ -1379,7 +1379,7 @@
    "description": "Files that differ only in whitespace make no new version.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.9397393998224288,
+   "duration": 0.8434587004594505,
    "observed": [
     "staged: files modified ['UC1.txt', 'UC2.txt', 'UC3.txt', 'UC4.txt']; elements {'added': [], 'removed': [], 'modified': [], 'moved': []}; meaningful False",
     "update: started=False, 'No meaningful change: 4 file(s) differ, but no element the analysis compares changed. No new version was made.'"
@@ -1400,7 +1400,7 @@
    "description": "Pins and links follow sentences that moved when another was inserted above them.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.000853899633512,
+   "duration": 1.0244268998503685,
    "observed": [
     "links before: [('UC.txt::sentence_0', 'Auth.java::Auth::login'), ('UC.txt::sentence_1', 'Auth.java::Auth::logout'), ('UC.txt::sentence_2', 'Loans.java::Loans::borrow')]",
     "staged: files ['UC.txt'], elements {'added': ['UC.txt::sentence_1'], 'removed': [], 'modified': [], 'moved': [{'old': 'UC.txt::sentence_1', 'new': 'UC.txt::sentence_2'}, {'old': 'UC.txt::sentence_2', 'new': 'UC.txt::sentence_3'}]}",
@@ -1424,7 +1424,7 @@
    "description": "An update that cannot be done is refused up front with a reason.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.8808228003326803,
+   "duration": 0.8306424000766128,
    "observed": [
     "no stored files: 409 - This analysis has no stored files, so there is nothing to update. Run and save it from an upload first.",
     "unknown side: 404 - Side not found.",
@@ -1448,7 +1448,7 @@
    "description": "A link whose requirement was removed is reported as broken, not dropped.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.0684075001627207,
+   "duration": 1.1104466998949647,
    "observed": [
     "summary: {'valid': 2, 'no_longer_found': 0, 'broken': 1, 'new': 0, 'uncovered': 1}",
     "broken links: [('UC3.txt', 'borrow(String title)', False, True, True)]"
@@ -1469,7 +1469,7 @@
    "description": "An update whose run failed leaves the analysis exactly as it was.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.0762854998465627,
+   "duration": 1.0066203002352268,
    "observed": [
     "job state: failed - the model could not be reached",
     "versions (number, runs): [(1, 1)]",
@@ -1491,7 +1491,7 @@
    "description": "A report between distant versions follows every version's id map in between.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.402933299774304,
+   "duration": 1.3349840000737458,
    "observed": [
     "1 -> 3: {('UC.txt::sentence_0', 'Auth.java::Auth::login'): 'valid', ('UC.txt::sentence_2', 'Auth.java::Auth::logout'): 'valid', ('UC.txt::sentence_2', 'Loans.java::Loans::borrow'): 'broken'}",
     "versions listed: [(2, {'added': ['UC.txt::sentence_1'], 'removed': [], 'modified': [], 'moved': [{'old': 'UC.txt::sentence_1', 'new': 'UC.txt::sentence_2'}, {'old': 'UC.txt::sentence_2', 'new': 'UC.txt::sentence_3'}]}), (3, {'added': [], 'removed': ['UC.txt::sentence_3'], 'modified': [], 'moved': []})]",
@@ -1514,7 +1514,7 @@
    "description": "A sentence inserted and removed again leaves every link valid.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.296895399922505,
+   "duration": 1.3699156001675874,
    "observed": [
     "1 -> 3: {('UC.txt::sentence_0', 'Auth.java::Auth::login'): 'valid', ('UC.txt::sentence_1', 'Auth.java::Auth::logout'): 'valid', ('UC.txt::sentence_2', 'Loans.java::Loans::borrow'): 'valid'}; {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 0}"
    ]
@@ -1534,7 +1534,7 @@
    "description": "The net change between two versions shows only what differs between them.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.5155358002521098,
+   "duration": 1.5215674000792205,
    "observed": [
     "net rows: [('UC1.txt', 'modified', 1, 1)]; whole documents: True; counts {'files_added': 0, 'files_removed': 0, 'files_modified': 1, 'files_renamed': 0, 'elements_added': 0, 'elements_removed': 0, 'elements_modified': 1, 'elements_moved': 0}",
     "step by step (version, files added): [(2, ['UC5.txt']), (3, [])]"
@@ -1555,7 +1555,7 @@
    "description": "A sentence inserted and removed again is not part of the net change.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.2967691998928785,
+   "duration": 1.3649368002079427,
    "observed": [
     "net: [('source', {'files_added': 0, 'files_removed': 0, 'files_modified': 0, 'files_renamed': 0, 'elements_added': 0, 'elements_removed': 0, 'elements_modified': 0, 'elements_moved': 0}, []), ('target', {'files_added': 0, 'files_removed': 0, 'files_modified': 0, 'files_renamed': 0, 'elements_added': 0, 'elements_removed': 0, 'elements_modified': 0, 'elements_moved': 0}, [])]",
     "step by step (version, added, removed): [(2, ['UC.txt::sentence_1'], []), (3, [], ['UC.txt::sentence_1'])]"
@@ -1576,7 +1576,7 @@
    "description": "A missing blob drops the net change, not the report.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.128192000091076,
+   "duration": 1.0759169000666589,
    "observed": [
     "net_available: False; net sides: 0; step by step versions: [2]; summary {'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 0}"
    ]
@@ -1596,7 +1596,7 @@
    "description": "A changed text file's diff is read from the stored files, capped, and refused for PDFs.",
    "outcome": "passed",
    "failure": null,
-   "duration": 1.1915892998222262,
+   "duration": 1.2866220998112112,
    "observed": [
     "UC1.txt: {'lines': ['@@ -1 +1 @@', '-A visitor performs a login with a passphrase.', '+A visitor performs a login with a passphrase, twice.'], 'truncated': False}",
     "UC9.txt: 200 lines, truncated=True; pdf: 400"
@@ -1617,7 +1617,7 @@
    "description": "A link both runs found, between unchanged elements, is valid and neither end changed.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.003728400217369199,
+   "duration": 0.0037242998369038105,
    "observed": [
     "{'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 0}"
    ]
@@ -1637,7 +1637,7 @@
    "description": "A link that disappeared between two unchanged elements is no longer found, for no reason in the files.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0028244999703019857,
+   "duration": 0.002829400124028325,
    "observed": [
     "{'state': 'no_longer_found', 'source_id': 'UC2', 'target_id': 'Auth::logout()', 'source_present': True, 'target_present': True, 'source_changed': False, 'target_changed': False, 'confidence': 0.9, 'confidence_level': 'high', 'explanation': None}"
    ]
@@ -1657,7 +1657,7 @@
    "description": "A link lost after its requirement was edited names the source as what changed.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0026990000624209642,
+   "duration": 0.003042099764570594,
    "observed": [
     "{('UC1', 'Auth::login()'): (False, False), ('UC2', 'Auth::logout()'): (True, False), ('UC3', 'Loans::borrow()'): (False, False)}"
    ]
@@ -1677,7 +1677,7 @@
    "description": "A link kept across an edit to its code says the target changed.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0020391996949911118,
+   "duration": 0.0031082001514732838,
    "observed": [
     "{('UC1', 'Auth::login()'): (False, False), ('UC2', 'Auth::logout()'): (False, True), ('UC3', 'Loans::borrow()'): (False, False)}"
    ]
@@ -1697,7 +1697,7 @@
    "description": "A link with an end that no longer exists is broken, and says which end.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.002894100034609437,
+   "duration": 0.0031804002355784178,
    "observed": [
     "requirement removed: {'state': 'broken', 'source_id': 'UC3', 'target_id': 'Loans::borrow()', 'source_present': False, 'target_present': True, 'source_changed': True, 'target_changed': False, 'confidence': 0.9, 'confidence_level': 'high', 'explanation': None}",
     "code removed: {'state': 'broken', 'source_id': 'UC3', 'target_id': 'Loans::borrow()', 'source_present': True, 'target_present': False, 'source_changed': False, 'target_changed': True, 'confidence': 0.9, 'confidence_level': 'high', 'explanation': None}"
@@ -1718,7 +1718,7 @@
    "description": "A link only the later run found is new, and says whether either end is new or edited.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.002629200229421258,
+   "duration": 0.0029974000062793493,
    "observed": [
     "{('UC1', 'Auth::login()'): (False, False), ('UC2', 'Auth::logout()'): (False, False), ('UC3', 'Loans::borrow()'): (False, False), ('UC4', 'Loans::borrow()'): (True, False), ('UC1', 'Auth::logout()'): (False, False)}"
    ]
@@ -1738,7 +1738,7 @@
    "description": "Sources with no link in the later version are listed; removed ones are not.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0027689996641129255,
+   "duration": 0.0031803003512322903,
    "observed": [
     "uncovered: ['UC2']; summary {'valid': 1, 'no_longer_found': 1, 'broken': 1, 'new': 0, 'uncovered': 1}"
    ]
@@ -1758,7 +1758,7 @@
    "description": "A link whose element moved is the same link under its new identifier.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0022005997598171234,
+   "duration": 0.002023400040343404,
    "observed": [
     "{('s0', 'Auth::login()'): 'valid', ('s2', 'Auth::logout()'): 'valid'}"
    ]
@@ -1778,7 +1778,7 @@
    "description": "With nothing to compare against, every link is reported as it stands.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0024691999424248934,
+   "duration": 0.0022521999198943377,
    "observed": [
     "{'valid': 3, 'no_longer_found': 0, 'broken': 0, 'new': 0, 'uncovered': 1}"
    ]
@@ -1798,7 +1798,7 @@
    "description": "Each changed file says how many links touch it on its side, and how many say that end changed.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0020622999873012304,
+   "duration": 0.001793599920347333,
    "observed": [
     "[('Auth.java', 2, 1), ('security/Pay.java', 1, 1)]"
    ]
@@ -1818,7 +1818,7 @@
    "description": "A reply that follows the prompt's format is read from its tags, whatever else it says.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.002404300030320883,
+   "duration": 0.003810000140219927,
    "observed": [
     "simple: {'<trace>yes</trace>': True, '<trace>NO</trace>': False, '<think>yes, this could match</think>\\n<trace>no</trace>': False, 'Reasoning: yes and no.\\n<trace>no</trace>': False}",
     "reasoning: {'<trace>yes</trace>': True, '<trace>NO</trace>': False, '<think>yes, this could match</think>\\n<trace>no</trace>': False, 'Reasoning: yes and no.\\n<trace>no</trace>': False}",
@@ -1840,7 +1840,7 @@
    "description": "A reply without the tag that plainly says no must not become a link.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0022042999044060707,
+   "duration": 0.0030405998695641756,
    "observed": [
     "simple: 'No. The eyes of the reader are not involved.' -> not linked",
     "simple: 'No - that was removed yesterday.' -> not linked",
@@ -1863,7 +1863,7 @@
    "description": "An inserted sentence is the only addition; the sentences after it moved, not changed.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0025182999670505524,
+   "duration": 0.003676400054246187,
    "observed": [
     "{'added': ['UC1.txt::sentence_1'], 'removed': [], 'modified': [], 'moved': [('UC1.txt::sentence_1', 'UC1.txt::sentence_2'), ('UC1.txt::sentence_2', 'UC1.txt::sentence_3')]}"
    ]
@@ -1883,7 +1883,7 @@
    "description": "A removed sentence is reported removed, and the one that slid into its place is reported moved.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.003186600049957633,
+   "duration": 0.002791699720546603,
    "observed": [
     "{'added': [], 'removed': ['UC1.txt::sentence_1'], 'modified': [], 'moved': [('UC1.txt::sentence_2', 'UC1.txt::sentence_1')]}"
    ]
@@ -1903,7 +1903,7 @@
    "description": "A reworded sentence is modified in place.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.003584800288081169,
+   "duration": 0.002404100028797984,
    "observed": [
     "{'added': [], 'removed': [], 'modified': [('UC1.txt::sentence_0', 'UC1.txt::sentence_0')], 'moved': []}",
     "shown to the user: {'added': [], 'removed': [], 'modified': ['UC1.txt::sentence_0'], 'moved': []}"
@@ -1924,7 +1924,7 @@
    "description": "Swapped sentences are two moves, and no edit.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0025458999443799257,
+   "duration": 0.003144300077110529,
    "observed": [
     "{'added': [], 'removed': [], 'modified': [], 'moved': [('UC1.txt::sentence_0', 'UC1.txt::sentence_1'), ('UC1.txt::sentence_1', 'UC1.txt::sentence_0')]}"
    ]
@@ -1944,7 +1944,7 @@
    "description": "A file whose content reappears under a new path is a rename, and its elements follow it.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0025673999916762114,
+   "duration": 0.0021816000808030367,
    "observed": [
     "files: added [], removed [], modified ['UC1.txt'], renamed {'UC2.txt': 'archive/UC2.txt'}",
     "{'added': [], 'removed': [], 'modified': [], 'moved': [('UC2.txt::sentence_0', 'archive/UC2.txt::sentence_0'), ('UC2.txt::sentence_1', 'archive/UC2.txt::sentence_1')]}"
@@ -1965,7 +1965,7 @@
    "description": "Only whitespace changed: the files differ, the elements do not.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0038699002470821142,
+   "duration": 0.0037229000590741634,
    "observed": [
     "file diff: modified ['UC1.txt']",
     "text: {'added': [], 'removed': [], 'modified': [], 'moved': []}, meaningful False",
@@ -1987,7 +1987,7 @@
    "description": "A new component shifts the counters of the others; they are moved, not changed.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0036340998485684395,
+   "duration": 0.003084499854594469,
    "observed": [
     "shown to the user: {'added': ['model.uml$0$_cat'], 'removed': [], 'modified': [], 'moved': [{'old': 'model.uml$0$_auth', 'new': 'model.uml$1$_auth'}, {'old': 'model.uml$1$_lend', 'new': 'model.uml$2$_lend'}]}"
    ]
@@ -2007,7 +2007,7 @@
    "description": "A rewritten method stays itself; a deleted one and a new one stay apart.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.005848299711942673,
+   "duration": 0.0037070997059345245,
    "observed": [
     "shown to the user: {'added': ['Auth.java::Auth::audit(String event)'], 'removed': ['Auth.java::Auth::clear()'], 'modified': ['Auth.java::Auth::login(String name, String password)'], 'moved': []}"
    ]
@@ -2027,7 +2027,7 @@
    "description": "Pins follow moved elements and are dropped when an end was removed.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0037575000897049904,
+   "duration": 0.0023231999948620796,
    "observed": [
     "before: {'UC1.txt::sentence_0': ['Auth.java::Auth::login()'], 'UC1.txt::sentence_1': ['Auth.java::Auth::logout()'], 'UC1.txt::sentence_2': ['Loans.java::Loans::borrow()']}",
     "after: {'UC1.txt::sentence_0': ['Auth.java::Auth::login()'], 'UC1.txt::sentence_3': ['Loans.java::Loans::borrow()']}"
@@ -2048,7 +2048,7 @@
    "description": "Maps read back from storage are the maps that were stored, and chain across versions.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0040045001078397036,
+   "duration": 0.0027387000154703856,
    "observed": [
     "version 2: {'moved': {'UC1.txt::sentence_1': 'UC1.txt::sentence_2', 'UC1.txt::sentence_2': 'UC1.txt::sentence_3'}, 'removed': []}",
     "version 3: {'moved': {}, 'removed': ['UC1.txt::sentence_3']}",
@@ -2070,7 +2070,7 @@
    "description": "A sentence pushed down and back up again is still there under its old name.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0016645998694002628,
+   "duration": 0.0017760000191628933,
    "observed": [
     "{'moved': {}, 'removed': []}"
    ]
@@ -2090,7 +2090,7 @@
    "description": "Swapping twice returns every identifier to its element.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0016119999345391989,
+   "duration": 0.002039299812167883,
    "observed": [
     "{'moved': {}, 'removed': []}"
    ]
@@ -2110,7 +2110,7 @@
    "description": "An element removed after moving is removed.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.001722599845379591,
+   "duration": 0.0018445001915097237,
    "observed": [
     "{'moved': {}, 'removed': ['s1']}"
    ]
@@ -2130,7 +2130,7 @@
    "description": "The element that takes a freed name is not the one that had it.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0016206996515393257,
+   "duration": 0.0021396002266556025,
    "observed": [
     "{'moved': {'y': 'x'}, 'removed': ['x']}"
    ]
@@ -2150,7 +2150,7 @@
    "description": "Chaining three maps gives one answer, whichever pair is joined first.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0018287997227162123,
+   "duration": 0.0018074000254273415,
    "observed": [
     "left: {'moved': {'s0': 's1', 's1': 's3'}, 'removed': ['s2']}; right: {'moved': {'s0': 's1', 's1': 's3'}, 'removed': ['s2']}"
    ]
@@ -2170,7 +2170,7 @@
    "description": "Elements that only changed position in their file are counted; a move to another file is listed.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.002222399925813079,
+   "duration": 0.002518800087273121,
    "observed": [
     "counts: {'files_added': 0, 'files_removed': 0, 'files_modified': 2, 'files_renamed': 0, 'elements_added': 1, 'elements_removed': 0, 'elements_modified': 0, 'elements_moved': 2}",
     "listed: {'UC1.txt': [('added', None, 'UC1.txt::sentence_0')], 'UC2.txt': [('moved', 'UC1.txt::sentence_1', 'UC2.txt::sentence_1')]}"
@@ -2191,7 +2191,7 @@
    "description": "A renamed method is one modified element, listed with its old and new identifier.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0030115998815745115,
+   "duration": 0.0031413999386131763,
    "observed": [
     "[{'change': 'modified', 'old': 'Auth.java::Auth::login(String name)', 'new': 'Auth.java::Auth::signIn(String name)', 'label': 'Auth.signIn'}]"
    ]
@@ -2211,7 +2211,7 @@
    "description": "Renames recorded along the way tie a renamed and later edited file back to its old path.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0016079999040812254,
+   "duration": 0.0018326998688280582,
    "observed": [
     "chained renames: {'UC2.txt': 'old/UC2.txt'}",
     "with them: renamed {'UC2.txt': 'old/UC2.txt'}; without: added ['old/UC2.txt'], removed ['UC2.txt']"
@@ -2232,7 +2232,7 @@
    "description": "The application under test is pointed at the test database and a scratch storage folder.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0019471999257802963,
+   "duration": 0.00229830015450716,
    "observed": [
     "database in use: tracerag_test; database in .env: tracerag",
     "storage root: D:\\Downloads\\TraceRAG\\backend\\tests\\.work\\storage",
@@ -2254,7 +2254,7 @@
    "description": "A connection that would leave the machine, or reach Ollama, is refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0018504001200199127,
+   "duration": 0.0022980000358074903,
    "observed": [
     "api.github.com:443 -> Network access is blocked in tests: api.github.com:443",
     "localhost:11434 -> Network access is blocked in tests: localhost:11434"
@@ -2275,7 +2275,7 @@
    "description": "The fake embedder and classifier give the same answer every time.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0033482001163065434,
+   "duration": 0.003488700371235609,
    "observed": [
     "similarity(login req, login code) = 0.167",
     "similarity(login req, report code) = 0.000",
@@ -2298,7 +2298,7 @@
    "description": "Only a path inside the app is accepted as somewhere to send the browser back to.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0016369002405554056,
+   "duration": 0.0017903000116348267,
    "observed": [
     "{'/app/history?project=4': '/app/history?project=4', 'https://evil.com': '/app/profile', '//evil.com': '/app/profile', '/\\\\evil.com': '/app/profile', 'app/profile': '/app/profile', '': '/app/profile', 'None': '/app/profile'}"
    ]
@@ -2318,7 +2318,7 @@
    "description": "A state token is accepted only if it is ours, unexpired and made for this handshake.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0025738999247550964,
+   "duration": 0.0025082998909056187,
    "observed": [
     "valid state -> user 7, return to /app/history",
     "tampered -> That sign-in link is not valid.",
@@ -2342,7 +2342,7 @@
    "description": "Only plain files inside the repository are unpacked, with GitHub's wrapper folder dropped.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.02003729995340109,
+   "duration": 0.02121860021725297,
    "observed": [
     "files on disk after extraction: ['repo.tar.gz', 'work/checkout/src/A.java']"
    ]
@@ -2362,7 +2362,7 @@
    "description": "Every way GitHub writes a repository's address is understood; anything else is refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0020300999749451876,
+   "duration": 0.0021642998326569796,
    "observed": [
     "{'owner/repo': 'owner/repo', 'https://github.com/owner/repo': 'owner/repo', 'github.com/owner/repo.git': 'owner/repo', 'git@github.com:owner/repo.git': 'owner/repo', 'https://github.com/owner/repo/': 'owner/repo', 'https://github.com/owner/repo/tree/main': 'owner/repo'}",
     "'not a repository!!' -> 'not a repository!!' does not look like a GitHub repository. Paste its URL, or write it as owner/name.",
@@ -2384,9 +2384,9 @@
    "description": "A stored token is unreadable without the key, and says so when the key is wrong.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0037314000073820353,
+   "duration": 0.0034258002415299416,
    "observed": [
-    "stored form starts: gAAAAABqx5T33kLy... (120 characters)",
+    "stored form starts: gAAAAABqyRYyvCOs... (120 characters)",
     "with a different key: A stored access token could not be read. This happens when secret_key changes; the connection has to be made again."
    ]
   },
@@ -2405,10 +2405,10 @@
    "description": "The two providers name elements differently; the stored form must be the same for both.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.020523899933323264,
+   "duration": 0.022903299890458584,
    "observed": [
     "document provider gives: UC1.txt",
-    "code provider gives: C:\\Users\\LENOVO\\AppData\\Local\\Temp\\pytest-of-LENOVO\\pytest-44\\test_document_and_code_identif0\\target\\Auth.java",
+    "code provider gives: C:\\Users\\LENOVO\\AppData\\Local\\Temp\\pytest-of-LENOVO\\pytest-46\\test_document_and_code_identif0\\target\\Auth.java",
     "stored form of the document: UC1.txt",
     "stored form of the method: Auth.java::Auth::login(String name, String passphrase)"
    ]
@@ -2428,9 +2428,9 @@
    "description": "A path is shortened only when it is really inside a workspace root.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.00419699982739985,
+   "duration": 0.0060918997041881084,
    "observed": [
-    "{'nested': 'pkg/sub/A.java', 'sibling': 'C:\\\\Users\\\\LENOVO\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-LENOVO\\\\pytest-44\\\\test_only_paths_inside_the_wor0\\\\target2\\\\A.java', 'outside': 'C:\\\\elsewhere\\\\A.java::A::run()'}"
+    "{'nested': 'pkg/sub/A.java', 'sibling': 'C:\\\\Users\\\\LENOVO\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-LENOVO\\\\pytest-46\\\\test_only_paths_inside_the_wor0\\\\target2\\\\A.java', 'outside': 'C:\\\\elsewhere\\\\A.java::A::run()'}"
    ]
   },
   {
@@ -2448,7 +2448,7 @@
    "description": "Whitespace a reader would not notice does not change what the content is.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0018934998661279678,
+   "duration": 0.001838600030168891,
    "observed": [
     "original 3d4be321093b, reformatted 3d4be321093b, edited ccb94c558ef1"
    ]
@@ -2468,7 +2468,7 @@
    "description": "Components are named by their model; duplicates get their file; everything else keeps its id.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0017395999748259783,
+   "duration": 0.001787800109013915,
    "observed": [
     "{'bbb.uml$0$_auth': 'Authentication', 'a.uml$1$_lend': 'Lending (a.uml)', 'b.uml$1$_lend': 'Lending (b.uml)', 'bbb.uml$2$_x': 'bbb.uml$2$_x', 'UC1.txt::sentence_8': 'UC1.txt::sentence_8', 'Auth.java::Auth::login()': 'Auth.java::Auth::login()'}"
    ]
@@ -2488,7 +2488,7 @@
    "description": "A link retrieval no longer surfaces is offered to the classifier again and kept.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.3941687000915408,
+   "duration": 0.43710209988057613,
    "observed": [
     "first run, top-k 10: [('UC9.txt', 'Auth.java::Auth::login'), ('UC9.txt', 'Auth.java::Auth::logout')]",
     "top-k 1, no pins: [('UC9.txt', 'Auth.java::Auth::logout')]",
@@ -2510,7 +2510,7 @@
    "description": "The whole pipeline, on a corpus where the right answer is known.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.2970656000543386,
+   "duration": 0.3338113999925554,
    "observed": [
     "links: [('UC1.txt', 'Auth.java::Auth::login'), ('UC2.txt', 'Auth.java::Auth::logout'), ('UC3.txt', 'Loans.java::Loans::borrow')]",
     "unimplemented: ['UC4.txt']",
@@ -2532,7 +2532,7 @@
    "description": "Pins that do not match this run's identifiers are reported, not silently ignored.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.2602700002025813,
+   "duration": 0.29421090008690953,
    "observed": [
     "links: 1",
     "warning: None of the 1 pinned source identifier(s) match this run's elements, so no link can be carried over. They are probably stored in a different form than the run produces."
@@ -2553,7 +2553,7 @@
    "description": "A Java file is split into a file, its class, and one element per method.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0029913000762462616,
+   "duration": 0.0028121001087129116,
    "observed": [
     "['code/Auth.java [file, compare=False]', 'code/Auth.java::Auth [class, compare=False]', 'code/Auth.java::Auth::login(String name, String passphrase) [function, compare=True]', 'code/Auth.java::Auth::logout() [function, compare=True]', 'code/Auth.java::Auth::clear() [function, compare=True]']"
    ]
@@ -2573,7 +2573,7 @@
    "description": "Links are reported on the ancestor at the requested level, one per pair.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.002179899951443076,
+   "duration": 0.002197599969804287,
    "observed": [
     "at file level: [('A.java', 0.9, 'high'), ('B.java', 0.5, 'low')]",
     "with no level: ['A.java::A::m1', 'A.java::A::m2', 'B.java::m1']"
@@ -2594,7 +2594,7 @@
    "description": "A document is read as one element, or as one element per sentence under it.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.002089699963107705,
+   "duration": 0.002281700260937214,
    "observed": [
     "whole document: ['arch.txt [artifact, compare=True]']",
     "by sentence: ['arch.txt [artifact, compare=False]', 'arch.txt::sentence_0 [sentence, compare=True]', 'arch.txt::sentence_1 [sentence, compare=True]']"
@@ -2615,7 +2615,7 @@
    "description": "A UML model is split into components, each knowing what it provides and requires.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0034378001000732183,
+   "duration": 0.004224099917337298,
    "observed": [
     "Authentication: provides ['IAuth'], requires []",
     "Lending: provides ['ILending'], requires ['IAuth']",
@@ -2637,7 +2637,7 @@
    "description": "Links follow call edges up to the depth given, losing confidence with each step.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0025001002941280603,
+   "duration": 0.0019661998376250267,
    "observed": [
     "depth 1: {('strong', 'a'): 0.9, ('weak', 'a'): 0.3, ('strong', 'b'): 0.765}",
     "depth 2: {('strong', 'a'): 0.9, ('weak', 'a'): 0.3, ('strong', 'b'): 0.765, ('strong', 'c'): 0.65}"
@@ -2658,7 +2658,7 @@
    "description": "The two sides of a run never share a collection, even when they hold the same kind.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0021875000093132257,
+   "duration": 0.0018565000500530005,
    "observed": [
     "requirements -> code: ('requirements_elements', 'code_elements')",
     "requirements -> requirements: ('requirements_elements', 'requirements-target_elements')"
@@ -2679,7 +2679,7 @@
    "description": "A second function with the same name and parameters is numbered instead of repeating an identifier.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.1541581000201404,
+   "duration": 0.22331500006839633,
    "observed": [
     "functions: ['app.js::Plugin(option)', 'app.js::Plugin(option)#2', 'app.js::unique(value)']",
     "pipeline run finished with 3 links; app.js functions indexed: 3"
@@ -2700,7 +2700,7 @@
    "description": "Dependency expansion is recorded as 0 unless the target is code.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0014017000794410706,
+   "duration": 0.001952699851244688,
    "observed": [
     "depth 2 becomes: {'code': 2, 'architecture': 0, 'architecture_document': 0, 'requirements': 0, None: 2}"
    ]
@@ -2720,7 +2720,7 @@
    "description": "Entries that try to climb out of the destination are kept inside it.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0276097001042217,
+   "duration": 0.02892130007967353,
    "observed": [
     "inside the destination: ['abs.java', 'deep/evil.java', 'evil.java', 'src/A.java']",
     "outside the destination: []"
@@ -2741,7 +2741,7 @@
    "description": "Whatever path is supplied, the result stays inside the folder it is written to.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.007460799999535084,
+   "duration": 0.010807299986481667,
    "observed": [
     "{'a/b.txt': 'a/b.txt', '../../etc/passwd': 'etc/passwd', '/etc/passwd': 'etc/passwd', 'C:\\\\Windows\\\\x.txt': 'C-Windows-x.txt', 'a\\\\..\\\\b': 'a-..-b', './a/./b': 'a/b', '  /x//y ': 'x/y', 'we!rd$name.java': 'we-rd-name.java', '': 'file'}"
    ]
@@ -2761,7 +2761,7 @@
    "description": "Bytes are counted across the whole request, and the limit is exact.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.0013789001386612654,
+   "duration": 0.0019270998891443014,
    "observed": [
     "used after two files: 10 of 10",
     "third file: Upload exceeds the 0 MB total limit (adding 'c.txt')."
@@ -2782,7 +2782,7 @@
    "description": "A file over the per-file limit is refused.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.003891199827194214,
+   "duration": 0.006074200151488185,
    "observed": [
     "600-byte file: saved 600 bytes",
     "1,500-byte file: 'big.txt' exceeds the 0 MB per-file limit."
@@ -2803,7 +2803,7 @@
    "description": "An archive is checked before it is trusted, and what it unpacks to counts against the budget.",
    "outcome": "passed",
    "failure": null,
-   "duration": 0.016716800164431334,
+   "duration": 0.01909479987807572,
    "observed": [
     "not a zip: 'notes.zip' is not a valid .zip archive.",
     "unpacks past the budget: Upload exceeds the 0 MB total limit (adding 'data.java')."

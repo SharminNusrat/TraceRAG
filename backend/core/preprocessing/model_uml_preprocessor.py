@@ -13,12 +13,7 @@ XMI_IDREF = f"{{{XMI_NAMESPACE}}}idref"
 
 
 class ModelUmlPreprocessor(Preprocessor):
-    """Splits a UML model into its components and interfaces.
-
-    Only components are compared: an interface describes how components talk to
-    each other, so it is context for their text rather than a link target of
-    its own.
-    """
+    """Splits a UML model into its components and interfaces."""
 
     def preprocess(self, artifacts: list[Artifact]) -> list[Element]:
         elements = []
@@ -43,8 +38,6 @@ class ModelUmlPreprocessor(Preprocessor):
         interfaces = {n.get(XMI_ID): n for n in nodes if self._uml_type(n) == "Interface"}
         components = [n for n in nodes if self._uml_type(n) == "Component"]
         usages = [n for n in nodes if self._uml_type(n) == "Usage"]
-        # A realization is normally owned by its component, but some exporters
-        # write it alongside instead, pointing back with a client reference.
         realizations = [n for n in nodes if self._uml_type(n) == "InterfaceRealization"]
 
         elements = []
@@ -75,11 +68,7 @@ class ModelUmlPreprocessor(Preprocessor):
         return elements
 
     def _typed_nodes(self, artifact: Artifact) -> list | None:
-        """Every node in the model that declares a UML type.
-
-        Searched over the whole tree rather than a fixed wrapper tag: models
-        nest elements inside packages, and exporters disagree on the tag name.
-        """
+        """Every node in the model that declares a UML type."""
         try:
             root = ElementTree.fromstring(artifact.content)
         except ElementTree.ParseError as error:
@@ -146,12 +135,7 @@ class ModelUmlPreprocessor(Preprocessor):
         return found
 
     def _references(self, node, name: str) -> list[str]:
-        """The ids a UML reference points at, however it was serialised.
-
-        XMI allows the same reference as an attribute holding one or more ids,
-        or as nested children carrying xmi:idref - or href when the target
-        lives in another file.
-        """
+        """The ids a UML reference points at, however it was serialised."""
         ids = (node.get(name) or "").split()
         for child in node.findall(name):
             reference = child.get(XMI_IDREF) or child.get("href") or ""

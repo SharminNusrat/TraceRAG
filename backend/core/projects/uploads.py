@@ -1,10 +1,4 @@
-"""Writing files someone handed over to disk, safely and within limits.
-
-Uploaded paths come from a browser and archives from anyone, so every name is
-cleaned before it touches the filesystem and every byte counts against a
-budget. Nothing here knows about HTTP: a refusal is raised as an UploadError,
-and the API decides how to answer it.
-"""
+"""Writing files someone handed over to disk, safely and within limits."""
 
 import logging
 import re
@@ -60,11 +54,7 @@ def safe_relative_path(raw_path: str) -> Path:
 
 
 def save_upload(upload, destination: Path, budget: UploadBudget) -> int:
-    """Stream an upload to disk, enforcing per-file and total size limits.
-
-    `upload` is anything with a `filename` and a readable `file` - what a web
-    framework hands over for an uploaded file.
-    """
+    """Stream an upload to disk, enforcing per-file and total size limits."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     with open(destination, "wb") as target:

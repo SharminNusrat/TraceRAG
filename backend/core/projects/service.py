@@ -1,11 +1,4 @@
-"""Projects, analyses and their runs, always scoped to an owner.
-
-An analysis (a ProjectConfig row) owns its two sides, its versions, its graph
-and its pinned links. A version owns both sides' files, and every run of that
-version reads them. Nothing here is shared between two analyses, so nothing
-here ever has to decide which of several analyses a file or a version belongs
-to. Only the bytes are shared, through the content-addressed blob store.
-"""
+"""Projects, analyses and their runs, always scoped to an owner."""
 
 import json
 import logging
@@ -29,8 +22,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_HISTORY_LIMIT = 50
 
-# Where a side's files come from, and so whether an update can fetch them on
-# its own or has to ask the user for them again.
 ORIGIN_UPLOAD = "upload"
 ORIGIN_GITHUB = "github"
 
@@ -50,8 +41,6 @@ def create_project(db: Session, user_id: int, name: str, description: str | None
 
 
 def get_project(db: Session, user_id: int, project_id: int) -> Project | None:
-    # Missing and not-yours give the same answer, so the response cannot be
-    # used to discover which ids exist.
     return db.scalar(
         select(Project).where(Project.project_id == project_id, Project.user_id == user_id)
     )
@@ -86,15 +75,7 @@ def create_config(
     source_kind: str | None,
     target_kind: str | None,
 ) -> ProjectConfig:
-    """A new analysis, with these settings between these two kinds.
-
-    Always a new row, never one looked up by its settings: running the same
-    settings again over other files is a second analysis with its own
-    history, not more history for the first.
-
-    The kinds are given beside the settings rather than inside them: they are
-    a fact about the artifacts a run was pointed at, not something it chose.
-    """
+    """A new analysis, with these settings between these two kinds."""
     depth = expansion_depth(target_kind, config.dependency_expansion_depth)
     created = ProjectConfig(
         project_id=project.project_id,
@@ -161,11 +142,7 @@ def delete_config(db: Session, config: ProjectConfig) -> None:
 
 
 def source_fingerprint(files: list[ArtifactFile]) -> str:
-    """A name for exactly this set of file contents.
-
-    Lets a re-upload of unchanged files be recognised as unchanged, which is
-    what stops an identical upload being treated as something new to analyse.
-    """
+    """A name for exactly this set of file contents."""
     parts = sorted(f"{file.relative_path}:{file.sha256}" for file in files)
     return sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
 
@@ -216,12 +193,7 @@ def connect_github_side(
     branch: str,
     token: str | None = None,
 ) -> ProjectSource:
-    """Point one side of an analysis at a GitHub repository.
-
-    The side keeps its files until the next update fetches the repository.
-    Nothing it holds was fetched from there, so the first check always reads
-    as a change.
-    """
+    """Point one side of an analysis at a GitHub repository."""
     if side.location != repository or side.branch != branch:
         side.checked_ref = None
     side.origin = ORIGIN_GITHUB
@@ -240,12 +212,7 @@ def connect_github_side(
 # ----- Versions -----
 
 def next_version(db: Session, config: ProjectConfig) -> ProjectVersion:
-    """Start the analysis's next version.
-
-    A version is one state of the analysis's files. New files are what begins
-    one - so a New Analysis opens version 1, and everything run against those
-    same files afterwards belongs to it.
-    """
+    """Start the analysis's next version."""
     highest = db.execute(
         select(func.max(ProjectVersion.version_number))
         .where(ProjectVersion.config_id == config.config_id)
@@ -292,12 +259,7 @@ def latest_version(db: Session, config: ProjectConfig) -> ProjectVersion | None:
 
 
 def version_numbers(db: Session, version_ids) -> dict[int, int]:
-    """The number each version is known by, for a set of version ids.
-
-    Looked up in one query for a whole page of runs. A run stores the version
-    it belongs to, but the user only ever sees the number - so without this a
-    run cannot be matched to the state of the files it ran against.
-    """
+    """The number each version is known by, for a set of version ids."""
     wanted = {version_id for version_id in version_ids if version_id is not None}
     if not wanted:
         return {}
@@ -318,13 +280,7 @@ def count_runs(db: Session, config: ProjectConfig) -> int:
 # ----- Pinned links -----
 
 def pinned_links(db: Session, config_id: int) -> dict[str, set[str]]:
-    """Last run's links for this analysis, as source -> targets.
-
-    Handed to the next run so the classifier is asked about them again. Without
-    it a link can disappear because a grown corpus pushed it out of the top-k,
-    which reads exactly like the classifier having changed its mind while
-    nothing actually decided anything.
-    """
+    """Last run's links for this analysis, as source -> targets."""
     grouped: dict[str, set[str]] = {}
     for source, target in db.execute(
         select(ElementLink.source_identifier, ElementLink.target_identifier)
@@ -337,18 +293,7 @@ def pinned_links(db: Session, config_id: int) -> dict[str, set[str]]:
 def record_element_links(
     db: Session, config_id: int, links: list | None
 ) -> int:
-    """Keep the pairs this run's classifier judged, for the next run to re-offer.
-
-    Replaced wholesale rather than merged: what is stored is always the most
-    recent run's pairs and only those. Merging would keep proposing pairs that
-    stopped being relevant several updates ago.
-
-    An empty list and no list at all mean different things, so they are treated
-    differently. `[]` is a run saying it linked nothing, which clears the store.
-    `None` is a caller that has nothing to say - a result shape from before
-    this existed - and leaves what is stored alone rather than discarding pins
-    on the word of something that was never asked the question.
-    """
+    """Keep the pairs this run's classifier judged, for the next run to re-offer."""
     if links is None:
         logger.info(f"Pinned links for config {config_id}: none given, stored ones left as they are")
         return 0
@@ -357,15 +302,11 @@ def record_element_links(
         delete(ElementLink).where(ElementLink.config_id == config_id)
     ).rowcount
     if not links:
-        # Said out loud, because storing nothing is what makes the next update
-        # unable to carry a link over - and it looks like nothing happened.
         logger.info(
             f"Pinned links for config {config_id}: stored 0, the run handed over "
             f"no element-level links ({removed} stored before were cleared)"
         )
         return 0
-    # Deduplicated because dependency expansion and aggregation can both hand
-    # back the same pair, and the table holds one row per pair.
     unique = {(source, target) for source, target in links}
     db.add_all([
         ElementLink(config_id=config_id, source_identifier=source, target_identifier=target)
@@ -395,11 +336,7 @@ def save_analysis(
     result,
     execution_duration: float | None,
 ) -> Analysis:
-    """Store one run of an analysis, against one of its versions.
-
-    The version is given by the caller, because only it knows whether these
-    are new files or the stored ones a re-run reaches for.
-    """
+    """Store one run of an analysis, against one of its versions."""
     analysis = Analysis(
         project_id=config.project_id,
         config_id=config.config_id,
@@ -445,11 +382,7 @@ def latest_analysis(db: Session, config: ProjectConfig) -> Analysis | None:
 
 
 def _side_for_entry(db: Session, config: ProjectConfig, entry: dict) -> ProjectSource:
-    """The side a stored file set belongs to, made on first sight.
-
-    A side is one end of the trace, so its role is all that identifies it. An
-    upload under a new name is the same side holding new files.
-    """
+    """The side a stored file set belongs to, made on first sight."""
     role = entry.get("role") or "source"
     side = side_for_role(db, config, role)
     if side is None:
@@ -468,12 +401,7 @@ def _side_for_entry(db: Session, config: ProjectConfig, entry: dict) -> ProjectS
 
 
 def claim_artifacts(db: Session, version: ProjectVersion, upload_id: str | None) -> int:
-    """Take an upload's files into the blob store as this version's file sets.
-
-    Returns how many sides were stored. Each side is stored complete, so a
-    version always says everything its runs read - even the side nobody
-    changed, whose rows simply point at the blobs already there.
-    """
+    """Take an upload's files into the blob store as this version's file sets."""
     # Zero is normal - no upload, aged out, or already claimed - so this never
     # raises and the run is kept either way.
     if not upload_id:
@@ -531,12 +459,7 @@ def collect_garbage(db: Session) -> int:
 
 
 def analyses_with_files(db: Session, analysis_ids: list[int]) -> set[int]:
-    """Which of these analyses still have every one of their files on disk.
-
-    Answered here rather than when a re-run or a download is attempted, so a
-    run whose bytes are gone can say so in the list instead of after a form
-    has been filled in.
-    """
+    """Which of these analyses still have every one of their files on disk."""
     if not analysis_ids:
         return set()
 
@@ -671,11 +594,7 @@ def run_view(analysis: Analysis) -> RunView:
 
 
 def maps_between(versions: list[ProjectVersion]) -> tuple[IdMap, IdMap]:
-    """The id maps that take each side's identifiers from the first version to the last.
-
-    Each version stores the map from the version before it; a report across
-    several versions follows them in turn.
-    """
+    """The id maps that take each side's identifiers from the first version to the last."""
     source, target = IdMap(), IdMap()
     for version in versions[1:]:
         changes = json.loads(version.changes_json or "{}")
@@ -704,15 +623,7 @@ def version_report(
     base_number: int | None = None,
     head_number: int | None = None,
 ) -> dict:
-    """The change report between two versions of an analysis.
-
-    The later version defaults to the newest and the earlier one to the
-    nearest version before it that has a run. Each version is read through
-    its newest run, so a re-run inside a version is what the report shows for
-    it. A version with no run is not an error: `no_run_version` names it, and
-    the later version's links are returned as they are, uncompared - or none,
-    when the later version is the one without a run.
-    """
+    """The change report between two versions of an analysis."""
     versions = sorted(config.versions, key=lambda version: version.version_number)
     if not versions:
         raise ReportError("This analysis has no version yet.")
