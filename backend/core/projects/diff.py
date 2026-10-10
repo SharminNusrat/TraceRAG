@@ -261,11 +261,23 @@ def _pair_changed(olds: list[Item], news: list[Item], rename) -> tuple[list, lis
     free = list(news)
 
     if len(olds) * len(news) <= MAX_SIMILARITY_PAIRS:
-        for old in (item for item in olds if item.compare):
-            scored = [(_ratio(old, new), index) for index, new in enumerate(free)]
-            best = max(scored, default=(0.0, None))
-            if best[0] >= SIMILAR:
-                pairs.append((old, free.pop(best[1])))
+        # The closest matches first. Taken in file order instead, a removed
+        # element claims a look-alike neighbour that was only edited, and the
+        # edited one is then reported as the one removed.
+        scored = sorted(
+            ((_ratio(old, new), o, n)
+             for o, old in enumerate(olds) if old.compare
+             for n, new in enumerate(news)),
+            key=lambda entry: (-entry[0], entry[1], entry[2]),
+        )
+        matched: dict[int, int] = {}
+        for score, o, n in scored:
+            if score < SIMILAR:
+                break
+            if o not in matched and n not in matched.values():
+                matched[o] = n
+        pairs = [(olds[o], news[n]) for o, n in sorted(matched.items())]
+        free = [new for n, new in enumerate(news) if n not in matched.values()]
 
     paired = {old.identifier for old, _ in pairs}
     for old in olds:

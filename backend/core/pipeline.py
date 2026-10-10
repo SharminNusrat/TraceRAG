@@ -17,13 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:
-    """How alike two vectors are, on the same scale retrieval reports.
-
-    The vector collections are built with cosine distance and report
-    `1 - distance`, so a score computed here sits on the same scale as one that
-    came back from a query - which matters, because this number becomes the
-    link's confidence.
-    """
+    """How alike two vectors are, on the same scale retrieval reports."""
     dot = sum(a * b for a, b in zip(left, right))
     size = sqrt(sum(a * a for a in left)) * sqrt(sum(b * b for b in right))
     return dot / size if size else 0.0
@@ -50,22 +44,13 @@ class TracePipeline:
         dependency_analyzer: CodeDependencyAnalyzer | None = None,
         dependency_expansion_depth: int = 0,
         reset_vector_stores: bool = True,
-        # Given only for sides whose artifacts are not prose. A requirement
-        # already reads as a sentence, so summarising it costs tokens and adds
-        # nothing the embedding did not already have.
         source_summarizer: ElementSummarizer | None = None,
         target_summarizer: ElementSummarizer | None = None,
-        # Links the last run made, as source identifier -> target identifiers.
-        # Offered to the classifier again alongside whatever retrieval finds,
-        # so a link can only end by being rejected, never by being crowded out
-        # of the top-k as the corpus grows. Empty on a first run.
         pinned_links: dict[str, set[str]] | None = None,
         # The directories this run reads from. Only used to reduce element
         # identifiers to the form the pins are stored in, since the providers
         # disagree about whether they name elements absolutely.
         workspace_roots: list | None = None,
-        # Called as the run moves through its steps, for anything watching from
-        # outside the process. Given a stage in words, and where it has got to.
         on_progress=None,
     ):
         self.source_provider = source_provider
@@ -101,16 +86,7 @@ class TracePipeline:
         targets_by_id: dict,
         vectors_by_id: dict,
     ) -> tuple[list[tuple], int]:
-        """Add last run's links to the candidates, if retrieval missed them.
-
-        Retrieval returns a fixed number of nearest elements, not everything
-        worth looking at, so a corpus that grew since the last run can push an
-        existing link out of the list without anything having changed about
-        either end. Putting it back means the classifier decides its fate.
-
-        Skipped when the element is gone: there is nothing to ask about, and
-        the link is broken rather than rejected.
-        """
+        """Add last run's links to the candidates, if retrieval missed them."""
         pinned = self.pinned_links.get(self._stored_form(source_element.identifier))
         if not pinned:
             return candidates, 0
@@ -120,9 +96,6 @@ class TracePipeline:
         for identifier in sorted(pinned - already):
             element = targets_by_id.get(identifier)
             vector = vectors_by_id.get(identifier)
-            # compare=False elements are excluded from retrieval, so admitting
-            # one here would put a candidate in front of the classifier that
-            # this configuration says is not tracing material.
             if element is None or vector is None or not element.compare:
                 continue
             carried.append((element, cosine_similarity(source_embedding, vector)))
@@ -199,10 +172,6 @@ class TracePipeline:
             for e, vector in zip(target_elements, target_embeddings)
         }
 
-        # Checked up front rather than discovered in the totals. A pin map in a
-        # different shape from this run's identifiers matches nothing and looks
-        # exactly like having nothing to carry over, so the one number that
-        # tells them apart is said out loud before any work is done.
         if self.pinned_links:
             recognised = sum(
                 1 for e in comparable if self._stored_form(e.identifier) in self.pinned_links

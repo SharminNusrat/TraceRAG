@@ -487,3 +487,55 @@ def test_a_file_renamed_then_modified(record):
     assert chained == {"UC2.txt": "old/UC2.txt"}
     assert with_renames.renamed == {"UC2.txt": "old/UC2.txt"} and not with_renames.added
     assert (without.added, without.removed) == (["old/UC2.txt"], ["UC2.txt"])
+
+
+# Two methods with look-alike bodies, as generated service code has.
+LOOKALIKE = """public class Manager {{
+{listing}
+    public boolean modify(Bean pBean) throws RemoteException {{
+        if (!{checker}(pBean))
+            throw new RemoteException(ErrorMessage.ERROR_DATA);
+        try {{
+            return (db.modify(pBean));
+        }} catch (SQLException e) {{
+            throw new RemoteException(ErrorMessage.ERROR_DBMS);
+        }} catch (Exception e) {{
+            throw new RemoteException(ErrorMessage.ERROR_UNKNOWN);
+        }}
+    }}
+}}
+"""
+LISTING = """    public ArrayList<Bean> getAll() throws RemoteException {
+        try {
+            return (db.getList());
+        } catch (SQLException e) {
+            throw new RemoteException(ErrorMessage.ERROR_DBMS);
+        } catch (Exception e) {
+            throw new RemoteException(ErrorMessage.ERROR_UNKNOWN);
+        }
+    }
+"""
+
+
+@case(
+    id="U-59",
+    feature="Element diff / a method removed beside one that was edited",
+    level="unit",
+    priority="High",
+    why="When one method is removed and its neighbour is edited in the same commit, the edited one must stay itself. Pairing the removed method with it reports the wrong method as removed and sends its pinned links to the wrong place.",
+    input="A class with getAll() and modify(Bean), whose bodies look alike. New version: getAll() removed, and one call inside modify(Bean) renamed",
+    expected="getAll() removed; modify(Bean) modified and still mapped to itself; nothing added",
+)
+def test_edited_method_is_not_paired_with_a_removed_lookalike(record):
+    """An edited method keeps its identity when a similar method next to it is removed."""
+    old = items(CodeMethodPreprocessor(), {"Manager.java": LOOKALIKE.format(listing=LISTING, checker="Checker.check")}, "source code")
+    new = items(CodeMethodPreprocessor(), {"Manager.java": LOOKALIKE.format(listing="", checker="Validator.verify")}, "source code")
+    changes = diff_elements(old, new)
+    record(f"removed {changes.removed}; modified {changes.modified}; added {changes.added}")
+    record(f"modify(Bean) maps to: {changes.id_map.translate('Manager.java::Manager::modify(Bean pBean)')}")
+
+    assert changes.removed == ["Manager.java::Manager::getAll()"]
+    assert changes.modified == [("Manager.java::Manager::modify(Bean pBean)", "Manager.java::Manager::modify(Bean pBean)")]
+    assert changes.added == []
+    assert changes.id_map.translate("Manager.java::Manager::modify(Bean pBean)") == "Manager.java::Manager::modify(Bean pBean)"
+    assert changes.id_map.translate("Manager.java::Manager::getAll()") is None
